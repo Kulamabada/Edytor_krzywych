@@ -6,17 +6,11 @@
 #include <vector>
 
 // Forward declarations
-namespace Geometry {
-    class GeometricObject;
-}
-
+class GeometricObject;
 class QPaintEvent;
 class QMouseEvent;
 class QWheelEvent;
 class QResizeEvent;
-
-namespace Graphics {
-
 class ViewportManager;
 class IRenderer;
 
@@ -28,36 +22,36 @@ public:
     ~Canvas() override;
 
     // Zarządzanie obiektami geometrycznymi
-    void addObject(std::shared_ptr<Geometry::GeometricObject> object);
-    void removeObject(std::shared_ptr<Geometry::GeometricObject> object);
+    void addObject(std::shared_ptr<GeometricObject> object);
+    void removeObject(std::shared_ptr<GeometricObject> object);
     void clearObjects();
-    std::vector<std::shared_ptr<Geometry::GeometricObject>> objects() const;
-    
+    std::vector<std::shared_ptr<GeometricObject>> objects() const;
+
     // Zarządzanie zaznaczeniem
-    void selectObject(std::shared_ptr<Geometry::GeometricObject> object);
+    void selectObject(std::shared_ptr<GeometricObject> object);
     void clearSelection();
-    std::shared_ptr<Geometry::GeometricObject> selectedObject() const;
-    
+    std::shared_ptr<GeometricObject> selectedObject() const;
+
     // Zarządzanie widokiem
     void zoomIn();
     void zoomOut();
     void resetView();
     void fitToContents();
-    
+
     // Dostęp do ViewportManager
     ViewportManager* viewportManager() const;
-    
+
     // Ustawienie renderera
     void setRenderer(std::shared_ptr<IRenderer> renderer);
     IRenderer* renderer() const;
-    
-public slots:
-    void refresh();
-    
-signals:
-    void objectAdded(std::shared_ptr<Geometry::GeometricObject> object);
-    void objectRemoved(std::shared_ptr<Geometry::GeometricObject> object);
-    void objectSelected(std::shared_ptr<Geometry::GeometricObject> object);
+
+    public slots:
+        void refresh();
+
+    signals:
+        void objectAdded(std::shared_ptr<GeometricObject> object);
+    void objectRemoved(std::shared_ptr<GeometricObject> object);
+    void objectSelected(std::shared_ptr<GeometricObject> object);
     void selectionCleared();
     void viewportChanged();
 
@@ -72,9 +66,7 @@ protected:
 
 private:
     class CanvasPrivate;
-    std::unique_ptr<CanvasPrivate> d_ptr;
+    std::unique_ptr<CanvasPrivate> m_dPtr;
 };
-
-} // namespace Graphics
 
 #endif // CANVAS_H

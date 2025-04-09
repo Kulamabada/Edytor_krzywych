@@ -13,13 +13,45 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-add_executable(edytor_krzywych main.cpp
-        IMathProvider.h
-        GeometricObject.h
-        TransformMatrix.h
-        AbstractCommand.h)
+add_executable(edytor_krzywych
+        main.cpp
+
+        Math/IMathProvider.h
+
+        Geometry/GeometricObject.h
+        Geometry/TransformMatrix.h
+
+        Core/AbstractCommand.h
+        Core/AbstractCommand.cpp
+        Core/ApplicationCore.cpp
+        Core/Command.cpp
+        Core/CommandManager.cpp
+        Geometry/GeometricObject.cpp
+        Geometry/Point.cpp
+        Geometry/TransformMatrix.cpp
+        Geometry/Curve.cpp
+        Geometry/BezierCurve.cpp
+        Geometry/InterpolatedCurve.cpp
+        Geometry/ParametricCurve.cpp
+        Graphics/Canvas.cpp
+        Graphics/IRenderer.cpp
+        Graphics/ViewportManager.cpp
+        Graphics/QtRenderer.cpp
+        Math/IMathProvider.cpp
+        Math/EigenMathAdapter.cpp
+)
 
 find_package(Qt6 COMPONENTS Core Gui Widgets REQUIRED)
-
 target_link_libraries(edytor_krzywych PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
 
+# Elastyczne podejście do znajdowania Eigen3
+find_package(Eigen3 CONFIG QUIET)
+if(NOT Eigen3_FOUND)
+    set(Eigen3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/eigen-3.4.0/cmake")
+    find_package(Eigen3 CONFIG QUIET)
+    if(NOT Eigen3_FOUND)
+        # Używamy include_directories jako ostateczność
+        include_directories("${CMAKE_CURRENT_SOURCE_DIR}/eigen-3.4.0")
+        message(STATUS "Using Eigen3 headers directly")
+    endif()
+endif()
