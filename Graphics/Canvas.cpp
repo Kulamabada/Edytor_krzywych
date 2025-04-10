@@ -1,23 +1,13 @@
 #include "Canvas.h"
-#include "ViewportManager.h"
-#include "IRenderer.h"
-#include "GeometricObject.h"
-
-#include <QPainter>
-#include <QPaintEvent>
-#include <QMouseEvent>
-#include <QWheelEvent>
-#include <QResizeEvent>
-#include <algorithm>
 
 class Canvas::CanvasPrivate {
 public:
-    CanvasPrivate() : viewportManager(new Graphics::ViewportManager()) {}
+    CanvasPrivate() : viewportManager(new ViewportManager()) {}
 
     std::vector<std::shared_ptr<GeometricObject>> objects;
     std::shared_ptr<GeometricObject> selectedObject;
-    std::unique_ptr<Graphics::ViewportManager> viewportManager;
-    std::shared_ptr<Graphics::IRenderer> renderer;
+    std::unique_ptr<ViewportManager> viewportManager;
+    std::shared_ptr<IRenderer> renderer;
 
     // Zmienne do obsługi interakcji myszy
     bool isPanning = false;
@@ -32,7 +22,8 @@ Canvas::Canvas(QWidget* parent)
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
     setAttribute(Qt::WA_OpaquePaintEvent);
-
+    setAttribute(Qt::WA_NoSystemBackground);
+    setAutoFillBackground(false);
     if (m_dPtr->viewportManager) {
         m_dPtr->viewportManager->setWindowSize(width(), height());
         m_dPtr->viewportManager->resetView();
@@ -147,18 +138,18 @@ void Canvas::fitToContents()
     }
 }
 
-Graphics::ViewportManager* Canvas::viewportManager() const
+ViewportManager* Canvas::viewportManager() const
 {
     return m_dPtr->viewportManager.get();
 }
 
-void Canvas::setRenderer(std::shared_ptr<Graphics::IRenderer> renderer)
+void Canvas::setRenderer(std::shared_ptr<IRenderer> renderer)
 {
     m_dPtr->renderer = renderer;
     update();
 }
 
-Graphics::IRenderer* Canvas::renderer() const
+IRenderer* Canvas::renderer() const
 {
     return m_dPtr->renderer.get();
 }
@@ -173,6 +164,11 @@ void Canvas::paintEvent(QPaintEvent* event)
     Q_UNUSED(event);
 
     QPainter painter(this);
+    // Sprawdzamy, czy painter został prawidłowo zainicjowany
+    if (!painter.isActive()) {
+        qWarning() << "Nie można zainicjować QPainter w Canvas::paintEvent";
+        return;
+    }
     painter.fillRect(rect(), Qt::white);
 
     if (!m_dPtr->renderer) {
@@ -192,7 +188,7 @@ void Canvas::paintEvent(QPaintEvent* event)
 
     // Rysowanie zaznaczenia
     if (m_dPtr->selectedObject) {
-        const auto* geometricObj = dynamic_cast<const Geometry::Base::GeometricObject*>(m_dPtr->selectedObject.get());
+        const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_dPtr->selectedObject.get());
         if (geometricObj) {
             auto position = geometricObj->getPosition();
             QPointF selectionPos = m_dPtr->viewportManager->worldToScreen(QPointF(position.x(), position.y()));

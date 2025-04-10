@@ -14,10 +14,9 @@
 
 #include "Graphics/Canvas.h"
 #include "Core/CommandManager.h"
-#include "Geometry/BezierCurve.h"
 #include "Geometry/InterpolatedCurve.h"
-#include "Geometry/ParametricCurve.h"
 #include "Geometry/Point.h"
+#include "Graphics/QtRenderer.h"
 #include "Math/EigenMathAdapter.h"
 
 int main(int argc, char *argv[]) {
@@ -101,6 +100,9 @@ int main(int argc, char *argv[]) {
     // Canvas do rysowania
     Canvas *canvas = new Canvas(centralWidget);
     layout->addWidget(canvas);
+
+    auto renderer = std::make_shared<QtRenderer>();
+    canvas->setRenderer(renderer);
 
     // Ustawienie centralnego widgetu
     mainWindow.setCentralWidget(centralWidget);
@@ -211,17 +213,6 @@ int main(int argc, char *argv[]) {
         statusBar->showMessage("Dopasowano widok do zawartości");
     });
 
-    QObject::connect(bezierAction, &QAction::triggered, [&]() {
-        auto curve = std::make_shared<BezierCurve>(mathProvider);
-        // Dodanie przykładowych punktów kontrolnych
-        curve->addControlPoint(Point(0, 0));
-        curve->addControlPoint(Point(50, 100));
-        curve->addControlPoint(Point(100, 0));
-        canvas->addObject(curve);
-        canvas->refresh();
-        statusBar->showMessage("Utworzono krzywą Beziera");
-    });
-
     QObject::connect(interpolatedAction, &QAction::triggered, [&]() {
         auto curve = std::make_shared<InterpolatedCurve>(mathProvider);
         // Dodanie przykładowych punktów
@@ -231,17 +222,6 @@ int main(int argc, char *argv[]) {
         canvas->addObject(curve);
         canvas->refresh();
         statusBar->showMessage("Utworzono krzywą interpolowaną");
-    });
-
-    QObject::connect(parametricAction, &QAction::triggered, [&]() {
-        auto curve = std::make_shared<ParametricCurve>(mathProvider);
-        // Ustawienie przykładowych funkcji parametrycznych (okrąg)
-        curve->setXFunction([](double t) { return 50 + 50 * std::cos(t); });
-        curve->setYFunction([](double t) { return 50 + 50 * std::sin(t); });
-        curve->setParameterRange(0, 2 * M_PI);
-        canvas->addObject(curve);
-        canvas->refresh();
-        statusBar->showMessage("Utworzono krzywą parametryczną");
     });
 
     QObject::connect(aboutAction, &QAction::triggered, [&]() {
@@ -254,14 +234,16 @@ int main(int argc, char *argv[]) {
 
     // Aktualizacja listy obiektów
     QObject::connect(canvas, &Canvas::objectAdded, [objectsList, &statusBar](std::shared_ptr<GeometricObject> obj) {
-        objectsList->addItem(QString("Obiekt %1").arg(objectsList->count() + 1));
+        const QString str = "Obiekt " + QString::number(objectsList->count() + 1);
+        objectsList->addItem(str);
         statusBar->showMessage("Dodano nowy obiekt");
     });
 
     QObject::connect(canvas, &Canvas::objectRemoved, [objectsList, canvas, &statusBar](std::shared_ptr<GeometricObject> obj) {
         objectsList->clear();
         for (size_t i = 0; i < canvas->objects().size(); ++i) {
-            objectsList->addItem(QString("Obiekt %1").arg(i + 1));
+            const QString str = "Obiekt " + QString::number(i + 1);
+            objectsList->addItem(QString(str));
         }
         statusBar->showMessage("Usunięto obiekt");
     });
@@ -270,7 +252,8 @@ int main(int argc, char *argv[]) {
         if (row >= 0 && row < static_cast<int>(canvas->objects().size())) {
             canvas->selectObject(canvas->objects()[row]);
             canvas->refresh();
-            statusBar->showMessage(QString("Wybrano obiekt %1").arg(row + 1));
+            const QString message = "Wybrano obiekt " + QString::number(row + 1);
+            statusBar->showMessage(message);
         }
     });
 

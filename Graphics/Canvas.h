@@ -4,6 +4,15 @@
 #include <QWidget>
 #include <memory>
 #include <vector>
+#include "ViewportManager.h"
+#include "IRenderer.h"
+#include "../Geometry/GeometricObject.h"
+#include <QPainter>
+#include <QPaintEvent>
+#include <QMouseEvent>
+#include <QWheelEvent>
+#include <QResizeEvent>
+#include <algorithm>
 
 // Forward declarations
 class GeometricObject;

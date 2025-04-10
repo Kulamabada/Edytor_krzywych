@@ -2,8 +2,6 @@
 #include <algorithm>
 #include <cmath>
 
-namespace Graphics {
-
 // Stałe domyślne
 const double DEFAULT_MIN_ZOOM = 0.1;
 const double DEFAULT_MAX_ZOOM = 100.0;
@@ -237,5 +235,3 @@ void ViewportManager::updateTransformations()
     // Obliczenie transformacji odwrotnej
     m_inverseViewTransform = m_viewTransform.inverted();
 }
-
-} // namespace Graphics

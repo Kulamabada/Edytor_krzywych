@@ -1,31 +1,13 @@
 #include "InterpolatedCurve.h"
 #include "Point.h"
-#include "Vector.h"
-#include "IMathProvider.h"
-#include <Eigen/Dense>
+#include "../Math/IMathProvider.h"
 #include <cmath>
 
-// Definicja struktury wewnętrznych danych interpolacji
-class InterpolatedCurve::InterpolationData {
-public:
-    // Dla cubic spline:
-    std::vector<Eigen::Vector4d> splineCoefficients;
-
-    // Dla Catmull-Rom i Cardinal:
-    std::vector<Eigen::Matrix<double, 4, 2>> segmentMatrices;
-
-    void clear() {
-        splineCoefficients.clear();
-        segmentMatrices.clear();
-    }
-};
-
 InterpolatedCurve::InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
-                                   InterpolationType type)
+                                    InterpolationType type)
     : mathProvider(std::move(mathProvider)),
       type(type),
-      data(std::make_unique<InterpolationData>()) {
-    // Inicjalizacja krzywej interpolowanej
+      needsRebuild(true) {
 }
 
 void InterpolatedCurve::addPoint(const Point& point) {
@@ -78,221 +60,301 @@ InterpolatedCurve::InterpolationType InterpolatedCurve::getInterpolationType() c
     return type;
 }
 
-void InterpolatedCurve::setTension(double newTension) {
-    if (tension != newTension) {
-        tension = newTension;
-        needsRebuild = true;
-    }
-}
-
-double InterpolatedCurve::getTension() const {
-    return tension;
-}
-
-void InterpolatedCurve::rebuildInterpolation() {
-    if (!needsRebuild) {
-        return;
-    }
-
-    data->clear();
-
-    if (points.size() < 2) {
+void InterpolatedCurve::rebuildInterpolation() const {
+    if (!needsRebuild || points.size() < 2) {
         needsRebuild = false;
         return;
     }
 
-    switch (type) {
-        case InterpolationType::Linear:
-            // Liniowa interpolacja nie wymaga budowania współczynników
-            break;
+    coefficients.clear();
 
+    switch (type) {
         case InterpolationType::CubicSpline:
             buildCubicSpline();
             break;
-
         case InterpolationType::CatmullRom:
             buildCatmullRom();
             break;
-
-        case InterpolationType::CardinalSpline:
-            buildCardinalSpline();
+        case InterpolationType::Linear:
+            // Dla interpolacji liniowej nie potrzebujemy współczynników
             break;
     }
 
     needsRebuild = false;
 }
 
-void InterpolatedCurve::buildCubicSpline() {
-    size_t n = points.size();
+void InterpolatedCurve::buildCubicSpline() const {
+    const size_t n = points.size();
     if (n < 2) return;
 
-    // Dla każdego wymiaru (x, y) rozwiązujemy oddzielny system
-    for (int dim = 0; dim < 2; ++dim) {
-        // Budujemy układ równań Ax = b dla drugich pochodnych
-        Eigen::MatrixXd A = Eigen::MatrixXd::Zero(n, n);
-        Eigen::VectorXd b = Eigen::VectorXd::Zero(n);
+    // Utwórz trójdiagonalną macierz dla obliczania współczynników spline
+    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(n, n);
+    Eigen::VectorXd bx = Eigen::VectorXd::Zero(n);
+    Eigen::VectorXd by = Eigen::VectorXd::Zero(n);
 
-        // Warunki brzegowe dla naturalnych spline'ów (druga pochodna na końcach = 0)
-        A(0, 0) = 1.0;
-        A(n-1, n-1) = 1.0;
+    // Naturalne warunki brzegowe
+    A(0, 0) = 1.0;
+    A(n-1, n-1) = 1.0;
 
-        // Wypełnianie macierzy dla punktów wewnętrznych
-        for (size_t i = 1; i < n - 1; ++i) {
-            double h_i = 1.0;  // Równomierne próbkowanie dla uproszczenia
-            double h_i1 = 1.0;
+    // Wypełnianie macierzy dla punktów wewnętrznych
+    for (size_t i = 1; i < n - 1; ++i) {
+        A(i, i-1) = 1.0;
+        A(i, i) = 4.0;
+        A(i, i+1) = 1.0;
 
-            A(i, i-1) = h_i;
-            A(i, i) = 2 * (h_i + h_i1);
-            A(i, i+1) = h_i1;
+        bx(i) = 3.0 * (points[i+1].x() - points[i-1].x());
+        by(i) = 3.0 * (points[i+1].y() - points[i-1].y());
+    }
 
-            double value_im1 = (dim == 0) ? points[i-1].x() : points[i-1].y();
-            double value_i = (dim == 0) ? points[i].x() : points[i].y();
-            double value_ip1 = (dim == 0) ? points[i+1].x() : points[i+1].y();
+    // Rozwiązanie układu równań dla pochodnych
+    Eigen::VectorXd cx = A.colPivHouseholderQr().solve(bx);
+    Eigen::VectorXd cy = A.colPivHouseholderQr().solve(by);
 
-            b(i) = 6.0 * ((value_ip1 - value_i) / h_i1 - (value_i - value_im1) / h_i);
-        }
+    // Obliczenie współczynników dla każdego segmentu
+    for (size_t i = 0; i < n - 1; ++i) {
+        Eigen::Matrix<double, 4, 2> coef;
 
-        // Rozwiązanie układu równań dla drugich pochodnych
-        Eigen::VectorXd secondDerivatives = A.fullPivLu().solve(b);
+        // Współczynniki dla x
+        coef(0, 0) = points[i].x();
+        coef(1, 0) = cx(i);
+        coef(2, 0) = 3.0 * (points[i+1].x() - points[i].x()) - 2.0 * cx(i) - cx(i+1);
+        coef(3, 0) = 2.0 * (points[i].x() - points[i+1].x()) + cx(i) + cx(i+1);
 
-        // Obliczanie współczynników dla każdego segmentu krzywej
-        for (size_t i = 0; i < n - 1; ++i) {
-            double value_i = (dim == 0) ? points[i].x() : points[i].y();
-            double value_ip1 = (dim == 0) ? points[i+1].x() : points[i+1].y();
-            double h_i = 1.0;  // Równomierne próbkowanie
+        // Współczynniki dla y
+        coef(0, 1) = points[i].y();
+        coef(1, 1) = cy(i);
+        coef(2, 1) = 3.0 * (points[i+1].y() - points[i].y()) - 2.0 * cy(i) - cy(i+1);
+        coef(3, 1) = 2.0 * (points[i].y() - points[i+1].y()) + cy(i) + cy(i+1);
 
-            if (dim == 0) {  // Dla wymiaru x
-                Eigen::Vector4d coeffs;
-                coeffs(0) = secondDerivatives(i) / (6.0 * h_i);  // a
-                coeffs(1) = secondDerivatives(i+1) / (6.0 * h_i); // b
-                coeffs(2) = value_i / h_i - secondDerivatives(i) * h_i / 6.0; // c
-                coeffs(3) = value_ip1 / h_i - secondDerivatives(i+1) * h_i / 6.0; // d
-
-                if (i < data->splineCoefficients.size()) {
-                    data->splineCoefficients[i] = coeffs;
-                } else {
-                    data->splineCoefficients.push_back(coeffs);
-                }
-            } else {  // Dla wymiaru y - aktualizujemy istniejące współczynniki
-                if (i < data->splineCoefficients.size()) {
-                    Eigen::Vector4d& coeffs = data->splineCoefficients[i];
-                    // Zapisujemy współczynniki y w drugiej połowie wektora
-                    coeffs(0) = secondDerivatives(i) / (6.0 * h_i);
-                    coeffs(1) = secondDerivatives(i+1) / (6.0 * h_i);
-                    coeffs(2) = value_i / h_i - secondDerivatives(i) * h_i / 6.0;
-                    coeffs(3) = value_ip1 / h_i - secondDerivatives(i+1) * h_i / 6.0;
-                }
-            }
-        }
+        coefficients.push_back(coef);
     }
 }
 
-void InterpolatedCurve::buildCatmullRom() {
-    size_t n = points.size();
-    if (n < 2) return;
+void InterpolatedCurve::buildCatmullRom() const {
+    if (points.size() < 2) return;
 
-    // Dla każdego segmentu krzywej obliczamy macierz Catmull-Rom
-    for (size_t i = 0; i < n - 1; ++i) {
-        // Dla Catmull-Rom potrzebujemy 4 punktów kontrolnych
-        Point p0 = (i > 0) ? points[i-1] : points[i];  // Jeśli i=0, powtórz pierwszy punkt
+    // Macierz bazowa Catmull-Rom
+    Eigen::Matrix4d basis;
+    basis << 0, 1, 0, 0,
+             -0.5, 0, 0.5, 0,
+             1, -2.5, 2, -0.5,
+             -0.5, 1.5, -1.5, 0.5;
+
+    // Dla każdego segmentu
+    for (size_t i = 0; i < points.size() - 1; ++i) {
+        // Punkty kontrolne z ekstrapolacją na krańcach
+        Point p0 = (i > 0) ? points[i-1] : points[i];
         Point p1 = points[i];
         Point p2 = points[i+1];
-        Point p3 = (i+1 < n-1) ? points[i+2] : points[i+1];  // Jeśli i=n-2, powtórz ostatni punkt
-
-        // Macierz bazowa Catmull-Rom
-        Eigen::Matrix4d basis;
-        basis << 0, 1, 0, 0,
-                -0.5, 0, 0.5, 0,
-                1, -2.5, 2, -0.5,
-                -0.5, 1.5, -1.5, 0.5;
+        Point p3 = (i+1 < points.size()-1) ? points[i+2] : points[i+1];
 
         // Macierz punktów kontrolnych
-        Eigen::Matrix<double, 4, 2> controlPoints;
-        controlPoints << p0.x(), p0.y(),
-                         p1.x(), p1.y(),
-                         p2.x(), p2.y(),
-                         p3.x(), p3.y();
+        Eigen::Matrix<double, 4, 2> controls;
+        controls << p0.x(), p0.y(),
+                   p1.x(), p1.y(),
+                   p2.x(), p2.y(),
+                   p3.x(), p3.y();
 
-        // Macierz segmentu = basis * controlPoints
-        Eigen::Matrix<double, 4, 2> segmentMatrix = basis * controlPoints;
-
-        // Zapisanie macierzy segmentu
-        if (i < data->segmentMatrices.size()) {
-            data->segmentMatrices[i] = segmentMatrix;
-        } else {
-            data->segmentMatrices.push_back(segmentMatrix);
-        }
-    }
-}
-
-void InterpolatedCurve::buildCardinalSpline() {
-    size_t n = points.size();
-    if (n < 2) return;
-
-    // Dla każdego segmentu krzywej obliczamy macierz Cardinal
-    for (size_t i = 0; i < n - 1; ++i) {
-        // Dla Cardinal potrzebujemy 4 punktów kontrolnych
-        Point p0 = (i > 0) ? points[i-1] : points[i];  // Jeśli i=0, powtórz pierwszy punkt
-        Point p1 = points[i];
-        Point p2 = points[i+1];
-        Point p3 = (i+1 < n-1) ? points[i+2] : points[i+1];  // Jeśli i=n-2, powtórz ostatni punkt
-
-        // Macierz bazowa Cardinal, gdzie s = (1-tension)/2
-        double s = (1.0 - tension) / 2.0;
-        Eigen::Matrix4d basis;
-        basis << 0, 1, 0, 0,
-                -s, 0, s, 0,
-                2*s, s-3, 3-2*s, -s,
-                -s, 2-s, s-2, s;
-
-        // Macierz punktów kontrolnych
-        Eigen::Matrix<double, 4, 2> controlPoints;
-        controlPoints << p0.x(), p0.y(),
-                         p1.x(), p1.y(),
-                         p2.x(), p2.y(),
-                         p3.x(), p3.y();
-
-        // Macierz segmentu = basis * controlPoints
-        Eigen::Matrix<double, 4, 2> segmentMatrix = basis * controlPoints;
-
-        // Zapisanie macierzy segmentu
-        if (i < data->segmentMatrices.size()) {
-            data->segmentMatrices[i] = segmentMatrix;
-        } else {
-            data->segmentMatrices.push_back(segmentMatrix);
-        }
+        // Obliczenie współczynników
+        coefficients.push_back(basis * controls);
     }
 }
 
 Point InterpolatedCurve::getPointAt(double t) const {
-    if (points.empty()) {
-        return Point(0.0, 0.0);
-    }
+    if (points.empty()) return Point(0.0, 0.0, 0.0);
+    if (points.size() == 1) return points[0];
 
-    if (points.size() == 1) {
-        return points[0];
-    }
-
-    // Upewnij się, że mamy zaktualizowane dane interpolacji
+    // Aktualizacja danych interpolacji jeśli potrzebna
     if (needsRebuild) {
-        const_cast<InterpolatedCurve*>(this)->rebuildInterpolation();
+        rebuildInterpolation();
     }
 
-    // Ograniczenie parametru t do zakresu [0, 1]
+    // Ograniczenie parametru t do [0, 1]
     t = std::max(0.0, std::min(1.0, t));
 
-    // Liczba segmentów
+    // Obliczenie segmentu i lokalnego parametru
     size_t numSegments = points.size() - 1;
-
-    // Obliczenie indeksu segmentu i lokalnego parametru
     double segmentLength = 1.0 / numSegments;
     size_t segmentIndex = std::min(static_cast<size_t>(t / segmentLength), numSegments - 1);
     double localT = (t - segmentIndex * segmentLength) / segmentLength;
 
-    switch (type) {
-        case InterpolationType::Linear: {
-            // Interpolacja liniowa
-            double oneMinusT = 1.0 - localT;
-            double x = oneMinusT * points[segmentIndex].x() + localT * points[segmentIndex + 1].x();
-            double y = oneMinusT * points[segmentIndex].y() + localT * points[segmentIndex + 1].y();
-            double z = oneMinusT * poi
+    if (type == InterpolationType::Linear) {
+        // Prosta interpolacja liniowa
+        double oneMinusT = 1.0 - localT;
+        double x = oneMinusT * points[segmentIndex].x() + localT * points[segmentIndex + 1].x();
+        double y = oneMinusT * points[segmentIndex].y() + localT * points[segmentIndex + 1].y();
+        double z = oneMinusT * points[segmentIndex].z() + localT * points[segmentIndex + 1].z();
+        return Point(x, y, z);
+    } else {
+        // Interpolacja krzywoliniowa
+        if (segmentIndex >= coefficients.size()) {
+            return points[segmentIndex]; // Awaryjnie
+        }
+
+        const auto& coef = coefficients[segmentIndex];
+        Eigen::Vector4d tVec;
+        tVec << 1.0, localT, localT*localT, localT*localT*localT;
+
+        double x = tVec.dot(coef.col(0));
+        double y = tVec.dot(coef.col(1));
+
+        return Point(x, y, 0.0);
+    }
+}
+
+Vector InterpolatedCurve::getTangentAt(double t) const {
+    // Numeryczne obliczenie pochodnej
+    const double epsilon = 1e-6;
+    Point p1 = getPointAt(t);
+    Point p2 = getPointAt(t + epsilon);
+
+    return Vector(
+        (p2.x() - p1.x()) / epsilon,
+        (p2.y() - p1.y()) / epsilon,
+        (p2.z() - p1.z()) / epsilon
+    );
+}
+
+double InterpolatedCurve::getCurvatureAt(double t) const {
+    // Obliczenie krzywizny przez przybliżenie drugiej pochodnej
+    const double h = 1e-6;
+    Vector first = getTangentAt(t);
+    Vector second = (getTangentAt(t + h) - first) / h;
+
+    double numerator = std::abs(first.x() * second.y() - first.y() * second.x());
+    double denominator = std::pow(first.x() * first.x() + first.y() * first.y(), 1.5);
+
+    return (denominator < 1e-10) ? 0.0 : (numerator / denominator);
+}
+
+bool InterpolatedCurve::isPointOnCurve(const Point& point, double tolerance) const {
+    // Sprawdzenie przez próbkowanie krzywej
+    const int steps = 50;
+    for (int i = 0; i <= steps; ++i) {
+        double t = static_cast<double>(i) / steps;
+        if (getPointAt(t).distanceTo(point) <= tolerance) {
+            return true;
+        }
+    }
+    return false;
+}
+
+double InterpolatedCurve::getLength() const {
+    // Przybliżenie długości przez sumowanie odcinków
+    const int steps = 20;
+    double length = 0.0;
+    Point prev = getPointAt(0.0);
+
+    for (int i = 1; i <= steps; ++i) {
+        double t = static_cast<double>(i) / steps;
+        Point curr = getPointAt(t);
+        length += prev.distanceTo(curr);
+        prev = curr;
+    }
+
+    return length;
+}
+
+std::vector<Point> InterpolatedCurve::getIntersectionsWith(const Curve& other) const {
+    // Uproszczona implementacja - brute force z optymalizacją
+    std::vector<Point> result;
+    const int steps = 25;
+    const double tolerance = 1e-4;
+
+    for (int i = 0; i <= steps; ++i) {
+        double t1 = static_cast<double>(i) / steps;
+        Point p1 = getPointAt(t1);
+
+        for (int j = 0; j <= steps; ++j) {
+            double t2 = static_cast<double>(j) / steps;
+            Point p2 = other.getPointAt(t2);
+
+            if (p1.distanceTo(p2) < tolerance) {
+                // Sprawdź czy punkt już istnieje w wynikach
+                bool exists = false;
+                for (const auto& p : result) {
+                    if (p.distanceTo(p1) < tolerance) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    result.push_back(p1);
+                }
+                break;
+            }
+        }
+    }
+
+    return result;
+}
+
+void InterpolatedCurve::transform(const TransformMatrix& matrix) {
+    for (auto& point : points) {
+        point.transform(matrix);
+    }
+    needsRebuild = true;
+}
+
+std::unique_ptr<Curve> InterpolatedCurve::clone() const {
+    auto copy = std::make_unique<InterpolatedCurve>(mathProvider, type);
+    copy->setPoints(points);
+    return copy;
+}
+
+Vector InterpolatedCurve::getPosition() const {
+    if (points.empty()) return Vector::Zero();
+
+    Vector sum = Vector::Zero();
+    for (const auto& p : points) {
+        sum += Vector(p.x(), p.y(), p.z());
+    }
+    return sum / static_cast<double>(points.size());
+}
+
+void InterpolatedCurve::setPosition(const Eigen::Vector3d& position) {
+    if (points.empty()) return;
+
+    Vector delta = position - getPosition();
+    for (auto& p : points) {
+        p.setX(p.x() + delta.x());
+        p.setY(p.y() + delta.y());
+        p.setZ(p.z() + delta.z());
+    }
+    needsRebuild = true;
+}
+
+Vector InterpolatedCurve::getScale() const {
+    return Vector::Ones();
+}
+
+void InterpolatedCurve::setScale(const Vector& scale) {
+    if (points.empty()) return;
+
+    Vector center = getPosition();
+    for (auto& p : points) {
+        Vector relPos(p.x() - center.x(), p.y() - center.y(), p.z() - center.z());
+        p.setX(center.x() + relPos.x() * scale.x());
+        p.setY(center.y() + relPos.y() * scale.y());
+        p.setZ(center.z() + relPos.z() * scale.z());
+    }
+    needsRebuild = true;
+}
+
+Eigen::Quaterniond InterpolatedCurve::getRotation() const {
+    return Eigen::Quaterniond::Identity();
+}
+
+void InterpolatedCurve::setRotation(const Eigen::Quaterniond& rotation) {
+    if (points.empty()) return;
+
+    Vector center = getPosition();
+    for (auto& p : points) {
+        Vector relPos(p.x() - center.x(), p.y() - center.y(), p.z() - center.z());
+        Vector rotated = rotation * relPos;
+        p.setX(center.x() + rotated.x());
+        p.setY(center.y() + rotated.y());
+        p.setZ(center.z() + rotated.z());
+    }
+    needsRebuild = true;
+}

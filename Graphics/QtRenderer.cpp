@@ -1,17 +1,4 @@
 #include "QtRenderer.h"
-#include "ViewportManager.h"
-#include "GeometricObject.h"
-#include "Point.h"
-#include "Curve.h"
-#include <QPainter>
-#include <QPen>
-#include <QBrush>
-#include <QPointF>
-#include <QTransform>
-#include <vector>
-#include <cmath>
-
-namespace Graphics {
 
 class QtRenderer::QtRendererPrivate {
 public:
@@ -70,6 +57,11 @@ void QtRenderer::beginRender(QPainter* painter, ViewportManager* viewportManager
         return;
     }
 
+    if (!painter->isActive()) {
+        qWarning() << "QPainter nie jest aktywny w beginRender()";
+        return;
+    }
+
     m_dPtr->painter = painter;
     m_dPtr->viewportManager = viewportManager;
 
@@ -88,9 +80,9 @@ void QtRenderer::endRender()
     }
 }
 
-void QtRenderer::renderPoint(const Geometry::Point& point)
+void QtRenderer::renderPoint(const Point& point)
 {
-    if (!m_dPtr->painter || !m_dPtr->viewportManager) {
+    if (!m_dPtr->painter || !m_dPtr->viewportManager || !m_dPtr->painter->isActive()) {
         return;
     }
 
@@ -105,7 +97,7 @@ void QtRenderer::renderPoint(const Geometry::Point& point)
     m_dPtr->painter->drawEllipse(QPointF(x, y), m_dPtr->pointSize, m_dPtr->pointSize);
 }
 
-void QtRenderer::renderCurve(const Geometry::Curve& curve)
+void QtRenderer::renderCurve(const Curve& curve)
 {
     if (!m_dPtr->painter || !m_dPtr->viewportManager) {
         return;
@@ -120,22 +112,22 @@ void QtRenderer::renderCurve(const Geometry::Curve& curve)
 
     for (int i = 0; i <= numSegments; ++i) {
         double t = static_cast<double>(i) / numSegments;
-        Point p = curve.getPointAtParameter(t);
+        Point p = curve.getPointAt(t);
         points.append(QPointF(p.x(), p.y()));
     }
 
     m_dPtr->painter->drawPolyline(points);
 }
 
-void QtRenderer::renderObject(const Geometry::GeometricObject& object)
+void QtRenderer::renderObject(const GeometricObject& object)
 {
-    const Geometry::Point* point = dynamic_cast<const Geometry::Point*>(&object);
+    const Point* point = dynamic_cast<const Point*>(&object);
     if (point) {
         renderPoint(*point);
         return;
     }
 
-    const Geometry::Curve* curve = dynamic_cast<const Geometry::Curve*>(&object);
+    const Curve* curve = dynamic_cast<const Curve*>(&object);
     if (curve) {
         renderCurve(*curve);
         return;
@@ -213,7 +205,7 @@ void QtRenderer::renderAxes()
 
 void QtRenderer::renderSelectionMarker(const QPointF& position)
 {
-    if (!m_dPtr->painter) {
+    if (!m_dPtr->painter || !m_dPtr->painter->isActive()) {
         return;
     }
 
@@ -277,5 +269,3 @@ void QtRenderer::setDrawAxes(bool draw)
 {
     m_dPtr->drawAxes = draw;
 }
-
-} // namespace Graphics

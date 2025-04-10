@@ -22,7 +22,6 @@ add_executable(edytor_krzywych
         Geometry/TransformMatrix.h
 
         Core/AbstractCommand.h
-        Core/AbstractCommand.cpp
         Core/ApplicationCore.cpp
         Core/Command.cpp
         Core/CommandManager.cpp
@@ -30,11 +29,8 @@ add_executable(edytor_krzywych
         Geometry/Point.cpp
         Geometry/TransformMatrix.cpp
         Geometry/Curve.cpp
-        Geometry/BezierCurve.cpp
         Geometry/InterpolatedCurve.cpp
-        Geometry/ParametricCurve.cpp
         Graphics/Canvas.cpp
-        Graphics/IRenderer.cpp
         Graphics/ViewportManager.cpp
         Graphics/QtRenderer.cpp
         Math/IMathProvider.cpp

@@ -1,0 +1,2889 @@
+// Plik wygenerowany automatycznie 2025-04-10 17:11:12
+// Zawiera 29 plików z projektu edytora krzywych
+
+//===== START FILE: Core\AbstractCommand.h =====//
+
+// File: AbstractCommand.h
+#pragma once
+
+#include <memory>
+
+class AbstractCommand {
+public:
+    virtual ~AbstractCommand() = default;
+
+    virtual bool execute() = 0;
+    virtual bool undo() = 0;
+    virtual bool redo() = 0;
+};
+
+//===== END FILE: Core\AbstractCommand.h =====//
+
+//===== START FILE: Core\ApplicationCore.cpp =====//
+
+// File: ApplicationCore.cpp
+#include "ApplicationCore.h"
+#include "CommandManager.h"
+#include <stdexcept>
+
+// Implementacja PIMPL
+class ApplicationCore::ApplicationCoreImpl {
+public:
+    ApplicationCoreImpl() : m_initialized(false), m_commandManager(std::make_unique<CommandManager>()) {}
+    ~ApplicationCoreImpl() = default;
+
+    bool initialize() {
+        if (m_initialized) {
+            return true; // Już zainicjalizowany
+        }
+
+        // Inicjalizacja menedżera komend
+        m_initialized = true;
+        return true;
+    }
+
+    void shutdown() {
+        if (!m_initialized) {
+            return; // Już zamknięty lub nie zainicjalizowany
+        }
+
+        m_initialized = false;
+    }
+
+    CommandManager& getCommandManager() {
+        if (!m_initialized) {
+            throw std::runtime_error("ApplicationCore nie został zainicjalizowany");
+        }
+        return *m_commandManager;
+    }
+
+private:
+    bool m_initialized;
+    std::unique_ptr<CommandManager> m_commandManager;
+};
+
+// Implementacja Singletona
+ApplicationCore& ApplicationCore::getInstance() {
+    static ApplicationCore instance;
+    return instance;
+}
+
+// Konstruktor i destruktor
+ApplicationCore::ApplicationCore() : m_pImpl(std::make_unique<ApplicationCoreImpl>()) {
+}
+
+ApplicationCore::~ApplicationCore() {
+    shutdown();
+}
+
+// Funkcjonalność główna
+bool ApplicationCore::initialize() {
+    return m_pImpl->initialize();
+}
+
+void ApplicationCore::shutdown() {
+    m_pImpl->shutdown();
+}
+
+// Dostęp do menedżerów
+CommandManager& ApplicationCore::getCommandManager() {
+    return m_pImpl->getCommandManager();
+}
+
+//===== END FILE: Core\ApplicationCore.cpp =====//
+
+//===== START FILE: Core\ApplicationCore.h =====//
+
+#ifndef APPLICATIONCORE_H
+#define APPLICATIONCORE_H
+
+#include <memory>
+#include "CommandManager.h"
+
+class ApplicationCore {
+public:
+    // Singleton pattern
+    static ApplicationCore& getInstance();
+
+    // Prevent copying and assignment
+    ApplicationCore(const ApplicationCore&) = delete;
+    ApplicationCore& operator=(const ApplicationCore&) = delete;
+
+    // Core application functionality
+    bool initialize();
+    void shutdown();
+
+    // Access to managers
+    CommandManager& getCommandManager();
+
+private:
+    // Private constructor & destructor (Singleton)
+    ApplicationCore();
+    ~ApplicationCore();
+
+    // PIMPL implementation
+    class ApplicationCoreImpl;
+    std::unique_ptr<ApplicationCoreImpl> m_pImpl;
+};
+
+#endif // APPLICATIONCORE_H
+
+//===== END FILE: Core\ApplicationCore.h =====//
+
+//===== START FILE: Core\Command.cpp =====//
+
+// File: Command.cpp
+#include "Command.h"
+#include <algorithm>
+#include <cassert>
+
+// Deklaracje funkcji globalnych do zarządzania sceną
+// W rzeczywistej aplikacji byłyby to metody odpowiedniego menedżera sceny
+namespace {
+    // Dodaje obiekt do sceny, zwraca przypisane ID obiektu
+    int addObjectToScene(std::shared_ptr<GeometricObject> object);
+
+    // Usuwa obiekt ze sceny po ID
+    bool removeObjectFromScene(int objectId);
+
+    // Pobiera obiekt ze sceny po ID
+    std::shared_ptr<GeometricObject> getObjectFromScene(int objectId);
+
+    // Stosuje transformację do obiektu
+    bool transformObject(int objectId, const Eigen::Matrix3d& transform);
+
+    // Pobiera aktualny styl obiektu
+    ObjectStyle getObjectStyle(int objectId);
+
+    // Ustawia styl dla obiektu
+    bool setObjectStyle(int objectId, const ObjectStyle& style);
+}
+
+// Implementacja AddObjectCommand
+AddObjectCommand::AddObjectCommand(std::shared_ptr<GeometricObject> object)
+    : m_object(std::move(object)), m_objectId(-1) {
+}
+
+bool AddObjectCommand::execute() {
+    if (!m_object) {
+        return false;
+    }
+
+    m_objectId = addObjectToScene(m_object);
+    return m_objectId >= 0;
+}
+
+bool AddObjectCommand::undo() {
+    if (m_objectId < 0) {
+        return false;
+    }
+
+    return removeObjectFromScene(m_objectId);
+}
+
+bool AddObjectCommand::redo() {
+    return execute();
+}
+
+// Implementacja RemoveObjectCommand
+RemoveObjectCommand::RemoveObjectCommand(int objectId)
+    : m_objectId(objectId), m_removedObject(nullptr) {
+}
+
+bool RemoveObjectCommand::execute() {
+    // Zapisz obiekt przed usunięciem
+    m_removedObject = getObjectFromScene(m_objectId);
+    if (!m_removedObject) {
+        return false;
+    }
+
+    return removeObjectFromScene(m_objectId);
+}
+
+bool RemoveObjectCommand::undo() {
+    if (!m_removedObject) {
+        return false;
+    }
+
+    // Dodaj obiekt z powrotem do sceny
+    m_objectId = addObjectToScene(m_removedObject);
+    return m_objectId >= 0;
+}
+
+bool RemoveObjectCommand::redo() {
+    return execute();
+}
+
+// Implementacja TransformObjectCommand
+TransformObjectCommand::TransformObjectCommand(int objectId, const Eigen::Matrix3d& transformation)
+    : m_objectId(objectId), m_forwardTransform(transformation) {
+    // Oblicz odwrotną transformację dla operacji undo
+    m_inverseTransform = transformation.inverse();
+}
+
+bool TransformObjectCommand::execute() {
+    return transformObject(m_objectId, m_forwardTransform);
+}
+
+bool TransformObjectCommand::undo() {
+    return transformObject(m_objectId, m_inverseTransform);
+}
+
+bool TransformObjectCommand::redo() {
+    return execute();
+}
+
+// Implementacja ModifyObjectStyleCommand
+ModifyObjectStyleCommand::ModifyObjectStyleCommand(int objectId, const ObjectStyle& newStyle)
+    : m_objectId(objectId), m_newStyle(newStyle) {
+    // Zapisz aktualny styl dla operacji undo
+    m_oldStyle = getObjectStyle(m_objectId);
+}
+
+bool ModifyObjectStyleCommand::execute() {
+    return setObjectStyle(m_objectId, m_newStyle);
+}
+
+bool ModifyObjectStyleCommand::undo() {
+    return setObjectStyle(m_objectId, m_oldStyle);
+}
+
+bool ModifyObjectStyleCommand::redo() {
+    return execute();
+}
+
+// Implementacja CompoundCommand
+CompoundCommand::CompoundCommand(const std::string& name)
+    : m_name(name) {
+}
+
+void CompoundCommand::addCommand(std::unique_ptr<AbstractCommand> command) {
+    if (command) {
+        m_commands.push_back(std::move(command));
+    }
+}
+
+bool CompoundCommand::execute() {
+    bool success = true;
+    size_t executedCommands = 0;
+
+    // Wykonaj wszystkie komendy po kolei
+    for (size_t i = 0; i < m_commands.size(); ++i) {
+        if (!m_commands[i]->execute()) {
+            success = false;
+            executedCommands = i;
+            break;
+        }
+        executedCommands = i + 1;
+    }
+
+    // Jeśli którakolwiek komenda nie powiodła się, cofnij wszystkie wykonane w odwrotnej kolejności
+    if (!success) {
+        for (size_t i = 0; i < executedCommands; ++i) {
+            size_t index = executedCommands - i - 1;
+            m_commands[index]->undo();
+        }
+    }
+
+    return success;
+}
+
+bool CompoundCommand::undo() {
+    bool success = true;
+
+    // Cofnij wszystkie komendy w odwrotnej kolejności
+    for (auto it = m_commands.rbegin(); it != m_commands.rend(); ++it) {
+        if (!(*it)->undo()) {
+            success = false;
+            break;
+        }
+    }
+
+    return success;
+}
+
+bool CompoundCommand::redo() {
+    bool success = true;
+
+    // Ponownie wykonaj wszystkie komendy po kolei
+    for (auto& command : m_commands) {
+        if (!command->redo()) {
+            success = false;
+            break;
+        }
+    }
+
+    return success;
+}
+
+// Implementacja funkcji globalnych do zarządzania sceną
+namespace {
+    // Te implementacje byłyby zastąpione rzeczywistym kodem zarządzania sceną
+    // w prawdziwej aplikacji
+
+    int addObjectToScene(std::shared_ptr<GeometricObject> object) {
+        // Tymczasowa implementacja - dodałaby obiekt do sceny i zwróciła ID
+        static int nextId = 0;
+        return ++nextId;
+    }
+
+    bool removeObjectFromScene(int objectId) {
+        // Tymczasowa implementacja - usunęłaby obiekt ze sceny
+        return objectId > 0;
+    }
+
+    std::shared_ptr<GeometricObject> getObjectFromScene(int objectId) {
+        // Tymczasowa implementacja - pobrałaby obiekt ze sceny
+        // Zwraca nullptr, ponieważ nie możemy utworzyć rzeczywistej instancji
+        return nullptr;
+    }
+
+    bool transformObject(int objectId, const Eigen::Matrix3d& transform) {
+        // Tymczasowa implementacja - zastosowałaby transformację
+        return objectId > 0;
+    }
+
+    ObjectStyle getObjectStyle(int objectId) {
+        // Tymczasowa implementacja - pobrałaby styl obiektu
+        return ObjectStyle{QColor(0, 0, 0), 1.0, Qt::SolidLine};
+    }
+
+    bool setObjectStyle(int objectId, const ObjectStyle& style) {
+        // Tymczasowa implementacja - ustawiłaby styl obiektu
+        return objectId > 0;
+    }
+}
+
+//===== END FILE: Core\Command.cpp =====//
+
+//===== START FILE: Core\Command.h =====//
+
+#ifndef COMMAND_H
+#define COMMAND_H
+
+#include <memory>
+#include <string>
+#include <QColor>
+#include <Eigen/Dense>
+#include "AbstractCommand.h"
+#include "../Geometry/GeometricObject.h"
+
+// Command to add a geometric object to the scene
+class AddObjectCommand : public AbstractCommand {
+public:
+    explicit AddObjectCommand(std::shared_ptr<GeometricObject> object);
+    ~AddObjectCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<GeometricObject> m_object;
+    int m_objectId{-1};
+};
+
+// Command to remove a geometric object from the scene
+class RemoveObjectCommand : public AbstractCommand {
+public:
+    explicit RemoveObjectCommand(int objectId);
+    ~RemoveObjectCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    int m_objectId;
+    std::shared_ptr<GeometricObject> m_removedObject;
+};
+
+// Command to transform a geometric object
+class TransformObjectCommand : public AbstractCommand {
+public:
+    TransformObjectCommand(int objectId, const Eigen::Matrix3d& transformation);
+    ~TransformObjectCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    int m_objectId;
+    Eigen::Matrix3d m_forwardTransform;
+    Eigen::Matrix3d m_inverseTransform;
+};
+
+// Object style properties
+struct ObjectStyle {
+    QColor color;
+    double lineWidth;
+    Qt::PenStyle lineStyle;
+};
+
+// Command to modify object visual properties
+class ModifyObjectStyleCommand : public AbstractCommand {
+public:
+    ModifyObjectStyleCommand(int objectId, const ObjectStyle& newStyle);
+    ~ModifyObjectStyleCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    int m_objectId;
+    ObjectStyle m_newStyle;
+    ObjectStyle m_oldStyle;
+};
+
+// Compound command for executing multiple commands as a single operation
+class CompoundCommand : public AbstractCommand {
+public:
+    CompoundCommand(const std::string& name);
+    ~CompoundCommand() override = default;
+
+    void addCommand(std::unique_ptr<AbstractCommand> command);
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::vector<std::unique_ptr<AbstractCommand>> m_commands;
+    std::string m_name;
+};
+
+#endif // COMMAND_H
+
+//===== END FILE: Core\Command.h =====//
+
+//===== START FILE: Core\CommandManager.cpp =====//
+
+// File: CommandManager.cpp
+#include "CommandManager.h"
+#include "AbstractCommand.h"
+#include <vector>
+#include <stdexcept>
+
+// Implementacja PIMPL
+class CommandManager::CommandManagerImpl {
+public:
+    CommandManagerImpl() = default;
+    ~CommandManagerImpl() = default;
+
+    bool executeCommand(std::unique_ptr<AbstractCommand> command) {
+        if (!command) {
+            return false;
+        }
+
+        // Wykonanie komendy
+        bool success = command->execute();
+        if (!success) {
+            return false;
+        }
+
+        // Po wykonaniu nowej komendy, czyścimy stos redo
+        if (!m_redoStack.empty()) {
+            m_redoStack.clear();
+        }
+
+        // Dodanie komendy do stosu undo
+        m_undoStack.push_back(std::move(command));
+        return true;
+    }
+
+    bool canUndo() const {
+        return !m_undoStack.empty();
+    }
+
+    bool canRedo() const {
+        return !m_redoStack.empty();
+    }
+
+    bool undo() {
+        if (!canUndo()) {
+            return false;
+        }
+
+        // Pobranie ostatniej komendy ze stosu undo
+        auto command = std::move(m_undoStack.back());
+        m_undoStack.pop_back();
+
+        // Cofnięcie komendy
+        bool success = command->undo();
+
+        // Przeniesienie komendy na stos redo
+        m_redoStack.push_back(std::move(command));
+        return success;
+    }
+
+    bool redo() {
+        if (!canRedo()) {
+            return false;
+        }
+
+        // Pobranie ostatniej komendy ze stosu redo
+        auto command = std::move(m_redoStack.back());
+        m_redoStack.pop_back();
+
+        // Ponowne wykonanie komendy
+        bool success = command->redo();
+
+        // Przeniesienie komendy na stos undo
+        m_undoStack.push_back(std::move(command));
+        return success;
+    }
+
+    void clearHistory() {
+        m_undoStack.clear();
+        m_redoStack.clear();
+    }
+
+    int undoStackSize() const {
+        return static_cast<int>(m_undoStack.size());
+    }
+
+    int redoStackSize() const {
+        return static_cast<int>(m_redoStack.size());
+    }
+
+private:
+    std::vector<std::unique_ptr<AbstractCommand>> m_undoStack;
+    std::vector<std::unique_ptr<AbstractCommand>> m_redoStack;
+};
+
+// Implementacja CommandManager
+CommandManager::CommandManager() : m_pImpl(std::make_unique<CommandManagerImpl>()) {
+}
+
+CommandManager::~CommandManager() = default;
+
+bool CommandManager::executeCommand(std::unique_ptr<AbstractCommand> command) {
+    return m_pImpl->executeCommand(std::move(command));
+}
+
+bool CommandManager::canUndo() const {
+    return m_pImpl->canUndo();
+}
+
+bool CommandManager::canRedo() const {
+    return m_pImpl->canRedo();
+}
+
+bool CommandManager::undo() {
+    return m_pImpl->undo();
+}
+
+bool CommandManager::redo() {
+    return m_pImpl->redo();
+}
+
+void CommandManager::clearHistory() {
+    m_pImpl->clearHistory();
+}
+
+int CommandManager::undoStackSize() const {
+    return m_pImpl->undoStackSize();
+}
+
+int CommandManager::redoStackSize() const {
+    return m_pImpl->redoStackSize();
+}
+
+//===== END FILE: Core\CommandManager.cpp =====//
+
+//===== START FILE: Core\CommandManager.h =====//
+
+#ifndef COMMANDMANAGER_H
+#define COMMANDMANAGER_H
+
+#include <memory>
+#include <vector>
+#include "AbstractCommand.h"
+
+class CommandManager {
+public:
+    CommandManager();
+    ~CommandManager();
+
+    // Prevent copying
+    CommandManager(const CommandManager&) = delete;
+    CommandManager& operator=(const CommandManager&) = delete;
+
+    // Command execution
+    bool executeCommand(std::unique_ptr<AbstractCommand> command);
+
+    // Undo/Redo operations
+    bool canUndo() const;
+    bool canRedo() const;
+    bool undo();
+    bool redo();
+
+    // Stack management
+    void clearHistory();
+    int undoStackSize() const;
+    int redoStackSize() const;
+
+private:
+    // PIMPL implementation
+    class CommandManagerImpl;
+    std::unique_ptr<CommandManagerImpl> m_pImpl;
+};
+
+#endif // COMMANDMANAGER_H
+
+//===== END FILE: Core\CommandManager.h =====//
+
+//===== START FILE: Geometry\Curve.cpp =====//
+
+#include "Curve.h"
+
+Curve::Curve() {
+    // Podstawowa inicjalizacja krzywej
+}
+
+void Curve::reverse() {
+    // Domyślna implementacja odwrócenia krzywej
+    // Ta metoda powinna być nadpisana w klasach pochodnych dla
+    // zapewnienia poprawnego odwrócenia specyficznego typu krzywej
+}
+
+//===== END FILE: Geometry\Curve.cpp =====//
+
+//===== START FILE: Geometry\Curve.h =====//
+
+#pragma once
+
+#include "GeometricObject.h"
+#include <vector>
+#include <memory>
+
+// Forward declarations
+class Point;
+
+class Curve : public GeometricObject {
+public:
+    Curve();
+    virtual ~Curve() override = default;
+
+    // Curve-specific methods
+    virtual bool isPointOnCurve(const Point& point, double tolerance = 1e-6) const = 0;
+    virtual double getLength() const = 0;
+    virtual Point getPointAt(double t) const = 0;
+    virtual Vector getTangentAt(double t) const = 0;
+    virtual double getCurvatureAt(double t) const = 0;
+
+    virtual std::vector<Point> getIntersectionsWith(const Curve& other) const = 0;
+
+    // Override from GeometricObject
+    void transform(const TransformMatrix& matrix) override = 0;
+
+    // Common operations for all curves
+    virtual void reverse();
+    virtual std::unique_ptr<Curve> clone() const = 0;
+};
+
+//===== END FILE: Geometry\Curve.h =====//
+
+//===== START FILE: Geometry\GeometricObject.cpp =====//
+
+// File: GeometricObject.cpp
+#include "GeometricObject.h"
+
+namespace Geometry {
+    namespace Base {
+        // GeometricObject to interfejs z czystymi metodami wirtualnymi,
+        // więc nie wymaga implementacji w pliku .cpp
+    } // namespace Base
+} // namespace Geometry
+
+//===== END FILE: Geometry\GeometricObject.cpp =====//
+
+//===== START FILE: Geometry\GeometricObject.h =====//
+
+// File: GeometricObject.h
+#pragma once
+
+#include <memory>
+#include <Eigen/Dense>
+using Vector = Eigen::Vector3d;
+class TransformMatrix;
+
+class GeometricObject {
+public:
+    virtual ~GeometricObject() = default;
+
+    virtual Vector getPosition() const = 0;
+    virtual void setPosition(const Eigen::Vector3d& position) = 0;
+
+    virtual Vector getScale() const = 0;
+    virtual void setScale(const Vector& scale) = 0;
+
+    virtual Eigen::Quaterniond getRotation() const = 0;
+    virtual void setRotation(const Eigen::Quaterniond& rotation) = 0;
+
+    virtual void transform(const TransformMatrix& matrix) = 0;
+};
+
+//===== END FILE: Geometry\GeometricObject.h =====//
+
+//===== START FILE: Geometry\InterpolatedCurve.cpp =====//
+
+#include "InterpolatedCurve.h"
+#include "Point.h"
+#include "../Math/IMathProvider.h"
+#include <cmath>
+
+InterpolatedCurve::InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
+                                    InterpolationType type)
+    : mathProvider(std::move(mathProvider)),
+      type(type),
+      needsRebuild(true) {
+}
+
+void InterpolatedCurve::addPoint(const Point& point) {
+    points.push_back(point);
+    needsRebuild = true;
+}
+
+void InterpolatedCurve::insertPoint(size_t index, const Point& point) {
+    if (index <= points.size()) {
+        points.insert(points.begin() + index, point);
+        needsRebuild = true;
+    }
+}
+
+void InterpolatedCurve::removePoint(size_t index) {
+    if (index < points.size()) {
+        points.erase(points.begin() + index);
+        needsRebuild = true;
+    }
+}
+
+void InterpolatedCurve::setPoints(const std::vector<Point>& newPoints) {
+    points = newPoints;
+    needsRebuild = true;
+}
+
+void InterpolatedCurve::movePoint(size_t index, const Point& newPosition) {
+    if (index < points.size()) {
+        points[index] = newPosition;
+        needsRebuild = true;
+    }
+}
+
+const std::vector<Point>& InterpolatedCurve::getPoints() const {
+    return points;
+}
+
+size_t InterpolatedCurve::getPointCount() const {
+    return points.size();
+}
+
+void InterpolatedCurve::setInterpolationType(InterpolationType newType) {
+    if (type != newType) {
+        type = newType;
+        needsRebuild = true;
+    }
+}
+
+InterpolatedCurve::InterpolationType InterpolatedCurve::getInterpolationType() const {
+    return type;
+}
+
+void InterpolatedCurve::rebuildInterpolation() const {
+    if (!needsRebuild || points.size() < 2) {
+        needsRebuild = false;
+        return;
+    }
+
+    coefficients.clear();
+
+    switch (type) {
+        case InterpolationType::CubicSpline:
+            buildCubicSpline();
+            break;
+        case InterpolationType::CatmullRom:
+            buildCatmullRom();
+            break;
+        case InterpolationType::Linear:
+            // Dla interpolacji liniowej nie potrzebujemy współczynników
+            break;
+    }
+
+    needsRebuild = false;
+}
+
+void InterpolatedCurve::buildCubicSpline() const {
+    const size_t n = points.size();
+    if (n < 2) return;
+
+    // Utwórz trójdiagonalną macierz dla obliczania współczynników spline
+    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(n, n);
+    Eigen::VectorXd bx = Eigen::VectorXd::Zero(n);
+    Eigen::VectorXd by = Eigen::VectorXd::Zero(n);
+
+    // Naturalne warunki brzegowe
+    A(0, 0) = 1.0;
+    A(n-1, n-1) = 1.0;
+
+    // Wypełnianie macierzy dla punktów wewnętrznych
+    for (size_t i = 1; i < n - 1; ++i) {
+        A(i, i-1) = 1.0;
+        A(i, i) = 4.0;
+        A(i, i+1) = 1.0;
+
+        bx(i) = 3.0 * (points[i+1].x() - points[i-1].x());
+        by(i) = 3.0 * (points[i+1].y() - points[i-1].y());
+    }
+
+    // Rozwiązanie układu równań dla pochodnych
+    Eigen::VectorXd cx = A.colPivHouseholderQr().solve(bx);
+    Eigen::VectorXd cy = A.colPivHouseholderQr().solve(by);
+
+    // Obliczenie współczynników dla każdego segmentu
+    for (size_t i = 0; i < n - 1; ++i) {
+        Eigen::Matrix<double, 4, 2> coef;
+
+        // Współczynniki dla x
+        coef(0, 0) = points[i].x();
+        coef(1, 0) = cx(i);
+        coef(2, 0) = 3.0 * (points[i+1].x() - points[i].x()) - 2.0 * cx(i) - cx(i+1);
+        coef(3, 0) = 2.0 * (points[i].x() - points[i+1].x()) + cx(i) + cx(i+1);
+
+        // Współczynniki dla y
+        coef(0, 1) = points[i].y();
+        coef(1, 1) = cy(i);
+        coef(2, 1) = 3.0 * (points[i+1].y() - points[i].y()) - 2.0 * cy(i) - cy(i+1);
+        coef(3, 1) = 2.0 * (points[i].y() - points[i+1].y()) + cy(i) + cy(i+1);
+
+        coefficients.push_back(coef);
+    }
+}
+
+void InterpolatedCurve::buildCatmullRom() const {
+    if (points.size() < 2) return;
+
+    // Macierz bazowa Catmull-Rom
+    Eigen::Matrix4d basis;
+    basis << 0, 1, 0, 0,
+             -0.5, 0, 0.5, 0,
+             1, -2.5, 2, -0.5,
+             -0.5, 1.5, -1.5, 0.5;
+
+    // Dla każdego segmentu
+    for (size_t i = 0; i < points.size() - 1; ++i) {
+        // Punkty kontrolne z ekstrapolacją na krańcach
+        Point p0 = (i > 0) ? points[i-1] : points[i];
+        Point p1 = points[i];
+        Point p2 = points[i+1];
+        Point p3 = (i+1 < points.size()-1) ? points[i+2] : points[i+1];
+
+        // Macierz punktów kontrolnych
+        Eigen::Matrix<double, 4, 2> controls;
+        controls << p0.x(), p0.y(),
+                   p1.x(), p1.y(),
+                   p2.x(), p2.y(),
+                   p3.x(), p3.y();
+
+        // Obliczenie współczynników
+        coefficients.push_back(basis * controls);
+    }
+}
+
+Point InterpolatedCurve::getPointAt(double t) const {
+    if (points.empty()) return Point(0.0, 0.0, 0.0);
+    if (points.size() == 1) return points[0];
+
+    // Aktualizacja danych interpolacji jeśli potrzebna
+    if (needsRebuild) {
+        rebuildInterpolation();
+    }
+
+    // Ograniczenie parametru t do [0, 1]
+    t = std::max(0.0, std::min(1.0, t));
+
+    // Obliczenie segmentu i lokalnego parametru
+    size_t numSegments = points.size() - 1;
+    double segmentLength = 1.0 / numSegments;
+    size_t segmentIndex = std::min(static_cast<size_t>(t / segmentLength), numSegments - 1);
+    double localT = (t - segmentIndex * segmentLength) / segmentLength;
+
+    if (type == InterpolationType::Linear) {
+        // Prosta interpolacja liniowa
+        double oneMinusT = 1.0 - localT;
+        double x = oneMinusT * points[segmentIndex].x() + localT * points[segmentIndex + 1].x();
+        double y = oneMinusT * points[segmentIndex].y() + localT * points[segmentIndex + 1].y();
+        double z = oneMinusT * points[segmentIndex].z() + localT * points[segmentIndex + 1].z();
+        return Point(x, y, z);
+    } else {
+        // Interpolacja krzywoliniowa
+        if (segmentIndex >= coefficients.size()) {
+            return points[segmentIndex]; // Awaryjnie
+        }
+
+        const auto& coef = coefficients[segmentIndex];
+        Eigen::Vector4d tVec;
+        tVec << 1.0, localT, localT*localT, localT*localT*localT;
+
+        double x = tVec.dot(coef.col(0));
+        double y = tVec.dot(coef.col(1));
+
+        return Point(x, y, 0.0);
+    }
+}
+
+Vector InterpolatedCurve::getTangentAt(double t) const {
+    // Numeryczne obliczenie pochodnej
+    const double epsilon = 1e-6;
+    Point p1 = getPointAt(t);
+    Point p2 = getPointAt(t + epsilon);
+
+    return Vector(
+        (p2.x() - p1.x()) / epsilon,
+        (p2.y() - p1.y()) / epsilon,
+        (p2.z() - p1.z()) / epsilon
+    );
+}
+
+double InterpolatedCurve::getCurvatureAt(double t) const {
+    // Obliczenie krzywizny przez przybliżenie drugiej pochodnej
+    const double h = 1e-6;
+    Vector first = getTangentAt(t);
+    Vector second = (getTangentAt(t + h) - first) / h;
+
+    double numerator = std::abs(first.x() * second.y() - first.y() * second.x());
+    double denominator = std::pow(first.x() * first.x() + first.y() * first.y(), 1.5);
+
+    return (denominator < 1e-10) ? 0.0 : (numerator / denominator);
+}
+
+bool InterpolatedCurve::isPointOnCurve(const Point& point, double tolerance) const {
+    // Sprawdzenie przez próbkowanie krzywej
+    const int steps = 50;
+    for (int i = 0; i <= steps; ++i) {
+        double t = static_cast<double>(i) / steps;
+        if (getPointAt(t).distanceTo(point) <= tolerance) {
+            return true;
+        }
+    }
+    return false;
+}
+
+double InterpolatedCurve::getLength() const {
+    // Przybliżenie długości przez sumowanie odcinków
+    const int steps = 20;
+    double length = 0.0;
+    Point prev = getPointAt(0.0);
+
+    for (int i = 1; i <= steps; ++i) {
+        double t = static_cast<double>(i) / steps;
+        Point curr = getPointAt(t);
+        length += prev.distanceTo(curr);
+        prev = curr;
+    }
+
+    return length;
+}
+
+std::vector<Point> InterpolatedCurve::getIntersectionsWith(const Curve& other) const {
+    // Uproszczona implementacja - brute force z optymalizacją
+    std::vector<Point> result;
+    const int steps = 25;
+    const double tolerance = 1e-4;
+
+    for (int i = 0; i <= steps; ++i) {
+        double t1 = static_cast<double>(i) / steps;
+        Point p1 = getPointAt(t1);
+
+        for (int j = 0; j <= steps; ++j) {
+            double t2 = static_cast<double>(j) / steps;
+            Point p2 = other.getPointAt(t2);
+
+            if (p1.distanceTo(p2) < tolerance) {
+                // Sprawdź czy punkt już istnieje w wynikach
+                bool exists = false;
+                for (const auto& p : result) {
+                    if (p.distanceTo(p1) < tolerance) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    result.push_back(p1);
+                }
+                break;
+            }
+        }
+    }
+
+    return result;
+}
+
+void InterpolatedCurve::transform(const TransformMatrix& matrix) {
+    for (auto& point : points) {
+        point.transform(matrix);
+    }
+    needsRebuild = true;
+}
+
+std::unique_ptr<Curve> InterpolatedCurve::clone() const {
+    auto copy = std::make_unique<InterpolatedCurve>(mathProvider, type);
+    copy->setPoints(points);
+    return copy;
+}
+
+Vector InterpolatedCurve::getPosition() const {
+    if (points.empty()) return Vector::Zero();
+
+    Vector sum = Vector::Zero();
+    for (const auto& p : points) {
+        sum += Vector(p.x(), p.y(), p.z());
+    }
+    return sum / static_cast<double>(points.size());
+}
+
+void InterpolatedCurve::setPosition(const Eigen::Vector3d& position) {
+    if (points.empty()) return;
+
+    Vector delta = position - getPosition();
+    for (auto& p : points) {
+        p.setX(p.x() + delta.x());
+        p.setY(p.y() + delta.y());
+        p.setZ(p.z() + delta.z());
+    }
+    needsRebuild = true;
+}
+
+Vector InterpolatedCurve::getScale() const {
+    return Vector::Ones();
+}
+
+void InterpolatedCurve::setScale(const Vector& scale) {
+    if (points.empty()) return;
+
+    Vector center = getPosition();
+    for (auto& p : points) {
+        Vector relPos(p.x() - center.x(), p.y() - center.y(), p.z() - center.z());
+        p.setX(center.x() + relPos.x() * scale.x());
+        p.setY(center.y() + relPos.y() * scale.y());
+        p.setZ(center.z() + relPos.z() * scale.z());
+    }
+    needsRebuild = true;
+}
+
+Eigen::Quaterniond InterpolatedCurve::getRotation() const {
+    return Eigen::Quaterniond::Identity();
+}
+
+void InterpolatedCurve::setRotation(const Eigen::Quaterniond& rotation) {
+    if (points.empty()) return;
+
+    Vector center = getPosition();
+    for (auto& p : points) {
+        Vector relPos(p.x() - center.x(), p.y() - center.y(), p.z() - center.z());
+        Vector rotated = rotation * relPos;
+        p.setX(center.x() + rotated.x());
+        p.setY(center.y() + rotated.y());
+        p.setZ(center.z() + rotated.z());
+    }
+    needsRebuild = true;
+}
+
+//===== END FILE: Geometry\InterpolatedCurve.cpp =====//
+
+//===== START FILE: Geometry\InterpolatedCurve.h =====//
+
+#pragma once
+
+#include "Curve.h"
+#include <vector>
+#include <memory>
+#include <Eigen/Dense>
+
+class IMathProvider;
+class Point;
+
+class InterpolatedCurve : public Curve {
+public:
+    enum class InterpolationType {
+        Linear,         // Interpolacja liniowa
+        CubicSpline,    // Naturalne spline'y kubiczne
+        CatmullRom      // Interpolacja Catmull-Rom
+    };
+
+    explicit InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
+                               InterpolationType type = InterpolationType::CubicSpline);
+    ~InterpolatedCurve() override = default;
+
+    // Zarządzanie punktami interpolacji
+    void addPoint(const Point& point);
+    void insertPoint(size_t index, const Point& point);
+    void removePoint(size_t index);
+    void setPoints(const std::vector<Point>& points);
+    void movePoint(size_t index, const Point& newPosition);
+    const std::vector<Point>& getPoints() const;
+    size_t getPointCount() const;
+
+    // Konfiguracja interpolacji
+    void setInterpolationType(InterpolationType type);
+    InterpolationType getInterpolationType() const;
+
+    // Implementacja metod z klasy bazowej Curve
+    bool isPointOnCurve(const Point& point, double tolerance = 1e-6) const override;
+    double getLength() const override;
+    Point getPointAt(double t) const override;
+    Vector getTangentAt(double t) const override;
+    double getCurvatureAt(double t) const override;
+    std::vector<Point> getIntersectionsWith(const Curve& other) const override;
+
+    // Implementacja z GeometricObject
+    void transform(const TransformMatrix& matrix) override;
+    std::unique_ptr<Curve> clone() const override;
+    Vector getPosition() const override;
+    void setPosition(const Eigen::Vector3d& position) override;
+    Vector getScale() const override;
+    void setScale(const Vector& scale) override;
+    Eigen::Quaterniond getRotation() const override;
+    void setRotation(const Eigen::Quaterniond& rotation) override;
+
+private:
+    std::vector<Point> points;
+    InterpolationType type;
+    std::shared_ptr<IMathProvider> mathProvider;
+
+    // Buforowane dane interpolacyjne
+    mutable std::vector<Eigen::Matrix<double, 4, 2>> coefficients;
+    mutable bool needsRebuild{true};
+
+    // Metody do budowy danych interpolacyjnych
+    void rebuildInterpolation() const;
+    void buildCubicSpline() const;
+    void buildCatmullRom() const;
+};
+
+//===== END FILE: Geometry\InterpolatedCurve.h =====//
+
+//===== START FILE: Geometry\Point.cpp =====//
+
+// File: Point.cpp
+#include "Point.h"
+#include "TransformMatrix.h"
+#include <cmath>
+#include <Eigen/Dense>
+
+Point::Point() : m_coordinates{0.0, 0.0, 0.0} {
+}
+
+Point::Point(double x, double y, double z) : m_coordinates{x, y, z} {
+}
+
+double Point::x() const {
+    return m_coordinates[0];
+}
+
+double Point::y() const {
+    return m_coordinates[1];
+}
+
+double Point::z() const {
+    return m_coordinates[2];
+}
+
+void Point::setX(double x) {
+    m_coordinates[0] = x;
+}
+
+void Point::setY(double y) {
+    m_coordinates[1] = y;
+}
+
+void Point::setZ(double z) {
+    m_coordinates[2] = z;
+}
+
+double Point::distanceTo(const Point& other) const {
+    const double dx = other.x() - x();
+    const double dy = other.y() - y();
+    const double dz = other.z() - z();
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+Point Point::midPoint(const Point& other) const {
+    return Point(
+        (x() + other.x()) / 2.0,
+        (y() + other.y()) / 2.0,
+        (z() + other.z()) / 2.0
+    );
+}
+
+void Point::transform(const TransformMatrix& matrix) {
+    // Konwertujemy punkt do formatu Eigen::Vector4d (reprezentacja homogeniczna)
+    Eigen::Vector4d homogeneousPoint;
+    homogeneousPoint << x(), y(), z(), 1.0;
+
+    // Pobieramy macierz transformacji i aplikujemy transformację
+    Eigen::Vector4d transformedPoint = matrix.getMatrix() * homogeneousPoint;
+
+    // Konwertujemy z powrotem do współrzędnych kartezjańskich (z normalizacją)
+    if (std::abs(transformedPoint(3)) > 1e-10) {  // Unikamy dzielenia przez zero
+        setX(transformedPoint(0) / transformedPoint(3));
+        setY(transformedPoint(1) / transformedPoint(3));
+        setZ(transformedPoint(2) / transformedPoint(3));
+    }
+}
+
+// Implementacja metod z GeometricObject
+Eigen::Vector3d Point::getPosition() const {
+    return Eigen::Vector3d(x(), y(), z());
+}
+
+void Point::setPosition(const Eigen::Vector3d& position) {
+    setX(position.x());
+    setY(position.y());
+    setZ(position.z());
+}
+
+Eigen::Vector3d Point::getScale() const {
+    // Punkt nie ma skali, więc zwracamy jednostkowy wektor
+    return Eigen::Vector3d::Ones();
+}
+
+void Point::setScale(const Eigen::Vector3d& scale) {
+    // Operacja skalowania nie ma zastosowania dla punktu
+    // Implementacja pozostaje pusta
+}
+
+Eigen::Quaterniond Point::getRotation() const {
+    // Punkt nie ma orientacji, zwracamy domyślny kwaternion (brak rotacji)
+    return Eigen::Quaterniond::Identity();
+}
+
+void Point::setRotation(const Eigen::Quaterniond& rotation) {
+    // Operacja rotacji nie ma zastosowania dla punktu
+    // Implementacja pozostaje pusta
+}
+
+//===== END FILE: Geometry\Point.cpp =====//
+
+//===== START FILE: Geometry\Point.h =====//
+
+#pragma once
+
+#include "GeometricObject.h"
+#include <array>
+
+class TransformMatrix;
+
+class Point : public GeometricObject {
+public:
+    Point();
+    Point(double x, double y, double z = 0.0);
+    virtual ~Point() override = default;
+
+    // Coordinate access
+    double x() const;
+    double y() const;
+    double z() const;
+    void setX(double x);
+    void setY(double y);
+    void setZ(double z);
+
+    // Vector operations
+    double distanceTo(const Point& other) const;
+    Point midPoint(const Point& other) const;
+
+    // Override from GeometricObject
+    void transform(const TransformMatrix& matrix) override;
+    Eigen::Vector3d getPosition() const override;
+    void setPosition(const Eigen::Vector3d& position) override;
+    Eigen::Vector3d getScale() const override;
+    void setScale(const Eigen::Vector3d& scale) override;
+    Eigen::Quaterniond getRotation() const override;
+    void setRotation(const Eigen::Quaterniond& rotation) override;
+
+private:
+    std::array<double, 3> m_coordinates;
+};
+
+//===== END FILE: Geometry\Point.h =====//
+
+//===== START FILE: Geometry\TransformMatrix.cpp =====//
+
+// File: TransformMatrix.cpp
+#include "TransformMatrix.h"
+
+// StandardTransformMatrix implementation
+StandardTransformMatrix::StandardTransformMatrix()
+    : m_matrix(Eigen::Matrix4d::Identity()) {
+}
+
+StandardTransformMatrix::StandardTransformMatrix(const Eigen::Matrix4d& matrix)
+    : m_matrix(matrix) {
+}
+
+Eigen::Matrix4d StandardTransformMatrix::getMatrix() const {
+    return m_matrix;
+}
+
+void StandardTransformMatrix::setMatrix(const Eigen::Matrix4d& matrix) {
+    m_matrix = matrix;
+}
+
+Eigen::Matrix4d StandardTransformMatrix::multiply(const Eigen::Matrix4d& other) const {
+    return m_matrix * other;
+}
+
+//===== END FILE: Geometry\TransformMatrix.cpp =====//
+
+//===== START FILE: Geometry\TransformMatrix.h =====//
+
+// File: TransformMatrix.h
+#pragma once
+#include <Eigen/Dense>
+#include <memory>
+
+class TransformMatrix {
+public:
+    virtual ~TransformMatrix() = default;
+
+    virtual Eigen::Matrix4d getMatrix() const = 0;
+    virtual void setMatrix(const Eigen::Matrix4d& matrix) = 0;
+    virtual Eigen::Matrix4d multiply(const Eigen::Matrix4d& other) const = 0;
+};
+
+// Standardowa implementacja TransformMatrix
+class StandardTransformMatrix : public TransformMatrix {
+public:
+    StandardTransformMatrix();
+    explicit StandardTransformMatrix(const Eigen::Matrix4d& matrix);
+
+    // Implementacja metod interfejsu
+    Eigen::Matrix4d getMatrix() const override;
+    void setMatrix(const Eigen::Matrix4d& matrix) override;
+    Eigen::Matrix4d multiply(const Eigen::Matrix4d& other) const override;
+
+private:
+    Eigen::Matrix4d m_matrix;
+};
+
+//===== END FILE: Geometry\TransformMatrix.h =====//
+
+//===== START FILE: Graphics\Canvas.cpp =====//
+
+#include "Canvas.h"
+
+class Canvas::CanvasPrivate {
+public:
+    CanvasPrivate() : viewportManager(new ViewportManager()) {}
+
+    std::vector<std::shared_ptr<GeometricObject>> objects;
+    std::shared_ptr<GeometricObject> selectedObject;
+    std::unique_ptr<ViewportManager> viewportManager;
+    std::shared_ptr<IRenderer> renderer;
+
+    // Zmienne do obsługi interakcji myszy
+    bool isPanning = false;
+    QPointF lastMousePos;
+    QPointF selectionPoint;
+    bool isSelecting = false;
+};
+
+Canvas::Canvas(QWidget* parent)
+    : QWidget(parent), m_dPtr(new CanvasPrivate())
+{
+    setMouseTracking(true);
+    setFocusPolicy(Qt::StrongFocus);
+    setAttribute(Qt::WA_OpaquePaintEvent);
+    setAttribute(Qt::WA_NoSystemBackground);
+    setAutoFillBackground(false);
+    if (m_dPtr->viewportManager) {
+        m_dPtr->viewportManager->setWindowSize(width(), height());
+        m_dPtr->viewportManager->resetView();
+    }
+}
+
+Canvas::~Canvas() = default;
+
+void Canvas::addObject(std::shared_ptr<GeometricObject> object)
+{
+    if (!object) return;
+
+    m_dPtr->objects.push_back(object);
+    emit objectAdded(object);
+    update();
+}
+
+void Canvas::removeObject(std::shared_ptr<GeometricObject> object)
+{
+    if (!object) return;
+
+    if (m_dPtr->selectedObject == object) {
+        clearSelection();
+    }
+
+    auto it = std::find(m_dPtr->objects.begin(), m_dPtr->objects.end(), object);
+    if (it != m_dPtr->objects.end()) {
+        m_dPtr->objects.erase(it);
+        emit objectRemoved(object);
+        update();
+    }
+}
+
+void Canvas::clearObjects()
+{
+    m_dPtr->objects.clear();
+    clearSelection();
+    update();
+}
+
+std::vector<std::shared_ptr<GeometricObject>> Canvas::objects() const
+{
+    return m_dPtr->objects;
+}
+
+void Canvas::selectObject(std::shared_ptr<GeometricObject> object)
+{
+    if (m_dPtr->selectedObject != object) {
+        m_dPtr->selectedObject = object;
+        emit objectSelected(object);
+        update();
+    }
+}
+
+void Canvas::clearSelection()
+{
+    if (m_dPtr->selectedObject) {
+        m_dPtr->selectedObject = nullptr;
+        emit selectionCleared();
+        update();
+    }
+}
+
+std::shared_ptr<GeometricObject> Canvas::selectedObject() const
+{
+    return m_dPtr->selectedObject;
+}
+
+void Canvas::zoomIn()
+{
+    if (m_dPtr->viewportManager) {
+        QPointF center(width() / 2.0, height() / 2.0);
+        m_dPtr->viewportManager->zoomIn(center);
+        emit viewportChanged();
+        update();
+    }
+}
+
+void Canvas::zoomOut()
+{
+    if (m_dPtr->viewportManager) {
+        QPointF center(width() / 2.0, height() / 2.0);
+        m_dPtr->viewportManager->zoomOut(center);
+        emit viewportChanged();
+        update();
+    }
+}
+
+void Canvas::resetView()
+{
+    if (m_dPtr->viewportManager) {
+        m_dPtr->viewportManager->resetView();
+        emit viewportChanged();
+        update();
+    }
+}
+
+void Canvas::fitToContents()
+{
+    if (m_dPtr->objects.empty()) {
+        resetView();
+        return;
+    }
+
+    // Obliczenie granic wszystkich obiektów geometrycznych
+    QRectF bounds(-10, -10, 20, 20); // Domyślne granice
+
+    if (m_dPtr->viewportManager) {
+        m_dPtr->viewportManager->fitView(bounds);
+        emit viewportChanged();
+        update();
+    }
+}
+
+ViewportManager* Canvas::viewportManager() const
+{
+    return m_dPtr->viewportManager.get();
+}
+
+void Canvas::setRenderer(std::shared_ptr<IRenderer> renderer)
+{
+    m_dPtr->renderer = renderer;
+    update();
+}
+
+IRenderer* Canvas::renderer() const
+{
+    return m_dPtr->renderer.get();
+}
+
+void Canvas::refresh()
+{
+    update();
+}
+
+void Canvas::paintEvent(QPaintEvent* event)
+{
+    Q_UNUSED(event);
+
+    QPainter painter(this);
+    // Sprawdzamy, czy painter został prawidłowo zainicjowany
+    if (!painter.isActive()) {
+        qWarning() << "Nie można zainicjować QPainter w Canvas::paintEvent";
+        return;
+    }
+    painter.fillRect(rect(), Qt::white);
+
+    if (!m_dPtr->renderer) {
+        return;
+    }
+
+    m_dPtr->renderer->beginRender(&painter, m_dPtr->viewportManager.get());
+
+    // Rysowanie elementów pomocniczych
+    m_dPtr->renderer->renderGrid(1.0);
+    m_dPtr->renderer->renderAxes();
+
+    // Rysowanie obiektów geometrycznych
+    for (const auto& object : m_dPtr->objects) {
+        m_dPtr->renderer->renderObject(*object);
+    }
+
+    // Rysowanie zaznaczenia
+    if (m_dPtr->selectedObject) {
+        const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_dPtr->selectedObject.get());
+        if (geometricObj) {
+            auto position = geometricObj->getPosition();
+            QPointF selectionPos = m_dPtr->viewportManager->worldToScreen(QPointF(position.x(), position.y()));
+            m_dPtr->renderer->renderSelectionMarker(selectionPos);
+        }
+    }
+
+    m_dPtr->renderer->endRender();
+}
+
+void Canvas::resizeEvent(QResizeEvent* event)
+{
+    if (m_dPtr->viewportManager) {
+        m_dPtr->viewportManager->setWindowSize(event->size().width(), event->size().height());
+        emit viewportChanged();
+    }
+
+    QWidget::resizeEvent(event);
+}
+
+void Canvas::mousePressEvent(QMouseEvent* event)
+{
+    m_dPtr->lastMousePos = event->pos();
+
+    if (event->button() == Qt::LeftButton) {
+        m_dPtr->isSelecting = true;
+        m_dPtr->selectionPoint = event->pos();
+
+        // Tutaj można dodać kod do zaznaczania obiektów pod kursorem
+    }
+    else if (event->button() == Qt::MiddleButton ||
+            (event->button() == Qt::LeftButton && event->modifiers() & Qt::ControlModifier)) {
+        m_dPtr->isPanning = true;
+        setCursor(Qt::ClosedHandCursor);
+    }
+
+    QWidget::mousePressEvent(event);
+}
+
+void Canvas::mouseMoveEvent(QMouseEvent* event)
+{
+    QPointF currentPos = event->pos();
+    QPointF delta = currentPos - m_dPtr->lastMousePos;
+
+    if (m_dPtr->isPanning) {
+        if (m_dPtr->viewportManager) {
+            m_dPtr->viewportManager->pan(delta);
+            emit viewportChanged();
+            update();
+        }
+    }
+
+    m_dPtr->lastMousePos = currentPos;
+    QWidget::mouseMoveEvent(event);
+}
+
+void Canvas::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        if (m_dPtr->isSelecting) {
+            // Tutaj logika zaznaczania obiektu
+            m_dPtr->isSelecting = false;
+        }
+    }
+    else if (event->button() == Qt::MiddleButton ||
+            (event->button() == Qt::LeftButton && event->modifiers() & Qt::ControlModifier)) {
+        m_dPtr->isPanning = false;
+        setCursor(Qt::ArrowCursor);
+    }
+
+    QWidget::mouseReleaseEvent(event);
+}
+
+void Canvas::wheelEvent(QWheelEvent* event)
+{
+    if (m_dPtr->viewportManager) {
+        QPointF center = event->position();
+
+        double factor = event->angleDelta().y() > 0 ? 1.1 : 0.9;
+
+        m_dPtr->viewportManager->zoom(factor, center);
+        emit viewportChanged();
+        update();
+    }
+
+    event->accept();
+}
+
+//===== END FILE: Graphics\Canvas.cpp =====//
+
+//===== START FILE: Graphics\Canvas.h =====//
+
+#ifndef CANVAS_H
+#define CANVAS_H
+
+#include <QWidget>
+#include <memory>
+#include <vector>
+#include "ViewportManager.h"
+#include "IRenderer.h"
+#include "../Geometry/GeometricObject.h"
+#include <QPainter>
+#include <QPaintEvent>
+#include <QMouseEvent>
+#include <QWheelEvent>
+#include <QResizeEvent>
+#include <algorithm>
+
+// Forward declarations
+class GeometricObject;
+class QPaintEvent;
+class QMouseEvent;
+class QWheelEvent;
+class QResizeEvent;
+class ViewportManager;
+class IRenderer;
+
+class Canvas : public QWidget {
+    Q_OBJECT
+
+public:
+    explicit Canvas(QWidget* parent = nullptr);
+    ~Canvas() override;
+
+    // Zarządzanie obiektami geometrycznymi
+    void addObject(std::shared_ptr<GeometricObject> object);
+    void removeObject(std::shared_ptr<GeometricObject> object);
+    void clearObjects();
+    std::vector<std::shared_ptr<GeometricObject>> objects() const;
+
+    // Zarządzanie zaznaczeniem
+    void selectObject(std::shared_ptr<GeometricObject> object);
+    void clearSelection();
+    std::shared_ptr<GeometricObject> selectedObject() const;
+
+    // Zarządzanie widokiem
+    void zoomIn();
+    void zoomOut();
+    void resetView();
+    void fitToContents();
+
+    // Dostęp do ViewportManager
+    ViewportManager* viewportManager() const;
+
+    // Ustawienie renderera
+    void setRenderer(std::shared_ptr<IRenderer> renderer);
+    IRenderer* renderer() const;
+
+    public slots:
+        void refresh();
+
+    signals:
+        void objectAdded(std::shared_ptr<GeometricObject> object);
+    void objectRemoved(std::shared_ptr<GeometricObject> object);
+    void objectSelected(std::shared_ptr<GeometricObject> object);
+    void selectionCleared();
+    void viewportChanged();
+
+protected:
+    // Przeciążone metody QWidget
+    void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
+
+private:
+    class CanvasPrivate;
+    std::unique_ptr<CanvasPrivate> m_dPtr;
+};
+
+#endif // CANVAS_H
+
+//===== END FILE: Graphics\Canvas.h =====//
+
+//===== START FILE: Graphics\IRenderer.h =====//
+
+#ifndef IRENDERER_H
+#define IRENDERER_H
+
+#include <memory>
+#include <QColor>
+#include <Qt>
+
+class QPainter;
+class QPointF;
+
+class GeometricObject;
+class Point;
+class Curve;
+
+
+class ViewportManager;
+
+class IRenderer {
+public:
+    virtual ~IRenderer() = default;
+
+    // Inicjalizacja i konfiguracja
+    virtual void beginRender(QPainter* painter, ViewportManager* viewportManager) = 0;
+    virtual void endRender() = 0;
+    
+    // Metody renderowania konkretnych typów obiektów
+    virtual void renderPoint(const Point& point) = 0;
+    virtual void renderCurve(const Curve& curve) = 0;
+    
+    // Ogólna metoda do renderowania obiektów geometrycznych
+    virtual void renderObject(const GeometricObject& object) = 0;
+    
+    // Renderowanie pomocniczych elementów
+    virtual void renderGrid(double gridSize) = 0;
+    virtual void renderAxes() = 0;
+    virtual void renderSelectionMarker(const QPointF& position) = 0;
+    
+    // Metody do ustawiania stylów rysowania
+    virtual void setPointStyle(const QColor& color, float size) = 0;
+    virtual void setCurveStyle(const QColor& color, float width, Qt::PenStyle style = Qt::SolidLine) = 0;
+    virtual void setSelectionStyle(const QColor& color, float size) = 0;
+    virtual void setGridStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) = 0;
+    virtual void setAxesStyle(const QColor& color, float width) = 0;
+    
+    // Włączanie/wyłączanie elementów
+    virtual void setDrawGrid(bool draw) = 0;
+    virtual void setDrawAxes(bool draw) = 0;
+};
+
+
+#endif // IRENDERER_H
+
+//===== END FILE: Graphics\IRenderer.h =====//
+
+//===== START FILE: Graphics\QtRenderer.cpp =====//
+
+#include "QtRenderer.h"
+
+class QtRenderer::QtRendererPrivate {
+public:
+    QtRendererPrivate()
+        : pointColor(Qt::black)
+        , pointSize(4.0f)
+        , curveColor(Qt::blue)
+        , curveWidth(1.0f)
+        , curveStyle(Qt::SolidLine)
+        , selectionColor(Qt::red)
+        , selectionSize(6.0f)
+        , gridColor(Qt::lightGray)
+        , gridWidth(0.5f)
+        , gridStyle(Qt::DotLine)
+        , axesColor(Qt::black)
+        , axesWidth(1.0f)
+        , drawGrid(true)
+        , drawAxes(true)
+        , painter(nullptr)
+        , viewportManager(nullptr)
+    {}
+
+    // Style rysowania
+    QColor pointColor;
+    float pointSize;
+    QColor curveColor;
+    float curveWidth;
+    Qt::PenStyle curveStyle;
+    QColor selectionColor;
+    float selectionSize;
+    QColor gridColor;
+    float gridWidth;
+    Qt::PenStyle gridStyle;
+    QColor axesColor;
+    float axesWidth;
+
+    // Opcje rysowania
+    bool drawGrid;
+    bool drawAxes;
+
+    // Obiekty używane podczas rysowania
+    QPainter* painter;
+    ViewportManager* viewportManager;
+};
+
+QtRenderer::QtRenderer()
+    : m_dPtr(new QtRendererPrivate())
+{
+}
+
+QtRenderer::~QtRenderer() = default;
+
+void QtRenderer::beginRender(QPainter* painter, ViewportManager* viewportManager)
+{
+    if (!painter || !viewportManager) {
+        return;
+    }
+
+    if (!painter->isActive()) {
+        qWarning() << "QPainter nie jest aktywny w beginRender()";
+        return;
+    }
+
+    m_dPtr->painter = painter;
+    m_dPtr->viewportManager = viewportManager;
+
+    m_dPtr->painter->save();
+    m_dPtr->painter->setTransform(viewportManager->viewTransform());
+    m_dPtr->painter->setRenderHint(QPainter::Antialiasing, true);
+}
+
+void QtRenderer::endRender()
+{
+    if (m_dPtr->painter) {
+        m_dPtr->painter->restore();
+
+        m_dPtr->painter = nullptr;
+        m_dPtr->viewportManager = nullptr;
+    }
+}
+
+void QtRenderer::renderPoint(const Point& point)
+{
+    if (!m_dPtr->painter || !m_dPtr->viewportManager || !m_dPtr->painter->isActive()) {
+        return;
+    }
+
+    QPen pen(Qt::NoPen);
+    QBrush brush(m_dPtr->pointColor);
+    m_dPtr->painter->setPen(pen);
+    m_dPtr->painter->setBrush(brush);
+
+    double x = point.x();
+    double y = point.y();
+
+    m_dPtr->painter->drawEllipse(QPointF(x, y), m_dPtr->pointSize, m_dPtr->pointSize);
+}
+
+void QtRenderer::renderCurve(const Curve& curve)
+{
+    if (!m_dPtr->painter || !m_dPtr->viewportManager) {
+        return;
+    }
+
+    QPen pen(m_dPtr->curveColor, m_dPtr->curveWidth, m_dPtr->curveStyle);
+    m_dPtr->painter->setPen(pen);
+    m_dPtr->painter->setBrush(Qt::NoBrush);
+
+    const int numSegments = 100;
+    QPolygonF points;
+
+    for (int i = 0; i <= numSegments; ++i) {
+        double t = static_cast<double>(i) / numSegments;
+        Point p = curve.getPointAt(t);
+        points.append(QPointF(p.x(), p.y()));
+    }
+
+    m_dPtr->painter->drawPolyline(points);
+}
+
+void QtRenderer::renderObject(const GeometricObject& object)
+{
+    const Point* point = dynamic_cast<const Point*>(&object);
+    if (point) {
+        renderPoint(*point);
+        return;
+    }
+
+    const Curve* curve = dynamic_cast<const Curve*>(&object);
+    if (curve) {
+        renderCurve(*curve);
+        return;
+    }
+}
+
+void QtRenderer::renderGrid(double gridSize)
+{
+    if (!m_dPtr->drawGrid || !m_dPtr->painter || !m_dPtr->viewportManager) {
+        return;
+    }
+
+    QPen pen(m_dPtr->gridColor, m_dPtr->gridWidth, m_dPtr->gridStyle);
+    m_dPtr->painter->setPen(pen);
+
+    QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
+
+    double xMin = std::floor(visibleRect.left() / gridSize) * gridSize;
+    double xMax = std::ceil(visibleRect.right() / gridSize) * gridSize;
+    double yMin = std::floor(visibleRect.top() / gridSize) * gridSize;
+    double yMax = std::ceil(visibleRect.bottom() / gridSize) * gridSize;
+
+    // Rysuj linie pionowe
+    for (double x = xMin; x <= xMax; x += gridSize) {
+        m_dPtr->painter->drawLine(QPointF(x, yMin), QPointF(x, yMax));
+    }
+
+    // Rysuj linie poziome
+    for (double y = yMin; y <= yMax; y += gridSize) {
+        m_dPtr->painter->drawLine(QPointF(xMin, y), QPointF(xMax, y));
+    }
+}
+
+void QtRenderer::renderAxes()
+{
+    if (!m_dPtr->drawAxes || !m_dPtr->painter || !m_dPtr->viewportManager) {
+        return;
+    }
+
+    QPen pen(m_dPtr->axesColor, m_dPtr->axesWidth, Qt::SolidLine);
+    m_dPtr->painter->setPen(pen);
+
+    QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
+
+    // Rysuj oś X
+    m_dPtr->painter->drawLine(QPointF(visibleRect.left(), 0),
+                             QPointF(visibleRect.right(), 0));
+
+    // Rysuj oś Y
+    m_dPtr->painter->drawLine(QPointF(0, visibleRect.top()),
+                             QPointF(0, visibleRect.bottom()));
+
+    // Dodaj strzałki wskazujące kierunek osi
+    double arrowSize = 10.0 / m_dPtr->viewportManager->zoomFactor();
+
+    // Strzałka dla osi X
+    QPolygonF arrowX;
+    arrowX << QPointF(visibleRect.right(), 0)
+          << QPointF(visibleRect.right() - arrowSize, arrowSize / 2)
+          << QPointF(visibleRect.right() - arrowSize, -arrowSize / 2);
+    m_dPtr->painter->setBrush(m_dPtr->axesColor);
+    m_dPtr->painter->drawPolygon(arrowX);
+
+    // Strzałka dla osi Y
+    QPolygonF arrowY;
+    arrowY << QPointF(0, visibleRect.top())
+          << QPointF(arrowSize / 2, visibleRect.top() + arrowSize)
+          << QPointF(-arrowSize / 2, visibleRect.top() + arrowSize);
+    m_dPtr->painter->drawPolygon(arrowY);
+
+    // Dodaj etykiety osi
+    m_dPtr->painter->drawText(QPointF(visibleRect.right() - arrowSize, -arrowSize), "x");
+    m_dPtr->painter->drawText(QPointF(arrowSize, visibleRect.top() + arrowSize), "y");
+}
+
+void QtRenderer::renderSelectionMarker(const QPointF& position)
+{
+    if (!m_dPtr->painter || !m_dPtr->painter->isActive()) {
+        return;
+    }
+
+    m_dPtr->painter->save();
+    m_dPtr->painter->resetTransform();
+
+    QPen pen(m_dPtr->selectionColor, 1.0, Qt::SolidLine);
+    m_dPtr->painter->setPen(pen);
+    m_dPtr->painter->setBrush(Qt::NoBrush);
+
+    double size = m_dPtr->selectionSize;
+    m_dPtr->painter->drawEllipse(position, size, size);
+
+    // Narysuj krzyżyk w środku
+    m_dPtr->painter->drawLine(position - QPointF(size / 2, 0),
+                             position + QPointF(size / 2, 0));
+    m_dPtr->painter->drawLine(position - QPointF(0, size / 2),
+                             position + QPointF(0, size / 2));
+
+    m_dPtr->painter->restore();
+}
+
+void QtRenderer::setPointStyle(const QColor& color, float size)
+{
+    m_dPtr->pointColor = color;
+    m_dPtr->pointSize = size;
+}
+
+void QtRenderer::setCurveStyle(const QColor& color, float width, Qt::PenStyle style)
+{
+    m_dPtr->curveColor = color;
+    m_dPtr->curveWidth = width;
+    m_dPtr->curveStyle = style;
+}
+
+void QtRenderer::setSelectionStyle(const QColor& color, float size)
+{
+    m_dPtr->selectionColor = color;
+    m_dPtr->selectionSize = size;
+}
+
+void QtRenderer::setGridStyle(const QColor& color, float width, Qt::PenStyle style)
+{
+    m_dPtr->gridColor = color;
+    m_dPtr->gridWidth = width;
+    m_dPtr->gridStyle = style;
+}
+
+void QtRenderer::setAxesStyle(const QColor& color, float width)
+{
+    m_dPtr->axesColor = color;
+    m_dPtr->axesWidth = width;
+}
+
+void QtRenderer::setDrawGrid(bool draw)
+{
+    m_dPtr->drawGrid = draw;
+}
+
+void QtRenderer::setDrawAxes(bool draw)
+{
+    m_dPtr->drawAxes = draw;
+}
+
+//===== END FILE: Graphics\QtRenderer.cpp =====//
+
+//===== START FILE: Graphics\QtRenderer.h =====//
+
+#ifndef QTRENDERER_H
+#define QTRENDERER_H
+
+#include "IRenderer.h"
+#include <QColor>
+#include <Qt>
+#include <memory>
+#include "ViewportManager.h"
+#include "../Geometry/GeometricObject.h"
+#include "../Geometry/Point.h"
+#include "../Geometry/Curve.h"
+#include <QPainter>
+#include <QPen>
+#include <QBrush>
+#include <QPointF>
+#include <QTransform>
+#include <vector>
+#include <cmath>
+#include <QDebug>
+
+class QtRenderer : public IRenderer {
+public:
+    QtRenderer();
+    ~QtRenderer() override;
+
+    // Inicjalizacja i konfiguracja
+    void beginRender(QPainter* painter, ViewportManager* viewportManager) override;
+    void endRender() override;
+
+    // Metody renderowania konkretnych typów obiektów
+    void renderPoint(const Point& point) override;
+    void renderCurve(const Curve& curve) override;
+
+    // Ogólna metoda do renderowania obiektów geometrycznych
+    void renderObject(const GeometricObject& object) override;
+
+    // Renderowanie pomocniczych elementów
+    void renderGrid(double gridSize) override;
+    void renderAxes() override;
+    void renderSelectionMarker(const QPointF& position) override;
+
+    // Metody do ustawiania stylów rysowania
+    void setPointStyle(const QColor& color, float size) override;
+    void setCurveStyle(const QColor& color, float width, Qt::PenStyle style = Qt::SolidLine) override;
+    void setSelectionStyle(const QColor& color, float size) override;
+    void setGridStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) override;
+    void setAxesStyle(const QColor& color, float width) override;
+
+    // Włączanie/wyłączanie elementów
+    void setDrawGrid(bool draw) override;
+    void setDrawAxes(bool draw) override;
+
+private:
+    class QtRendererPrivate;
+    std::unique_ptr<QtRendererPrivate> m_dPtr;
+};
+
+
+#endif // QTRENDERER_H
+
+//===== END FILE: Graphics\QtRenderer.h =====//
+
+//===== START FILE: Graphics\ViewportManager.cpp =====//
+
+#include "ViewportManager.h"
+#include <algorithm>
+#include <cmath>
+
+// Stałe domyślne
+const double DEFAULT_MIN_ZOOM = 0.1;
+const double DEFAULT_MAX_ZOOM = 100.0;
+const double DEFAULT_ZOOM_FACTOR = 1.0;
+const QPointF DEFAULT_PAN_OFFSET(0.0, 0.0);
+const QRectF DEFAULT_VIEWPORT(-10.0, -10.0, 20.0, 20.0);
+
+ViewportManager::ViewportManager()
+    : m_viewport(DEFAULT_VIEWPORT)
+    , m_windowWidth(800)
+    , m_windowHeight(600)
+    , m_zoomFactor(DEFAULT_ZOOM_FACTOR)
+    , m_panOffset(DEFAULT_PAN_OFFSET)
+    , m_minZoom(DEFAULT_MIN_ZOOM)
+    , m_maxZoom(DEFAULT_MAX_ZOOM)
+{
+    updateTransformations();
+}
+
+ViewportManager::~ViewportManager() = default;
+
+void ViewportManager::pan(const QPointF& delta)
+{
+    // Obliczenie przesunięcia w koordynatach świata
+    QPointF worldDelta = screenToWorld(delta) - screenToWorld(QPointF(0, 0));
+
+    // Aktualizacja przesunięcia
+    m_panOffset -= worldDelta;
+
+    updateTransformations();
+}
+
+void ViewportManager::zoom(double factor, const QPointF& center)
+{
+    // Sprawdzenie ograniczeń zoomowania
+    double newZoom = m_zoomFactor * factor;
+    if (newZoom < m_minZoom) {
+        factor = m_minZoom / m_zoomFactor;
+        newZoom = m_minZoom;
+    }
+    else if (newZoom > m_maxZoom) {
+        factor = m_maxZoom / m_zoomFactor;
+        newZoom = m_maxZoom;
+    }
+
+    // Jeśli nie ma zmiany, zakończ
+    if (std::abs(factor - 1.0) < 1e-6) {
+        return;
+    }
+
+    // Pobierz punkt środkowy w koordynatach świata
+    QPointF worldCenter = screenToWorld(center);
+
+    // Aktualizacja współczynnika zoomowania
+    m_zoomFactor = newZoom;
+
+    // Korekta przesunięcia, aby punkt centralny pozostał w miejscu
+    QPointF newWorldCenter = screenToWorld(center);
+    m_panOffset += worldCenter - newWorldCenter;
+
+    updateTransformations();
+}
+
+void ViewportManager::resetView()
+{
+    // Przywrócenie domyślnych wartości
+    m_zoomFactor = DEFAULT_ZOOM_FACTOR;
+    m_panOffset = DEFAULT_PAN_OFFSET;
+    m_viewport = DEFAULT_VIEWPORT;
+
+    updateTransformations();
+}
+
+void ViewportManager::fitView(const QRectF& rect)
+{
+    if (rect.isEmpty()) {
+        return;
+    }
+
+    // Obliczenie współczynnika skalowania
+    double scaleX = m_windowWidth / rect.width();
+    double scaleY = m_windowHeight / rect.height();
+
+    // Użycie mniejszego współczynnika z marginesem 10%
+    double newZoom = std::min(scaleX, scaleY) * 0.9;
+
+    // Ograniczenie zoomu do dozwolonych wartości
+    newZoom = std::max(m_minZoom, std::min(m_maxZoom, newZoom));
+
+    m_zoomFactor = newZoom;
+    m_panOffset = QPointF(rect.center().x(), rect.center().y());
+
+    updateTransformations();
+}
+
+void ViewportManager::zoomIn(const QPointF& center)
+{
+    zoom(1.2, center); // Zbliżenie o 20%
+}
+
+void ViewportManager::zoomOut(const QPointF& center)
+{
+    zoom(0.8, center); // Oddalenie o 20%
+}
+
+void ViewportManager::panBy(double dx, double dy)
+{
+    pan(QPointF(dx, dy));
+}
+
+QPointF ViewportManager::screenToWorld(const QPointF& screenPoint) const
+{
+    return m_inverseViewTransform.map(screenPoint);
+}
+
+QPointF ViewportManager::worldToScreen(const QPointF& worldPoint) const
+{
+    return m_viewTransform.map(worldPoint);
+}
+
+QRectF ViewportManager::screenToWorld(const QRectF& screenRect) const
+{
+    return m_inverseViewTransform.mapRect(screenRect);
+}
+
+QRectF ViewportManager::worldToScreen(const QRectF& worldRect) const
+{
+    return m_viewTransform.mapRect(worldRect);
+}
+
+QTransform ViewportManager::viewTransform() const
+{
+    return m_viewTransform;
+}
+
+QTransform ViewportManager::inverseViewTransform() const
+{
+    return m_inverseViewTransform;
+}
+
+double ViewportManager::zoomFactor() const
+{
+    return m_zoomFactor;
+}
+
+QPointF ViewportManager::panOffset() const
+{
+    return m_panOffset;
+}
+
+QRectF ViewportManager::visibleWorldRect() const
+{
+    return screenToWorld(QRectF(0, 0, m_windowWidth, m_windowHeight));
+}
+
+void ViewportManager::setViewport(const QRectF& viewport)
+{
+    m_viewport = viewport;
+    updateTransformations();
+}
+
+void ViewportManager::setWindowSize(int width, int height)
+{
+    m_windowWidth = width;
+    m_windowHeight = height;
+    updateTransformations();
+}
+
+void ViewportManager::setZoomFactor(double factor)
+{
+    m_zoomFactor = std::max(m_minZoom, std::min(m_maxZoom, factor));
+    updateTransformations();
+}
+
+void ViewportManager::setPanOffset(const QPointF& offset)
+{
+    m_panOffset = offset;
+    updateTransformations();
+}
+
+void ViewportManager::setMinZoom(double minZoom)
+{
+    m_minZoom = minZoom > 0 ? minZoom : DEFAULT_MIN_ZOOM;
+    if (m_zoomFactor < m_minZoom) {
+        m_zoomFactor = m_minZoom;
+        updateTransformations();
+    }
+}
+
+void ViewportManager::setMaxZoom(double maxZoom)
+{
+    m_maxZoom = maxZoom > m_minZoom ? maxZoom : DEFAULT_MAX_ZOOM;
+    if (m_zoomFactor > m_maxZoom) {
+        m_zoomFactor = m_maxZoom;
+        updateTransformations();
+    }
+}
+
+void ViewportManager::setZoomConstraints(double minZoom, double maxZoom)
+{
+    m_minZoom = minZoom > 0 ? minZoom : DEFAULT_MIN_ZOOM;
+    m_maxZoom = maxZoom > m_minZoom ? maxZoom : DEFAULT_MAX_ZOOM;
+
+    // Dostosowanie aktualnego zoomu do nowych ograniczeń
+    if (m_zoomFactor < m_minZoom) {
+        m_zoomFactor = m_minZoom;
+    }
+    else if (m_zoomFactor > m_maxZoom) {
+        m_zoomFactor = m_maxZoom;
+    }
+
+    updateTransformations();
+}
+
+void ViewportManager::updateTransformations()
+{
+    // Zresetowanie transformacji
+    m_viewTransform.reset();
+
+    // Sekwencja transformacji:
+
+    // 1. Przesunięcie początku układu współrzędnych do środka okna
+    m_viewTransform.translate(m_windowWidth / 2.0, m_windowHeight / 2.0);
+
+    // 2. Zastosowanie współczynnika zoomowania (odwrócenie osi Y)
+    m_viewTransform.scale(m_zoomFactor, -m_zoomFactor);
+
+    // 3. Zastosowanie przesunięcia widoku
+    m_viewTransform.translate(-m_panOffset.x(), -m_panOffset.y());
+
+    // Obliczenie transformacji odwrotnej
+    m_inverseViewTransform = m_viewTransform.inverted();
+}
+
+//===== END FILE: Graphics\ViewportManager.cpp =====//
+
+//===== START FILE: Graphics\ViewportManager.h =====//
+
+#ifndef VIEWPORTMANAGER_H
+#define VIEWPORTMANAGER_H
+
+#include <QPointF>
+#include <QRectF>
+#include <QTransform>
+
+class ViewportManager {
+public:
+    ViewportManager();
+    ~ViewportManager();
+
+    // Transformacje widoku
+    void pan(const QPointF& delta);
+    void zoom(double factor, const QPointF& center);
+    void resetView();
+    void fitView(const QRectF& rect);
+    
+    // Pomocnicze metody transformacji
+    void zoomIn(const QPointF& center);
+    void zoomOut(const QPointF& center);
+    void panBy(double dx, double dy);
+
+    // Konwersje współrzędnych
+    QPointF screenToWorld(const QPointF& screenPoint) const;
+    QPointF worldToScreen(const QPointF& worldPoint) const;
+    QRectF screenToWorld(const QRectF& screenRect) const;
+    QRectF worldToScreen(const QRectF& worldRect) const;
+    
+    // Dostęp do właściwości widoku
+    QTransform viewTransform() const;
+    QTransform inverseViewTransform() const;
+    double zoomFactor() const;
+    QPointF panOffset() const;
+    QRectF visibleWorldRect() const;
+    
+    // Ustawianie właściwości widoku
+    void setViewport(const QRectF& viewport);
+    void setWindowSize(int width, int height);
+    void setZoomFactor(double factor);
+    void setPanOffset(const QPointF& offset);
+    
+    // Ograniczenia
+    void setMinZoom(double minZoom);
+    void setMaxZoom(double maxZoom);
+    void setZoomConstraints(double minZoom, double maxZoom);
+
+private:
+    void updateTransformations();
+
+    QRectF m_viewport; // Obszar w koordynatach świata
+    int m_windowWidth;
+    int m_windowHeight;
+    double m_zoomFactor;
+    QPointF m_panOffset;
+    QTransform m_viewTransform;
+    QTransform m_inverseViewTransform;
+    double m_minZoom;
+    double m_maxZoom;
+};
+
+#endif // VIEWPORTMANAGER_H
+
+//===== END FILE: Graphics\ViewportManager.h =====//
+
+//===== START FILE: Math\EigenMathAdapter.cpp =====//
+
+// File: EigenMathAdapter.cpp
+#include "EigenMathAdapter.h"
+#include "../Geometry/TransformMatrix.h"
+#include <stdexcept>
+
+EigenMathAdapter::EigenMathAdapter() {
+    // Inicjalizacja (opcjonalna)
+}
+
+// Implementacja metod operacji na macierzach
+std::shared_ptr<TransformMatrix> EigenMathAdapter::createRotationMatrix(double angle, const std::array<double, 3>& axis) {
+    Eigen::Vector3d eigenAxis(axis[0], axis[1], axis[2]);
+    Eigen::AngleAxisd rotation(angle, eigenAxis.normalized());
+    Eigen::Matrix4d matrix = Eigen::Matrix4d::Identity();
+    matrix.block<3, 3>(0, 0) = rotation.toRotationMatrix();
+    return std::make_shared<StandardTransformMatrix>(matrix);
+}
+
+std::shared_ptr<TransformMatrix> EigenMathAdapter::createTranslationMatrix(const std::array<double, 3>& translation) {
+    Eigen::Matrix4d matrix = Eigen::Matrix4d::Identity();
+    matrix(0, 3) = translation[0];
+    matrix(1, 3) = translation[1];
+    matrix(2, 3) = translation[2];
+    return std::make_shared<StandardTransformMatrix>(matrix);
+}
+
+std::shared_ptr<TransformMatrix> EigenMathAdapter::createScalingMatrix(const std::array<double, 3>& factors) {
+    Eigen::Matrix4d matrix = Eigen::Matrix4d::Identity();
+    matrix(0, 0) = factors[0];
+    matrix(1, 1) = factors[1];
+    matrix(2, 2) = factors[2];
+    return std::make_shared<StandardTransformMatrix>(matrix);
+}
+
+std::vector<double> EigenMathAdapter::solveLinearSystem(
+    const std::vector<std::vector<double>>& coefficients,
+    const std::vector<double>& constants) {
+
+    // Konwersja danych wejściowych
+    Eigen::MatrixXd A = toEigenMatrix(coefficients);
+    Eigen::VectorXd b = Eigen::Map<const Eigen::VectorXd>(constants.data(), constants.size());
+
+    // Rozwiązanie układu równań (Ax = b)
+    Eigen::VectorXd x = A.colPivHouseholderQr().solve(b);
+
+    // Konwersja wyniku
+    return std::vector<double>(x.data(), x.data() + x.size());
+}
+
+Eigen::MatrixXd EigenMathAdapter::toEigenMatrix(const std::vector<std::vector<double>>& matrix) const {
+    if (matrix.empty()) return Eigen::MatrixXd(0, 0);
+
+    size_t rows = matrix.size();
+    size_t cols = matrix[0].size();
+
+    Eigen::MatrixXd result(rows, cols);
+    for (size_t i = 0; i < rows; ++i) {
+        for (size_t j = 0; j < cols && j < matrix[i].size(); ++j) {
+            result(i, j) = matrix[i][j];
+        }
+    }
+    return result;
+}
+
+//===== END FILE: Math\EigenMathAdapter.cpp =====//
+
+//===== START FILE: Math\EigenMathAdapter.h =====//
+
+// File: EigenMathAdapter.h
+#pragma once
+
+#include "IMathProvider.h"
+#include <Eigen/Dense>
+#include <vector>
+#include <array>
+
+class TransformMatrix;
+
+class EigenMathAdapter : public IMathProvider {
+public:
+    EigenMathAdapter();
+    ~EigenMathAdapter() override = default;
+
+    // Operacje macierzowe
+    std::shared_ptr<TransformMatrix> createRotationMatrix(double angle, const std::array<double, 3>& axis) override;
+    std::shared_ptr<TransformMatrix> createTranslationMatrix(const std::array<double, 3>& translation) override;
+    std::shared_ptr<TransformMatrix> createScalingMatrix(const std::array<double, 3>& factors) override;
+
+    // Operacje algebry liniowej
+    std::vector<double> solveLinearSystem(
+        const std::vector<std::vector<double>>& coefficients,
+        const std::vector<double>& constants) override;
+
+private:
+    // Metoda pomocnicza do konwersji
+    Eigen::MatrixXd toEigenMatrix(const std::vector<std::vector<double>>& matrix) const;
+};
+
+//===== END FILE: Math\EigenMathAdapter.h =====//
+
+//===== START FILE: Math\IMathProvider.cpp =====//
+
+#include "IMathProvider.h"
+#include <stdexcept>
+
+class BasicMathProvider : public IMathProvider {
+public:
+    double add(double a, double b) const override {
+        return a + b;
+    }
+
+    double subtract(double a, double b) const override {
+        return a - b;
+    }
+
+    double multiply(double a, double b) const override {
+        return a * b;
+    }
+
+    double divide(double a, double b) const override {
+        if (b == 0) {
+            throw std::invalid_argument("Division by zero");
+        }
+        return a / b;
+    }
+};
+
+//===== END FILE: Math\IMathProvider.cpp =====//
+
+//===== START FILE: Math\IMathProvider.h =====//
+
+// File: IMathProvider.h
+#pragma once
+
+#include <memory>
+#include <vector>
+#include <array>
+
+class TransformMatrix;
+
+class IMathProvider {
+public:
+    virtual ~IMathProvider() = default;
+
+    // Podstawowe operacje arytmetyczne (inline)
+    virtual double add(double a, double b) const { return a + b; }
+    virtual double subtract(double a, double b) const { return a - b; }
+    virtual double multiply(double a, double b) const { return a * b; }
+    virtual double divide(double a, double b) const {
+        if (b == 0) throw std::invalid_argument("Division by zero");
+        return a / b;
+    }
+
+    // Operacje macierzowe
+    virtual std::shared_ptr<TransformMatrix> createRotationMatrix(double angle, const std::array<double, 3>& axis) = 0;
+    virtual std::shared_ptr<TransformMatrix> createTranslationMatrix(const std::array<double, 3>& translation) = 0;
+    virtual std::shared_ptr<TransformMatrix> createScalingMatrix(const std::array<double, 3>& factors) = 0;
+
+    // Operacje algebry liniowej
+    virtual std::vector<double> solveLinearSystem(
+        const std::vector<std::vector<double>>& coefficients,
+        const std::vector<double>& constants) = 0;
+};
+
+//===== END FILE: Math\IMathProvider.h =====//
+
+//===== START FILE: main.cpp =====//
+
+#include <QApplication>
+#include <QMainWindow>
+#include <QMenuBar>
+#include <QToolBar>
+#include <QAction>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QVBoxLayout>
+#include <QDockWidget>
+#include <QListWidget>
+#include <QStatusBar>
+#include <QLabel>
+#include <cmath>
+
+#include "Graphics/Canvas.h"
+#include "Core/CommandManager.h"
+#include "Geometry/InterpolatedCurve.h"
+#include "Geometry/Point.h"
+#include "Math/EigenMathAdapter.h"
+
+int main(int argc, char *argv[]) {
+    QApplication app(argc, argv);
+
+    // Główne okno aplikacji
+    QMainWindow mainWindow;
+    mainWindow.setWindowTitle("Edytor Krzywych");
+    mainWindow.resize(1024, 768);
+
+    // Menu aplikacji
+    QMenuBar *menuBar = mainWindow.menuBar();
+
+    // Menu Plik
+    QMenu *fileMenu = menuBar->addMenu("Plik");
+    QAction *newAction = fileMenu->addAction("Nowy");
+    newAction->setShortcut(QKeySequence::New);
+    QAction *openAction = fileMenu->addAction("Otwórz...");
+    openAction->setShortcut(QKeySequence::Open);
+    QAction *saveAction = fileMenu->addAction("Zapisz");
+    saveAction->setShortcut(QKeySequence::Save);
+    QAction *saveAsAction = fileMenu->addAction("Zapisz jako...");
+    saveAsAction->setShortcut(QKeySequence::SaveAs);
+    fileMenu->addSeparator();
+    QAction *exitAction = fileMenu->addAction("Wyjście");
+    exitAction->setShortcut(QKeySequence::Quit);
+
+    // Menu Edycja
+    QMenu *editMenu = menuBar->addMenu("Edycja");
+    QAction *undoAction = editMenu->addAction("Cofnij");
+    undoAction->setShortcut(QKeySequence::Undo);
+    QAction *redoAction = editMenu->addAction("Ponów");
+    redoAction->setShortcut(QKeySequence::Redo);
+    editMenu->addSeparator();
+    QAction *deleteAction = editMenu->addAction("Usuń");
+    deleteAction->setShortcut(QKeySequence::Delete);
+
+    // Menu Widok
+    QMenu *viewMenu = menuBar->addMenu("Widok");
+    QAction *zoomInAction = viewMenu->addAction("Przybliż");
+    zoomInAction->setShortcut(QKeySequence::ZoomIn);
+    QAction *zoomOutAction = viewMenu->addAction("Oddal");
+    zoomOutAction->setShortcut(QKeySequence::ZoomOut);
+    QAction *resetViewAction = viewMenu->addAction("Resetuj widok");
+    resetViewAction->setShortcut(QKeySequence("Ctrl+0"));
+    QAction *fitContentAction = viewMenu->addAction("Dopasuj do zawartości");
+
+    // Menu Krzywe
+    QMenu *curvesMenu = menuBar->addMenu("Krzywe");
+    QAction *bezierAction = curvesMenu->addAction("Krzywa Beziera");
+    QAction *interpolatedAction = curvesMenu->addAction("Krzywa interpolowana");
+    QAction *parametricAction = curvesMenu->addAction("Krzywa parametryczna");
+
+    // Menu Pomoc
+    QMenu *helpMenu = menuBar->addMenu("Pomoc");
+    QAction *aboutAction = helpMenu->addAction("O programie");
+
+    // Pasek narzędzi
+    QToolBar *toolBar = new QToolBar("Narzędzia główne", &mainWindow);
+    mainWindow.addToolBar(toolBar);
+
+    toolBar->addAction(newAction);
+    toolBar->addAction(openAction);
+    toolBar->addAction(saveAction);
+    toolBar->addSeparator();
+    toolBar->addAction(undoAction);
+    toolBar->addAction(redoAction);
+    toolBar->addSeparator();
+    toolBar->addAction(bezierAction);
+    toolBar->addAction(interpolatedAction);
+    toolBar->addAction(parametricAction);
+    toolBar->addSeparator();
+    toolBar->addAction(zoomInAction);
+    toolBar->addAction(zoomOutAction);
+    toolBar->addAction(resetViewAction);
+
+    // Centralny widget
+    QWidget *centralWidget = new QWidget(&mainWindow);
+    QVBoxLayout *layout = new QVBoxLayout(centralWidget);
+
+    // Canvas do rysowania
+    Canvas *canvas = new Canvas(centralWidget);
+    layout->addWidget(canvas);
+
+    // Ustawienie centralnego widgetu
+    mainWindow.setCentralWidget(centralWidget);
+
+    // Doker z listą obiektów
+    QDockWidget *objectsDock = new QDockWidget("Obiekty", &mainWindow);
+    objectsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+
+    QListWidget *objectsList = new QListWidget(objectsDock);
+    objectsDock->setWidget(objectsList);
+
+    mainWindow.addDockWidget(Qt::RightDockWidgetArea, objectsDock);
+
+    // Doker z właściwościami
+    QDockWidget *propertiesDock = new QDockWidget("Właściwości", &mainWindow);
+    propertiesDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+
+    QWidget *propertiesWidget = new QWidget(propertiesDock);
+    QVBoxLayout *propertiesLayout = new QVBoxLayout(propertiesWidget);
+    propertiesLayout->addWidget(new QLabel("Wybierz obiekt, aby edytować jego właściwości"));
+    propertiesDock->setWidget(propertiesWidget);
+
+    mainWindow.addDockWidget(Qt::RightDockWidgetArea, propertiesDock);
+
+    // Pasek statusu
+    QStatusBar *statusBar = mainWindow.statusBar();
+    statusBar->showMessage("Gotowy");
+
+    // Inicjalizacja narzędzi matematycznych
+    auto mathProvider = std::make_shared<EigenMathAdapter>();
+
+    // Inicjalizacja managera poleceń
+    CommandManager commandManager;
+
+    // Połączenia akcji
+    QObject::connect(exitAction, &QAction::triggered, &app, &QApplication::quit);
+
+    QObject::connect(newAction, &QAction::triggered, [&]() {
+        canvas->clearObjects();
+        commandManager.clearHistory();
+        canvas->resetView();
+        objectsList->clear();
+        statusBar->showMessage("Utworzono nowy projekt");
+    });
+
+    QObject::connect(openAction, &QAction::triggered, [&]() {
+        QString filePath = QFileDialog::getOpenFileName(&mainWindow, "Otwórz projekt",
+            QString(), "Pliki projektu (*.crv);;Wszystkie pliki (*.*)");
+        if (!filePath.isEmpty()) {
+            statusBar->showMessage("Otwieranie projektu nie jest jeszcze zaimplementowane");
+        }
+    });
+
+    QObject::connect(saveAction, &QAction::triggered, [&]() {
+        statusBar->showMessage("Zapisywanie projektu nie jest jeszcze zaimplementowane");
+    });
+
+    QObject::connect(saveAsAction, &QAction::triggered, [&]() {
+        QString filePath = QFileDialog::getSaveFileName(&mainWindow, "Zapisz projekt jako",
+            QString(), "Pliki projektu (*.crv);;Wszystkie pliki (*.*)");
+        if (!filePath.isEmpty()) {
+            statusBar->showMessage("Zapisywanie projektu nie jest jeszcze zaimplementowane");
+        }
+    });
+
+    QObject::connect(undoAction, &QAction::triggered, [&]() {
+        if (commandManager.canUndo()) {
+            commandManager.undo();
+            canvas->refresh();
+            statusBar->showMessage("Cofnięto ostatnią operację");
+        }
+    });
+
+    QObject::connect(redoAction, &QAction::triggered, [&]() {
+        if (commandManager.canRedo()) {
+            commandManager.redo();
+            canvas->refresh();
+            statusBar->showMessage("Ponowiono operację");
+        }
+    });
+
+    QObject::connect(deleteAction, &QAction::triggered, [&]() {
+        auto selectedObject = canvas->selectedObject();
+        if (selectedObject) {
+            canvas->removeObject(selectedObject);
+            canvas->refresh();
+            statusBar->showMessage("Usunięto wybrany obiekt");
+        }
+    });
+
+    QObject::connect(zoomInAction, &QAction::triggered, [&]() {
+        canvas->zoomIn();
+        statusBar->showMessage("Przybliżono widok");
+    });
+
+    QObject::connect(zoomOutAction, &QAction::triggered, [&]() {
+        canvas->zoomOut();
+        statusBar->showMessage("Oddalono widok");
+    });
+
+    QObject::connect(resetViewAction, &QAction::triggered, [&]() {
+        canvas->resetView();
+        statusBar->showMessage("Zresetowano widok");
+    });
+
+    QObject::connect(fitContentAction, &QAction::triggered, [&]() {
+        canvas->fitToContents();
+        statusBar->showMessage("Dopasowano widok do zawartości");
+    });
+
+    QObject::connect(interpolatedAction, &QAction::triggered, [&]() {
+        auto curve = std::make_shared<InterpolatedCurve>(mathProvider);
+        // Dodanie przykładowych punktów
+        curve->addPoint(Point(0, 0));
+        curve->addPoint(Point(50, 100));
+        curve->addPoint(Point(100, 0));
+        canvas->addObject(curve);
+        canvas->refresh();
+        statusBar->showMessage("Utworzono krzywą interpolowaną");
+    });
+
+    QObject::connect(aboutAction, &QAction::triggered, [&]() {
+        QMessageBox::about(&mainWindow, "O programie",
+            "<h3>Edytor Krzywych</h3>"
+            "<p>Wersja 1.0</p>"
+            "<p>Program do tworzenia i edycji krzywych matematycznych.</p>"
+            "<p>Używa biblioteki Eigen do obliczeń matematycznych.</p>");
+    });
+
+    // Aktualizacja listy obiektów
+    QObject::connect(canvas, &Canvas::objectAdded, [objectsList, &statusBar](std::shared_ptr<GeometricObject> obj) {
+        const QString str = "Obiekt " + QString::number(objectsList->count() + 1);
+        objectsList->addItem(str);
+        statusBar->showMessage("Dodano nowy obiekt");
+    });
+
+    QObject::connect(canvas, &Canvas::objectRemoved, [objectsList, canvas, &statusBar](std::shared_ptr<GeometricObject> obj) {
+        objectsList->clear();
+        for (size_t i = 0; i < canvas->objects().size(); ++i) {
+            const QString str = "Obiekt " + QString::number(i + 1);
+            objectsList->addItem(QString(str));
+        }
+        statusBar->showMessage("Usunięto obiekt");
+    });
+
+    QObject::connect(objectsList, &QListWidget::currentRowChanged, [canvas, objectsList, &statusBar](int row) {
+        if (row >= 0 && row < static_cast<int>(canvas->objects().size())) {
+            canvas->selectObject(canvas->objects()[row]);
+            canvas->refresh();
+            const QString message = "Wybrano obiekt " + QString::number(row + 1);
+            statusBar->showMessage(message);
+        }
+    });
+
+    QObject::connect(canvas, &Canvas::objectSelected, [canvas, objectsList](std::shared_ptr<GeometricObject> obj) {
+        auto objects = canvas->objects();
+        auto it = std::find(objects.begin(), objects.end(), obj);
+        if (it != objects.end()) {
+            int row = static_cast<int>(std::distance(objects.begin(), it));
+            objectsList->setCurrentRow(row);
+        }
+    });
+
+    // Wyświetlenie okna
+    mainWindow.show();
+    statusBar->showMessage("Aplikacja gotowa do użycia");
+
+    // Uruchomienie pętli zdarzeń aplikacji
+    return app.exec();
+}
+
+//===== END FILE: main.cpp =====//
+
