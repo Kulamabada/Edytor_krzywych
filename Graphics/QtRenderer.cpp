@@ -54,6 +54,7 @@ QtRenderer::~QtRenderer() = default;
 void QtRenderer::beginRender(QPainter* painter, ViewportManager* viewportManager)
 {
     if (!painter || !viewportManager) {
+        qDebug() << "Nieprawidłowy painter lub viewportManager";
         return;
     }
 
@@ -121,6 +122,11 @@ void QtRenderer::renderCurve(const Curve& curve)
 
 void QtRenderer::renderObject(const GeometricObject& object)
 {
+
+    if (!m_dPtr->painter || !m_dPtr->painter->isActive()) {
+        return;
+    }
+
     const Point* point = dynamic_cast<const Point*>(&object);
     if (point) {
         renderPoint(*point);
