@@ -1,4 +1,4 @@
-// Plik wygenerowany automatycznie 2025-04-10 17:11:12
+// Plik wygenerowany automatycznie 2025-04-10 18:56:17
 // Zawiera 29 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
@@ -1852,6 +1852,7 @@ QtRenderer::~QtRenderer() = default;
 void QtRenderer::beginRender(QPainter* painter, ViewportManager* viewportManager)
 {
     if (!painter || !viewportManager) {
+        qDebug() << "Nieprawidłowy painter lub viewportManager";
         return;
     }
 
@@ -1919,6 +1920,11 @@ void QtRenderer::renderCurve(const Curve& curve)
 
 void QtRenderer::renderObject(const GeometricObject& object)
 {
+
+    if (!m_dPtr->painter || !m_dPtr->painter->isActive()) {
+        return;
+    }
+
     const Point* point = dynamic_cast<const Point*>(&object);
     if (point) {
         renderPoint(*point);
@@ -2631,6 +2637,7 @@ public:
 #include "Core/CommandManager.h"
 #include "Geometry/InterpolatedCurve.h"
 #include "Geometry/Point.h"
+#include "Graphics/QtRenderer.h"
 #include "Math/EigenMathAdapter.h"
 
 int main(int argc, char *argv[]) {
@@ -2714,6 +2721,9 @@ int main(int argc, char *argv[]) {
     // Canvas do rysowania
     Canvas *canvas = new Canvas(centralWidget);
     layout->addWidget(canvas);
+
+    auto renderer = std::make_shared<QtRenderer>();
+    canvas->setRenderer(renderer);
 
     // Ustawienie centralnego widgetu
     mainWindow.setCentralWidget(centralWidget);
