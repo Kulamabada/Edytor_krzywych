@@ -122,7 +122,7 @@ void QtRenderer::renderCurve(const Curve& curve)
 
 void QtRenderer::renderObject(const GeometricObject& object)
 {
-    const Geometry::Point* point = dynamic_cast<const Geometry::Point*>(&object);
+    const Point* point = dynamic_cast<const Point*>(&object);
     if (point) {
         renderPoint(*point);
         return;
