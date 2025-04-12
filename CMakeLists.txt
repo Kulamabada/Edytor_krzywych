@@ -19,22 +19,34 @@ add_executable(edytor_krzywych
         Math/IMathProvider.h
 
         Geometry/GeometricObject.h
+        Geometry/Curve.h
+        Geometry/Curve.cpp
+        Geometry/Point.cpp
+        Geometry/Point.h
+        Geometry/TransformMatrix.cpp
         Geometry/TransformMatrix.h
+        Geometry/InterpolatedCurve.cpp
+        Geometry/InterpolatedCurve.h
 
         Core/AbstractCommand.h
         Core/ApplicationCore.cpp
+        Core/ApplicationCore.h
         Core/Command.cpp
+        Core/Command.h
         Core/CommandManager.cpp
-        Geometry/GeometricObject.cpp
-        Geometry/Point.cpp
-        Geometry/TransformMatrix.cpp
-        Geometry/Curve.cpp
-        Geometry/InterpolatedCurve.cpp
+        Core/CommandManager.h
+
         Graphics/Canvas.cpp
+        Graphics/Canvas.h
         Graphics/ViewportManager.cpp
+        Graphics/ViewportManager.h
         Graphics/QtRenderer.cpp
+        Graphics/QtRenderer.h
+
         Math/IMathProvider.cpp
+        Math/IMathProvider.h
         Math/EigenMathAdapter.cpp
+        Math/EigenMathAdapter.h
 )
 
 find_package(Qt6 COMPONENTS Core Gui Widgets REQUIRED)

@@ -36,7 +36,11 @@ public:
 
     // Renderowanie pomocniczych elementów
     void renderGrid(double gridSize) override;
+
+    void renderText(const QPointF &position, const QString &text);
+
     void renderAxes() override;
+    void renderAxisTicks();
     void renderSelectionMarker(const QPointF& position) override;
 
     // Metody do ustawiania stylów rysowania
@@ -50,10 +54,10 @@ public:
     void setDrawGrid(bool draw) override;
     void setDrawAxes(bool draw) override;
 
-private:
+private:;
     class QtRendererPrivate;
     std::unique_ptr<QtRendererPrivate> m_dPtr;
 };
 
 
-#endif // QTRENDERER_H
+#endif

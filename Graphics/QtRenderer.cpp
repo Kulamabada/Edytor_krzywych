@@ -46,8 +46,7 @@ public:
 
 QtRenderer::QtRenderer()
     : m_dPtr(new QtRendererPrivate())
-{
-}
+{}
 
 QtRenderer::~QtRenderer() = default;
 
@@ -92,8 +91,7 @@ void QtRenderer::renderPoint(const Point& point)
     m_dPtr->painter->setPen(pen);
     m_dPtr->painter->setBrush(brush);
 
-    double x = point.x();
-    double y = point.y();
+    const double x = point.x(), y = point.y();
 
     m_dPtr->painter->drawEllipse(QPointF(x, y), m_dPtr->pointSize, m_dPtr->pointSize);
 }
@@ -108,7 +106,7 @@ void QtRenderer::renderCurve(const Curve& curve)
     m_dPtr->painter->setPen(pen);
     m_dPtr->painter->setBrush(Qt::NoBrush);
 
-    const int numSegments = 100;
+    constexpr int numSegments = 100;
     QPolygonF points;
 
     for (int i = 0; i <= numSegments; ++i) {
@@ -129,62 +127,64 @@ void QtRenderer::renderObject(const GeometricObject& object)
     }
 
     const Curve* curve = dynamic_cast<const Curve*>(&object);
-    if (curve) {
+    if (curve)
         renderCurve(*curve);
-        return;
-    }
+
 }
 
-void QtRenderer::renderGrid(double gridSize)
-{
-    if (!m_dPtr->drawGrid || !m_dPtr->painter || !m_dPtr->viewportManager) {
-        return;
-    }
-
-    QPen pen(m_dPtr->gridColor, m_dPtr->gridWidth, m_dPtr->gridStyle);
-    m_dPtr->painter->setPen(pen);
+void QtRenderer::renderGrid(double gridSize) {
+    if (!m_dPtr->drawGrid || !m_dPtr->painter) return;
 
     QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
 
-    double xMin = std::floor(visibleRect.left() / gridSize) * gridSize;
-    double xMax = std::ceil(visibleRect.right() / gridSize) * gridSize;
-    double yMin = std::floor(visibleRect.top() / gridSize) * gridSize;
-    double yMax = std::ceil(visibleRect.bottom() / gridSize) * gridSize;
+    // Linie pomocnicze
+    QPen smallPen(QColor(230, 230, 230), 0.5, Qt::DotLine);
+    m_dPtr->painter->setPen(smallPen);
 
-    // Rysuj linie pionowe
-    for (double x = xMin; x <= xMax; x += gridSize) {
-        m_dPtr->painter->drawLine(QPointF(x, yMin), QPointF(x, yMax));
+    for (double x = std::floor(visibleRect.left()); x <= visibleRect.right(); x += 1.0) {
+        m_dPtr->painter->drawLine(QPointF(x, visibleRect.top()), QPointF(x, visibleRect.bottom()));
+    }
+    for (double y = std::floor(visibleRect.top()); y <= visibleRect.bottom(); y += 1.0) {
+        m_dPtr->painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
     }
 
-    // Rysuj linie poziome
-    for (double y = yMin; y <= yMax; y += gridSize) {
-        m_dPtr->painter->drawLine(QPointF(xMin, y), QPointF(xMax, y));
+    // Linie główne
+    QPen mainPen(QColor(200, 200, 200), 1.0, Qt::SolidLine);
+    m_dPtr->painter->setPen(mainPen);
+
+    for (double x = std::floor(visibleRect.left() / 5) * 5; x <= visibleRect.right(); x += 5.0) {
+        m_dPtr->painter->drawLine(QPointF(x, visibleRect.top()), QPointF(x, visibleRect.bottom()));
     }
+    for (double y = std::floor(visibleRect.top() / 5) * 5; y <= visibleRect.bottom(); y += 5.0) {
+        m_dPtr->painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
+    }
+}
+
+void QtRenderer::renderText(const QPointF& position, const QString& text) {
+    if (!m_dPtr->painter) return;
+    m_dPtr->painter->save();
+    QTransform current = m_dPtr->painter->transform();
+    m_dPtr->painter->resetTransform();
+    QPointF screenPos = current.map(position);
+    m_dPtr->painter->drawText(screenPos, text);
+    m_dPtr->painter->restore();
 }
 
 void QtRenderer::renderAxes()
 {
-    if (!m_dPtr->drawAxes || !m_dPtr->painter || !m_dPtr->viewportManager) {
-        return;
-    }
+    if (!m_dPtr->drawAxes || !m_dPtr->painter || !m_dPtr->viewportManager) return;
 
     QPen pen(m_dPtr->axesColor, m_dPtr->axesWidth, Qt::SolidLine);
     m_dPtr->painter->setPen(pen);
 
     QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
 
-    // Rysuj oś X
-    m_dPtr->painter->drawLine(QPointF(visibleRect.left(), 0),
-                             QPointF(visibleRect.right(), 0));
+    // Rysowanie głównych osi
+    m_dPtr->painter->drawLine(QPointF(visibleRect.left(), 0), QPointF(visibleRect.right(), 0));
+    m_dPtr->painter->drawLine(QPointF(0, visibleRect.top()), QPointF(0, visibleRect.bottom()));
 
-    // Rysuj oś Y
-    m_dPtr->painter->drawLine(QPointF(0, visibleRect.top()),
-                             QPointF(0, visibleRect.bottom()));
+    double arrowSize = 7.0 / m_dPtr->viewportManager->zoomFactor();
 
-    // Dodaj strzałki wskazujące kierunek osi
-    double arrowSize = 10.0 / m_dPtr->viewportManager->zoomFactor();
-
-    // Strzałka dla osi X
     QPolygonF arrowX;
     arrowX << QPointF(visibleRect.right(), 0)
           << QPointF(visibleRect.right() - arrowSize, arrowSize / 2)
@@ -192,23 +192,100 @@ void QtRenderer::renderAxes()
     m_dPtr->painter->setBrush(m_dPtr->axesColor);
     m_dPtr->painter->drawPolygon(arrowX);
 
-    // Strzałka dla osi Y
     QPolygonF arrowY;
-    arrowY << QPointF(0, visibleRect.top())
-          << QPointF(arrowSize / 2, visibleRect.top() + arrowSize)
-          << QPointF(-arrowSize / 2, visibleRect.top() + arrowSize);
+    arrowY << QPointF(0, visibleRect.bottom())
+          << QPointF(arrowSize / 2, visibleRect.bottom() - arrowSize)
+          << QPointF(-arrowSize / 2, visibleRect.bottom() - arrowSize);
     m_dPtr->painter->drawPolygon(arrowY);
 
-    // Dodaj etykiety osi
-    m_dPtr->painter->drawText(QPointF(visibleRect.right() - arrowSize, -arrowSize), "x");
-    m_dPtr->painter->drawText(QPointF(arrowSize, visibleRect.top() + arrowSize), "y");
+    renderText(QPointF(visibleRect.right() - 2 * arrowSize, -arrowSize), "x");
+    renderText(QPointF(arrowSize, visibleRect.bottom() - 2 * arrowSize), "y");
+
+    renderAxisTicks();
+}
+
+void QtRenderer::renderAxisTicks() {
+    if (!m_dPtr->painter || !m_dPtr->viewportManager || !m_dPtr->painter->isActive()) return;
+
+
+    QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
+    double zoomFactor = m_dPtr->viewportManager->zoomFactor();
+
+    // Obliczenie optymalnej odległości między przedziałkami w zależności od szerokości widocznego obszaru
+    double viewportWidth = visibleRect.width();
+    double viewportHeight = visibleRect.height();
+
+    // Chcemy mieć około 5-10 przedziałek na widocznym obszarze
+    double desiredTickCount = 16.0;
+    double optimalSpacingX = viewportWidth / desiredTickCount;
+    double optimalSpacingY = viewportHeight / desiredTickCount;
+
+    // Funkcja pomocnicza do znajdowania "ładnej" wartości odstępu
+    auto findNiceSpacing = [](double optimalSpacing) -> double {
+        double magnitude = pow(10, floor(log10(optimalSpacing)));
+        double normalized = optimalSpacing / magnitude;
+
+        if (normalized < 1.2) return 1.0 * magnitude;
+        if (normalized < 2.5) return 2.0 * magnitude;
+        if (normalized < 7.0) return 5.0 * magnitude;
+        return 10.0 * magnitude;
+    };
+
+    double tickSpacingX = findNiceSpacing(optimalSpacingX);
+    double tickSpacingY = findNiceSpacing(optimalSpacingY);
+
+    // Minimalna i maksymalna wartość dla przedziałek
+    double xMin = floor(visibleRect.left() / tickSpacingX) * tickSpacingX;
+    double xMax = ceil(visibleRect.right() / tickSpacingX) * tickSpacingX;
+    double yMin = floor(visibleRect.top() / tickSpacingY) * tickSpacingY;
+    double yMax = ceil(visibleRect.bottom() / tickSpacingY) * tickSpacingY;
+
+    double tickLength = 5.0 / zoomFactor;
+
+    auto determinePrecision = [](double spacing) -> int {
+        if (spacing >= 1.0) return 0;
+        return std::min(6, static_cast<int>(std::ceil(std::abs(std::log10(spacing)))));
+    };
+
+    int xPrecision = determinePrecision(tickSpacingX);
+    int yPrecision = determinePrecision(tickSpacingY);
+
+    for (double x = xMin; x <= xMax; x += tickSpacingX) {
+        if (std::abs(x) < 1e-6) continue;
+
+        m_dPtr->painter->drawLine(QPointF(x, -tickLength/2), QPointF(x, tickLength/2));
+        QString label = QString::number(x, 'f', xPrecision);
+        // Usunięcie zbędnych zer na końcu
+        while (label.contains('.') && label.endsWith('0'))
+            label.chop(1);
+
+        if (label.endsWith('.'))
+            label.chop(1);
+
+        renderText(QPointF(x, -tickLength - 5.0/zoomFactor), label);
+    }
+
+    // Rysowanie przedziałek dla osi Y
+    for (double y = yMin; y <= yMax; y += tickSpacingY) {
+        if (std::abs(y) < 1e-6) continue;
+
+        m_dPtr->painter->drawLine(QPointF(-tickLength/2, y), QPointF(tickLength/2, y));
+        QString label = QString::number(y, 'f', yPrecision);
+        // Usunięcie zbędnych zer na końcu
+        while (label.contains('.') && label.endsWith('0'))
+            label.chop(1);
+
+        if (label.endsWith('.'))
+            label.chop(1);
+
+        renderText(QPointF(-tickLength - 15.0/zoomFactor, y), label);
+    }
 }
 
 void QtRenderer::renderSelectionMarker(const QPointF& position)
 {
-    if (!m_dPtr->painter || !m_dPtr->painter->isActive()) {
+    if (!m_dPtr->painter || !m_dPtr->painter->isActive())
         return;
-    }
 
     m_dPtr->painter->save();
     m_dPtr->painter->resetTransform();

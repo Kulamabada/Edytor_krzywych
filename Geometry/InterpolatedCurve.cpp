@@ -5,8 +5,8 @@
 
 InterpolatedCurve::InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
                                     InterpolationType type)
-    : mathProvider(std::move(mathProvider)),
-      type(type),
+    : type(type),
+      mathProvider(std::move(mathProvider)),
       needsRebuild(true) {
 }
 

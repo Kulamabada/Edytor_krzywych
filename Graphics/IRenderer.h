@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <QColor>
+#include <qimage.h>
 #include <Qt>
 
 class QPainter;
@@ -34,7 +35,7 @@ public:
     virtual void renderGrid(double gridSize) = 0;
     virtual void renderAxes() = 0;
     virtual void renderSelectionMarker(const QPointF& position) = 0;
-    
+
     // Metody do ustawiania stylów rysowania
     virtual void setPointStyle(const QColor& color, float size) = 0;
     virtual void setCurveStyle(const QColor& color, float width, Qt::PenStyle style = Qt::SolidLine) = 0;
@@ -48,4 +49,4 @@ public:
 };
 
 
-#endif // IRENDERER_H
+#endif

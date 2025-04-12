@@ -1,5 +1,7 @@
 #include "Canvas.h"
 
+#include <utility>
+
 class Canvas::CanvasPrivate {
 public:
     CanvasPrivate() : viewportManager(new ViewportManager()) {}
@@ -24,6 +26,9 @@ Canvas::Canvas(QWidget* parent)
     setAttribute(Qt::WA_OpaquePaintEvent);
     setAttribute(Qt::WA_NoSystemBackground);
     setAutoFillBackground(false);
+    // Dodane, aby zapewnić poprawne odświeżanie przy zmianie stanu
+    setAttribute(Qt::WA_StaticContents, false);
+
     if (m_dPtr->viewportManager) {
         m_dPtr->viewportManager->setWindowSize(width(), height());
         m_dPtr->viewportManager->resetView();
@@ -145,7 +150,7 @@ ViewportManager* Canvas::viewportManager() const
 
 void Canvas::setRenderer(std::shared_ptr<IRenderer> renderer)
 {
-    m_dPtr->renderer = renderer;
+    m_dPtr->renderer = std::move(renderer);
     update();
 }
 
@@ -156,24 +161,27 @@ IRenderer* Canvas::renderer() const
 
 void Canvas::refresh()
 {
-    update();
+    if (isVisible() && width() > 0 && height() > 0 && !isMinimized()) {
+        update();
+    }
 }
 
 void Canvas::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event);
 
+    if (!isVisible() || width() <= 0 || height() <= 0) return;
+
+
     QPainter painter(this);
-    // Sprawdzamy, czy painter został prawidłowo zainicjowany
     if (!painter.isActive()) {
         qWarning() << "Nie można zainicjować QPainter w Canvas::paintEvent";
         return;
     }
+
     painter.fillRect(rect(), Qt::white);
 
-    if (!m_dPtr->renderer) {
-        return;
-    }
+    if (!m_dPtr->renderer) return;
 
     m_dPtr->renderer->beginRender(&painter, m_dPtr->viewportManager.get());
 
@@ -186,7 +194,6 @@ void Canvas::paintEvent(QPaintEvent* event)
         m_dPtr->renderer->renderObject(*object);
     }
 
-    // Rysowanie zaznaczenia
     if (m_dPtr->selectedObject) {
         const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_dPtr->selectedObject.get());
         if (geometricObj) {
@@ -198,6 +205,7 @@ void Canvas::paintEvent(QPaintEvent* event)
 
     m_dPtr->renderer->endRender();
 }
+
 
 void Canvas::resizeEvent(QResizeEvent* event)
 {
@@ -219,8 +227,7 @@ void Canvas::mousePressEvent(QMouseEvent* event)
 
         // Tutaj można dodać kod do zaznaczania obiektów pod kursorem
     }
-    else if (event->button() == Qt::MiddleButton ||
-            (event->button() == Qt::LeftButton && event->modifiers() & Qt::ControlModifier)) {
+    else if (event->button() == Qt::MiddleButton) {
         m_dPtr->isPanning = true;
         setCursor(Qt::ClosedHandCursor);
     }
@@ -253,8 +260,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent* event)
             m_dPtr->isSelecting = false;
         }
     }
-    else if (event->button() == Qt::MiddleButton ||
-            (event->button() == Qt::LeftButton && event->modifiers() & Qt::ControlModifier)) {
+    else if (event->button() == Qt::MiddleButton) {
         m_dPtr->isPanning = false;
         setCursor(Qt::ArrowCursor);
     }

@@ -3,11 +3,11 @@
 #include <cmath>
 
 // Stałe domyślne
-const double DEFAULT_MIN_ZOOM = 0.1;
-const double DEFAULT_MAX_ZOOM = 100.0;
-const double DEFAULT_ZOOM_FACTOR = 1.0;
-const QPointF DEFAULT_PAN_OFFSET(0.0, 0.0);
-const QRectF DEFAULT_VIEWPORT(-10.0, -10.0, 20.0, 20.0);
+constexpr double DEFAULT_MIN_ZOOM = 0.1;
+constexpr double DEFAULT_MAX_ZOOM = 100.0;
+constexpr double DEFAULT_ZOOM_FACTOR = 1.0;
+constexpr QPointF DEFAULT_PAN_OFFSET(0.0, 0.0);
+constexpr QRectF DEFAULT_VIEWPORT(-10.0, -10.0, 20.0, 20.0);
 
 ViewportManager::ViewportManager()
     : m_viewport(DEFAULT_VIEWPORT)
@@ -27,6 +27,9 @@ void ViewportManager::pan(const QPointF& delta)
 {
     // Obliczenie przesunięcia w koordynatach świata
     QPointF worldDelta = screenToWorld(delta) - screenToWorld(QPointF(0, 0));
+
+    // // Ponieważ oś Y nie jest odwrócona, odwracamy składową Y
+    // worldDelta.setY(-worldDelta.y());
 
     // Aktualizacja przesunięcia
     m_panOffset -= worldDelta;
@@ -85,8 +88,8 @@ void ViewportManager::fitView(const QRectF& rect)
     double scaleX = m_windowWidth / rect.width();
     double scaleY = m_windowHeight / rect.height();
 
-    // Użycie mniejszego współczynnika z marginesem 10%
-    double newZoom = std::min(scaleX, scaleY) * 0.9;
+    // Użycie mniejszego współczynnika z marginesem 15%
+    double newZoom = std::min(scaleX, scaleY) * 0.85;
 
     // Ograniczenie zoomu do dozwolonych wartości
     newZoom = std::max(m_minZoom, std::min(m_maxZoom, newZoom));
@@ -206,27 +209,17 @@ void ViewportManager::setZoomConstraints(double minZoom, double maxZoom)
     m_maxZoom = maxZoom > m_minZoom ? maxZoom : DEFAULT_MAX_ZOOM;
 
     // Dostosowanie aktualnego zoomu do nowych ograniczeń
-    if (m_zoomFactor < m_minZoom) {
-        m_zoomFactor = m_minZoom;
-    }
-    else if (m_zoomFactor > m_maxZoom) {
-        m_zoomFactor = m_maxZoom;
-    }
-
+    if (m_zoomFactor < m_minZoom) m_zoomFactor = m_minZoom;
+    else if (m_zoomFactor > m_maxZoom) m_zoomFactor = m_maxZoom;
     updateTransformations();
 }
 
 void ViewportManager::updateTransformations()
 {
-    // Zresetowanie transformacji
     m_viewTransform.reset();
-
-    // Sekwencja transformacji:
-
-    // 1. Przesunięcie początku układu współrzędnych do środka okna
+    // Przesunięcie początku układu współrzędnych do środka okna
     m_viewTransform.translate(m_windowWidth / 2.0, m_windowHeight / 2.0);
 
-    // 2. Zastosowanie współczynnika zoomowania (odwrócenie osi Y)
     m_viewTransform.scale(m_zoomFactor, -m_zoomFactor);
 
     // 3. Zastosowanie przesunięcia widoku
