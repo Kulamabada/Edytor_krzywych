@@ -81,14 +81,14 @@ int main(int argc, char *argv[]) {
     finishEditingAction->setShortcut(QKeySequence("Esc"));
 
     // Grupa akcji do trybów edycji punktów (tylko jeden może być aktywny)
-    QActionGroup *editModeGroup = new QActionGroup(&mainWindow);
+    auto *editModeGroup = new QActionGroup(&mainWindow);
     editModeGroup->addAction(selectModeAction);
     editModeGroup->addAction(addPointModeAction);
     editModeGroup->addAction(movePointModeAction);
     selectModeAction->setChecked(true); // Domyślnie tryb zaznaczania
 
     // Menu Widok
-    QMenu *viewMenu = menuBar->addMenu("Widok");
+    auto *viewMenu = menuBar->addMenu("Widok");
     QAction *zoomInAction = viewMenu->addAction(QIcon::fromTheme("zoom-in"), "Przybliż");
     zoomInAction->setShortcut(QKeySequence::ZoomIn);
     QAction *zoomOutAction = viewMenu->addAction(QIcon::fromTheme("zoom-out"), "Oddal");
@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
     QAction *aboutAction = helpMenu->addAction(QIcon::fromTheme("help-about"), "O programie");
 
     // Pasek narzędzi głównych
-    QToolBar *toolBar = new QToolBar("Narzędzia główne", &mainWindow);
+    auto *toolBar = new QToolBar("Narzędzia główne", &mainWindow);
     mainWindow.addToolBar(toolBar);
 
     toolBar->addAction(newAction);
@@ -127,7 +127,7 @@ int main(int argc, char *argv[]) {
     toolBar->addAction(resetViewAction);
 
     // Pasek narzędzi edycji punktów kontrolnych
-    QToolBar *editToolBar = new QToolBar("Narzędzia edycji punktów", &mainWindow);
+    auto *editToolBar = new QToolBar("Narzędzia edycji punktów", &mainWindow);
     mainWindow.addToolBar(Qt::TopToolBarArea, editToolBar);
 
     editToolBar->addAction(selectModeAction);
@@ -138,8 +138,8 @@ int main(int argc, char *argv[]) {
     editToolBar->addAction(finishEditingAction);
 
     // Centralny widget
-    QWidget *centralWidget = new QWidget(&mainWindow);
-    QVBoxLayout *layout = new QVBoxLayout(centralWidget);
+    auto *centralWidget = new QWidget(&mainWindow);
+    auto *layout = new QVBoxLayout(centralWidget);
 
     // Canvas do rysowania
     Canvas *canvas = new Canvas(centralWidget);
@@ -210,8 +210,7 @@ int main(int argc, char *argv[]) {
                     const Point& p = points[i];
                     pointItem->setText(0, QString("Punkt %1").arg(std::to_string(i)));
                     pointItem->setText(1, QString("(%1, %2)")
-                        .arg(QString::number(p.x(), 'f', 2))
-                        .arg(QString::number(p.y(), 'f', 2)));
+                        .arg(QString::number(p.x(), 'f', 2), QString::number(p.y(), 'f', 2)));
 
                     pointItem->setData(0, Qt::UserRole, QVariant::fromValue(static_cast<int>(i)));
                     pointItem->setData(0, Qt::UserRole + 1, QVariant::fromValue(index));
