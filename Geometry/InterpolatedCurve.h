@@ -51,6 +51,18 @@ public:
     Eigen::Quaterniond getRotation() const override;
     void setRotation(const Eigen::Quaterniond& rotation) override;
 
+    int findNearestControlPoint(const Point &point, double *outDistance) const;
+
+    std::vector<double> generateEvenlySpacedParameters(int count) const;
+
+    std::vector<Point> samplePoints(int count) const;
+
+    void simplify(double tolerance);
+
+    double distancePointToLine(const Point &point, const Point &lineStart, const Point &lineEnd) const;
+
+    void reparameterize();
+
 private:
     std::vector<Point> points;
     InterpolationType type;

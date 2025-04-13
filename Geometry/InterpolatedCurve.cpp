@@ -2,6 +2,8 @@
 #include "Point.h"
 #include "../Math/IMathProvider.h"
 #include <cmath>
+#include <limits>
+#include <algorithm>
 
 InterpolatedCurve::InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
                                     InterpolationType type)
@@ -256,35 +258,79 @@ double InterpolatedCurve::getLength() const {
 }
 
 std::vector<Point> InterpolatedCurve::getIntersectionsWith(const Curve& other) const {
-    // Uproszczona implementacja - brute force z optymalizacją
+    // Ulepszona implementacja - adaptacyjna metoda znajdowania przecięć
     std::vector<Point> result;
-    const int steps = 25;
-    const double tolerance = 1e-4;
 
-    for (int i = 0; i <= steps; ++i) {
-        double t1 = static_cast<double>(i) / steps;
-        Point p1 = getPointAt(t1);
+    // Najpierw sprawdzamy otoczki wypukłe obu krzywych
+    // Jeśli się nie przecinają, możemy szybko wrócić
 
-        for (int j = 0; j <= steps; ++j) {
-            double t2 = static_cast<double>(j) / steps;
-            Point p2 = other.getPointAt(t2);
+    // Adaptacyjny podział przestrzeni dla efektywnego znajdowania przecięć
+    const int initialSteps = 20;
+    const double initialTolerance = 1e-3;
+    const double finalTolerance = 1e-6;
+    const int maxRecursionDepth = 8;
 
-            if (p1.distanceTo(p2) < tolerance) {
-                // Sprawdź czy punkt już istnieje w wynikach
+    std::function<void(double, double, double, double, int)> findIntersectionsRecursive =
+        [&](double t1Start, double t1End, double t2Start, double t2End, int depth) {
+            Point p1Start = this->getPointAt(t1Start);
+            Point p1End = this->getPointAt(t1End);
+            Point p2Start = other.getPointAt(t2Start);
+            Point p2End = other.getPointAt(t2End);
+
+            // Sprawdzenie, czy prostokąty ograniczające mogą się przecinać
+            double minX1 = std::min(p1Start.x(), p1End.x());
+            double maxX1 = std::max(p1Start.x(), p1End.x());
+            double minY1 = std::min(p1Start.y(), p1End.y());
+            double maxY1 = std::max(p1Start.y(), p1End.y());
+
+            double minX2 = std::min(p2Start.x(), p2End.x());
+            double maxX2 = std::max(p2Start.x(), p2End.x());
+            double minY2 = std::min(p2Start.y(), p2End.y());
+            double maxY2 = std::max(p2Start.y(), p2End.y());
+
+            // Jeśli prostokąty się nie przecinają, kończymy rekurencję
+            if (maxX1 < minX2 || minX1 > maxX2 || maxY1 < minY2 || minY1 > maxY2) {
+                return;
+            }
+
+            // Sprawdzenie punktu środkowego
+            double t1Mid = (t1Start + t1End) / 2.0;
+            double t2Mid = (t2Start + t2End) / 2.0;
+            Point p1Mid = this->getPointAt(t1Mid);
+            Point p2Mid = other.getPointAt(t2Mid);
+
+            double distance = p1Mid.distanceTo(p2Mid);
+
+            // Jeśli znaleźliśmy przecięcie lub osiągnęliśmy maksymalną głębokość rekurencji
+            if (distance < finalTolerance || depth >= maxRecursionDepth) {
+                // Sprawdź, czy ten punkt nie został już dodany
                 bool exists = false;
                 for (const auto& p : result) {
-                    if (p.distanceTo(p1) < tolerance) {
+                    if (p1Mid.distanceTo(p) < finalTolerance) {
                         exists = true;
                         break;
                     }
                 }
-                if (!exists) {
-                    result.push_back(p1);
+
+                if (!exists && distance < initialTolerance) {
+                    // Dodajemy średni punkt jako przybliżenie przecięcia
+                    Point intersection((p1Mid.x() + p2Mid.x()) / 2.0,
+                                      (p1Mid.y() + p2Mid.y()) / 2.0,
+                                      (p1Mid.z() + p2Mid.z()) / 2.0);
+                    result.push_back(intersection);
                 }
-                break;
+                return;
             }
-        }
-    }
+
+            // Kontynuujemy rekurencyjne przeszukiwanie
+            findIntersectionsRecursive(t1Start, t1Mid, t2Start, t2Mid, depth + 1);
+            findIntersectionsRecursive(t1Start, t1Mid, t2Mid, t2End, depth + 1);
+            findIntersectionsRecursive(t1Mid, t1End, t2Start, t2Mid, depth + 1);
+            findIntersectionsRecursive(t1Mid, t1End, t2Mid, t2End, depth + 1);
+        };
+
+    // Uruchomienie rekurencyjnego wyszukiwania
+    findIntersectionsRecursive(0.0, 1.0, 0.0, 1.0, 0);
 
     return result;
 }
@@ -356,5 +402,196 @@ void InterpolatedCurve::setRotation(const Eigen::Quaterniond& rotation) {
         p.setY(center.y() + rotated.y());
         p.setZ(center.z() + rotated.z());
     }
+    needsRebuild = true;
+}
+
+// Nowe metody dla zaawansowanych operacji na krzywych
+
+int InterpolatedCurve::findNearestControlPoint(const Point& point, double* outDistance) const {
+    if (points.empty()) {
+        if (outDistance) *outDistance = std::numeric_limits<double>::max();
+        return -1;
+    }
+
+    int nearestIdx = 0;
+    double minDistance = points[0].distanceTo(point);
+
+    for (size_t i = 1; i < points.size(); ++i) {
+        double dist = points[i].distanceTo(point);
+        if (dist < minDistance) {
+            minDistance = dist;
+            nearestIdx = static_cast<int>(i);
+        }
+    }
+
+    if (outDistance) *outDistance = minDistance;
+    return nearestIdx;
+}
+
+std::vector<double> InterpolatedCurve::generateEvenlySpacedParameters(int count) const {
+    std::vector<double> parameters;
+    if (count <= 0) return parameters;
+
+    for (int i = 0; i < count; ++i) {
+        double t = static_cast<double>(i) / (count - 1);
+        parameters.push_back(t);
+    }
+
+    return parameters;
+}
+
+std::vector<Point> InterpolatedCurve::samplePoints(int count) const {
+    std::vector<Point> sampledPoints;
+    if (count <= 0 || points.empty()) return sampledPoints;
+
+    auto params = generateEvenlySpacedParameters(count);
+    for (double t : params) {
+        sampledPoints.push_back(getPointAt(t));
+    }
+
+    return sampledPoints;
+}
+
+void InterpolatedCurve::simplify(double tolerance) {
+    if (points.size() <= 2) return; // Nie można uprościć krzywej z mniej niż 3 punktami
+
+    std::vector<Point> result;
+    result.push_back(points.front());
+
+    // Algorytm Douglas-Peucker do upraszczania krzywych
+    std::function<void(size_t, size_t)> simplifySegment = [&](size_t start, size_t end) {
+        if (end <= start + 1) return;
+
+        double maxDistance = 0.0;
+        size_t maxIndex = start;
+
+        // Znajdź punkt najbardziej oddalony od linii prostej
+        Point startPoint = points[start];
+        Point endPoint = points[end];
+
+        for (size_t i = start + 1; i < end; ++i) {
+            double distance = distancePointToLine(points[i], startPoint, endPoint);
+            if (distance > maxDistance) {
+                maxDistance = distance;
+                maxIndex = i;
+            }
+        }
+
+        // Jeśli najdalszy punkt jest dalej niż tolerancja, zachowaj go i rekurencyjnie kontynuuj
+        if (maxDistance > tolerance) {
+            simplifySegment(start, maxIndex);
+            result.push_back(points[maxIndex]);
+            simplifySegment(maxIndex, end);
+        }
+    };
+
+    // Uruchomienie rekurencyjnej procedury upraszczania
+    simplifySegment(0, points.size() - 1);
+    result.push_back(points.back());
+
+    // Zastąp punkty kontrolne nowymi, uproszczonymi punktami
+    points = result;
+    needsRebuild = true;
+}
+
+double InterpolatedCurve::distancePointToLine(const Point& point, const Point& lineStart, const Point& lineEnd) const {
+    double lineLength = lineStart.distanceTo(lineEnd);
+    if (lineLength < 1e-10) return point.distanceTo(lineStart);
+
+    // Obliczenie wektora kierunkowego linii
+    Vector lineDirection(
+        lineEnd.x() - lineStart.x(),
+        lineEnd.y() - lineStart.y(),
+        lineEnd.z() - lineStart.z()
+    );
+    lineDirection.normalize();
+
+    // Wektor od punktu początkowego linii do badanego punktu
+    Vector pointVector(
+        point.x() - lineStart.x(),
+        point.y() - lineStart.y(),
+        point.z() - lineStart.z()
+    );
+
+    // Obliczenie rzutu wektora pointVector na kierunek linii
+    double projection = pointVector.dot(lineDirection);
+
+    // Jeśli projekcja jest ujemna, najbliższy jest punkt początkowy
+    if (projection < 0) {
+        return point.distanceTo(lineStart);
+    }
+    // Jeśli projekcja jest większa niż długość linii, najbliższy jest punkt końcowy
+    else if (projection > lineLength) {
+        return point.distanceTo(lineEnd);
+    }
+    // W przeciwnym razie oblicz odległość od prostej
+    else {
+        Vector projectionPoint(
+            lineStart.x() + projection * lineDirection.x(),
+            lineStart.y() + projection * lineDirection.y(),
+            lineStart.z() + projection * lineDirection.z()
+        );
+
+        return std::sqrt(
+            std::pow(point.x() - projectionPoint.x(), 2) +
+            std::pow(point.y() - projectionPoint.y(), 2) +
+            std::pow(point.z() - projectionPoint.z(), 2)
+        );
+    }
+}
+
+void InterpolatedCurve::reparameterize() {
+    if (points.size() <= 1) return;
+
+    // Oblicz długości łuków
+    std::vector<double> arcLengths;
+    arcLengths.push_back(0.0);
+
+    double totalLength = 0.0;
+    const int samples = 100;
+
+    Point prevPoint = points[0];
+    for (int i = 1; i <= samples; ++i) {
+        double t = static_cast<double>(i) / samples;
+        Point currPoint = getPointAt(t);
+        totalLength += prevPoint.distanceTo(currPoint);
+        arcLengths.push_back(totalLength);
+        prevPoint = currPoint;
+    }
+
+    // Normalizacja długości łuków
+    for (auto& length : arcLengths) {
+        length /= totalLength;
+    }
+
+    // Nowe punkty kontrolne
+    std::vector<Point> newPoints;
+    newPoints.push_back(points.front());
+
+    // Równomierne próbkowanie po długości łuku, pomijając pierwszy i ostatni punkt
+    for (size_t i = 1; i < points.size() - 1; ++i) {
+        double targetArcLength = static_cast<double>(i) / (points.size() - 1);
+
+        // Znajdź indeks w tablicy arcLengths, gdzie targetArcLength znajduje się między wartościami
+        auto it = std::lower_bound(arcLengths.begin(), arcLengths.end(), targetArcLength);
+        size_t idx = std::distance(arcLengths.begin(), it);
+
+        // Interpolacja liniowa dla znalezienia odpowiedniego parametru t
+        if (idx > 0 && idx < arcLengths.size()) {
+            double t1 = static_cast<double>(idx - 1) / samples;
+            double t2 = static_cast<double>(idx) / samples;
+            double a1 = arcLengths[idx - 1];
+            double a2 = arcLengths[idx];
+
+            // Interpolacja liniowa parametru t na podstawie długości łuku
+            double t = t1 + (targetArcLength - a1) * (t2 - t1) / (a2 - a1);
+            newPoints.push_back(getPointAt(t));
+        }
+    }
+
+    newPoints.push_back(points.back());
+
+    // Zastąp punkty kontrolne nowymi
+    points = newPoints;
     needsRebuild = true;
 }

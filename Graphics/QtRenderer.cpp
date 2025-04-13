@@ -15,8 +15,16 @@ public:
         , gridStyle(Qt::DotLine)
         , axesColor(Qt::black)
         , axesWidth(1.0f)
+        , controlPointNormalColor(Qt::blue)
+        , controlPointSelectedColor(Qt::red)
+        , controlPointActiveColor(Qt::green)
+        , controlPointSize(5.0f)
+        , controlPolygonColor(Qt::darkGray)
+        , controlPolygonWidth(1.0f)
+        , controlPolygonStyle(Qt::DashLine)
         , drawGrid(true)
         , drawAxes(true)
+        , drawControlPolygon(true)
         , painter(nullptr)
         , viewportManager(nullptr)
     {}
@@ -34,10 +42,18 @@ public:
     Qt::PenStyle gridStyle;
     QColor axesColor;
     float axesWidth;
+    QColor controlPointNormalColor;
+    QColor controlPointSelectedColor;
+    QColor controlPointActiveColor;
+    float controlPointSize;
+    QColor controlPolygonColor;
+    float controlPolygonWidth;
+    Qt::PenStyle controlPolygonStyle;
 
     // Opcje rysowania
     bool drawGrid;
     bool drawAxes;
+    bool drawControlPolygon;
 
     // Obiekty używane podczas rysowania
     QPainter* painter;
@@ -129,7 +145,6 @@ void QtRenderer::renderObject(const GeometricObject& object)
     const Curve* curve = dynamic_cast<const Curve*>(&object);
     if (curve)
         renderCurve(*curve);
-
 }
 
 void QtRenderer::renderGrid(double gridSize) {
@@ -206,7 +221,6 @@ void QtRenderer::renderAxes()
 
 void QtRenderer::renderAxisTicks() {
     if (!m_dPtr->painter || !m_dPtr->viewportManager || !m_dPtr->painter->isActive()) return;
-
 
     QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
     double zoomFactor = m_dPtr->viewportManager->zoomFactor();
@@ -306,6 +320,149 @@ void QtRenderer::renderSelectionMarker(const QPointF& position)
     m_dPtr->painter->restore();
 }
 
+void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bool isActive)
+{
+    if (!m_dPtr->painter || !m_dPtr->painter->isActive()) {
+        return;
+    }
+
+    m_dPtr->painter->save();
+    m_dPtr->painter->resetTransform();
+
+    // Wybór koloru w zależności od stanu punktu
+    QColor fillColor;
+    if (isActive) {
+        fillColor = m_dPtr->controlPointActiveColor;
+    } else if (isSelected) {
+        fillColor = m_dPtr->controlPointSelectedColor;
+    } else {
+        fillColor = m_dPtr->controlPointNormalColor;
+    }
+
+    // Warstwa tła (cień)
+    QPen shadowPen(Qt::black, 1.0);
+    QBrush shadowBrush(QColor(0, 0, 0, 50));
+    m_dPtr->painter->setPen(shadowPen);
+    m_dPtr->painter->setBrush(shadowBrush);
+    m_dPtr->painter->drawEllipse(position + QPointF(1, 1), m_dPtr->controlPointSize + 1, m_dPtr->controlPointSize + 1);
+
+    // Warstwa główna (punkt kontrolny)
+    QPen pen(Qt::black, 1.0);
+    QBrush brush(fillColor);
+    m_dPtr->painter->setPen(pen);
+    m_dPtr->painter->setBrush(brush);
+    m_dPtr->painter->drawEllipse(position, m_dPtr->controlPointSize, m_dPtr->controlPointSize);
+
+    // Dodaj numer punktu kontrolnego jeśli jest wybrany
+    if (isSelected) {
+        m_dPtr->painter->setPen(Qt::white);
+        QFont font = m_dPtr->painter->font();
+        font.setPointSize(9);
+        m_dPtr->painter->setFont(font);
+
+        // Obliczanie offsetu tekstu dla wyśrodkowania
+        QFontMetrics fm(font);
+        QString text = QString::number(isActive ? 1 : 0); // Przykładowy tekst
+        QRect textRect = fm.boundingRect(text);
+        QPointF textPos = position - QPointF(textRect.width() / 2.0, -textRect.height() / 4.0);
+
+        m_dPtr->painter->drawText(textPos, text);
+    }
+
+    m_dPtr->painter->restore();
+}
+
+void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selectedIndex, int activeIndex)
+{
+    if (!m_dPtr->painter || !m_dPtr->viewportManager || points.empty()) {
+        return;
+    }
+
+    // Rysowanie poligonu kontrolnego (linie łączące punkty)
+    if (m_dPtr->drawControlPolygon && points.size() >= 2) {
+        renderControlPolygon(points);
+    }
+
+    // Buforowanie pozycji punktów kontrolnych na ekranie (dla wydajności)
+    std::vector<QPointF> screenPositions;
+    screenPositions.reserve(points.size());
+
+    for (const auto& point : points) {
+        screenPositions.push_back(
+            m_dPtr->viewportManager->worldToScreen(QPointF(point.x(), point.y()))
+        );
+    }
+
+    // Najpierw rysujemy zwykłe punkty kontrolne
+    for (size_t i = 0; i < points.size(); ++i) {
+        if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != activeIndex) {
+            renderControlPoint(screenPositions[i], false, false);
+        }
+    }
+
+    // Następnie rysujemy zaznaczony punkt (jeśli istnieje)
+    if (selectedIndex >= 0 && selectedIndex < static_cast<int>(points.size())) {
+        renderControlPoint(screenPositions[selectedIndex], true, false);
+    }
+
+    // Na końcu rysujemy aktywny punkt (jeśli istnieje i jest inny niż zaznaczony)
+    if (activeIndex >= 0 && activeIndex < static_cast<int>(points.size()) && activeIndex != selectedIndex) {
+        renderControlPoint(screenPositions[activeIndex], false, true);
+    }
+
+    // Rysujemy etykiety z numerami punktów
+    m_dPtr->painter->save();
+    m_dPtr->painter->resetTransform();
+    QPen textPen(Qt::black);
+    m_dPtr->painter->setPen(textPen);
+
+    QFont font = m_dPtr->painter->font();
+    font.setPointSize(8);
+    m_dPtr->painter->setFont(font);
+
+    for (size_t i = 0; i < points.size(); ++i) {
+        QString label = QString::number(i);
+        QFontMetrics fm(font);
+        QRect textRect = fm.boundingRect(label);
+
+        QPointF textPos = screenPositions[i] + QPointF(m_dPtr->controlPointSize + 2,
+                                                      m_dPtr->controlPointSize / 2.0);
+
+        // Tło dla tekstu dla lepszej czytelności
+        QRectF bgRect = QRectF(textPos.x() - 1, textPos.y() - textRect.height(),
+                              textRect.width() + 2, textRect.height() + 2);
+        m_dPtr->painter->fillRect(bgRect, QColor(255, 255, 255, 180));
+
+        m_dPtr->painter->drawText(textPos, label);
+    }
+
+    m_dPtr->painter->restore();
+}
+
+void QtRenderer::renderControlPolygon(const std::vector<Point>& points)
+{
+    if (!m_dPtr->painter || !m_dPtr->viewportManager || points.size() < 2) {
+        return;
+    }
+
+    m_dPtr->painter->save();
+    m_dPtr->painter->resetTransform();
+
+    QPen pen(m_dPtr->controlPolygonColor, m_dPtr->controlPolygonWidth, m_dPtr->controlPolygonStyle);
+    m_dPtr->painter->setPen(pen);
+    m_dPtr->painter->setBrush(Qt::NoBrush);
+
+    QPolygonF polygon;
+    for (const auto& point : points) {
+        QPointF screenPos = m_dPtr->viewportManager->worldToScreen(QPointF(point.x(), point.y()));
+        polygon << screenPos;
+    }
+
+    m_dPtr->painter->drawPolyline(polygon);
+
+    m_dPtr->painter->restore();
+}
+
 void QtRenderer::setPointStyle(const QColor& color, float size)
 {
     m_dPtr->pointColor = color;
@@ -338,6 +495,22 @@ void QtRenderer::setAxesStyle(const QColor& color, float width)
     m_dPtr->axesWidth = width;
 }
 
+void QtRenderer::setControlPointStyle(const QColor& normalColor, const QColor& selectedColor,
+                                    const QColor& activeColor, float size)
+{
+    m_dPtr->controlPointNormalColor = normalColor;
+    m_dPtr->controlPointSelectedColor = selectedColor;
+    m_dPtr->controlPointActiveColor = activeColor;
+    m_dPtr->controlPointSize = size;
+}
+
+void QtRenderer::setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style)
+{
+    m_dPtr->controlPolygonColor = color;
+    m_dPtr->controlPolygonWidth = width;
+    m_dPtr->controlPolygonStyle = style;
+}
+
 void QtRenderer::setDrawGrid(bool draw)
 {
     m_dPtr->drawGrid = draw;
@@ -346,4 +519,9 @@ void QtRenderer::setDrawGrid(bool draw)
 void QtRenderer::setDrawAxes(bool draw)
 {
     m_dPtr->drawAxes = draw;
+}
+
+void QtRenderer::setDrawControlPolygon(bool draw)
+{
+    m_dPtr->drawControlPolygon = draw;
 }

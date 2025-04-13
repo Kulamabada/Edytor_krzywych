@@ -43,7 +43,6 @@ bool AddObjectCommand::undo() {
     if (m_objectId < 0) {
         return false;
     }
-
     return removeObjectFromScene(m_objectId);
 }
 
@@ -180,6 +179,181 @@ bool CompoundCommand::redo() {
     }
 
     return success;
+}
+
+// Implementacja nowych komend do manipulacji punktami kontrolnymi krzywych
+
+// Implementacja AddControlPointCommand
+AddControlPointCommand::AddControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, const Point& point, int index)
+    : m_curve(curve), m_point(point), m_index(index), m_addedIndex(-1) {
+}
+
+bool AddControlPointCommand::execute() {
+    if (!m_curve) {
+        return false;
+    }
+
+    if (m_index < 0 || m_index > static_cast<int>(m_curve->getPointCount())) {
+        // Dodaj na końcu krzywej
+        m_curve->addPoint(m_point);
+        m_addedIndex = static_cast<int>(m_curve->getPointCount()) - 1;
+    } else {
+        // Dodaj pod określonym indeksem
+        m_curve->insertPoint(m_index, m_point);
+        m_addedIndex = m_index;
+    }
+
+    return true;
+}
+
+bool AddControlPointCommand::undo() {
+    if (!m_curve || m_addedIndex < 0 ||
+        m_addedIndex >= static_cast<int>(m_curve->getPointCount())) {
+        return false;
+    }
+
+    m_curve->removePoint(m_addedIndex);
+    return true;
+}
+
+bool AddControlPointCommand::redo() {
+    if (!m_curve) {
+        return false;
+    }
+
+    if (m_addedIndex < 0) {
+        return execute(); // Pierwszy raz wykonujemy execute()
+    }
+
+    // Ponowne dodanie punktu na odpowiednim indeksie
+    if (m_addedIndex > static_cast<int>(m_curve->getPointCount())) {
+        m_curve->addPoint(m_point);
+    } else {
+        m_curve->insertPoint(m_addedIndex, m_point);
+    }
+
+    return true;
+}
+
+// Implementacja MoveControlPointCommand
+MoveControlPointCommand::MoveControlPointCommand(std::shared_ptr<InterpolatedCurve> curve,
+                                               int pointIndex,
+                                               const Point& newPosition)
+    : m_curve(curve), m_pointIndex(pointIndex), m_newPosition(newPosition) {
+
+    // Zapisz obecną pozycję punktu dla operacji undo
+    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getPointCount())) {
+        const auto& points = m_curve->getPoints();
+        m_oldPosition = points[m_pointIndex];
+    }
+}
+
+bool MoveControlPointCommand::execute() {
+    if (!m_curve || m_pointIndex < 0 ||
+        m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        return false;
+    }
+
+    m_curve->movePoint(m_pointIndex, m_newPosition);
+    return true;
+}
+
+bool MoveControlPointCommand::undo() {
+    if (!m_curve || m_pointIndex < 0 ||
+        m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        return false;
+    }
+
+    m_curve->movePoint(m_pointIndex, m_oldPosition);
+    return true;
+}
+
+bool MoveControlPointCommand::redo() {
+    return execute();
+}
+
+// Implementacja DeleteControlPointCommand
+DeleteControlPointCommand::DeleteControlPointCommand(std::shared_ptr<InterpolatedCurve> curve,
+                                                  int pointIndex)
+    : m_curve(curve), m_pointIndex(pointIndex) {
+
+    // Zapisz punkt przed usunięciem dla operacji undo
+    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getPointCount())) {
+        const auto& points = m_curve->getPoints();
+        m_deletedPoint = points[m_pointIndex];
+    }
+}
+
+bool DeleteControlPointCommand::execute() {
+    if (!m_curve || m_pointIndex < 0 ||
+        m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        return false;
+    }
+
+    // Sprawdź, czy krzywa będzie miała wystarczającą liczbę punktów po usunięciu
+    if (m_curve->getPointCount() < 3) {
+        return false; // Minimum 2 punkty do interpolacji
+    }
+
+    m_curve->removePoint(m_pointIndex);
+    return true;
+}
+
+bool DeleteControlPointCommand::undo() {
+    if (!m_curve) {
+        return false;
+    }
+
+    // Przywróć punkt na odpowiedni indeks
+    if (m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        m_curve->addPoint(m_deletedPoint);
+    } else {
+        m_curve->insertPoint(m_pointIndex, m_deletedPoint);
+    }
+
+    return true;
+}
+
+bool DeleteControlPointCommand::redo() {
+    return execute();
+}
+
+// Implementacja BatchControlPointsCommand
+BatchControlPointsCommand::BatchControlPointsCommand(std::shared_ptr<InterpolatedCurve> curve,
+                                                   const std::vector<Point>& newPoints)
+    : m_curve(curve), m_newPoints(newPoints) {
+
+    // Zapisz obecne punkty dla operacji undo
+    if (m_curve) {
+        m_oldPoints = m_curve->getPoints();
+    }
+}
+
+bool BatchControlPointsCommand::execute() {
+    if (!m_curve) {
+        return false;
+    }
+
+    // Wymaga minimum dwóch punktów do utworzenia krzywej
+    if (m_newPoints.size() < 2) {
+        return false;
+    }
+
+    m_curve->setPoints(m_newPoints);
+    return true;
+}
+
+bool BatchControlPointsCommand::undo() {
+    if (!m_curve) {
+        return false;
+    }
+
+    m_curve->setPoints(m_oldPoints);
+    return true;
+}
+
+bool BatchControlPointsCommand::redo() {
+    return execute();
 }
 
 // Implementacja funkcji globalnych do zarządzania sceną

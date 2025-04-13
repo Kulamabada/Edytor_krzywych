@@ -36,12 +36,15 @@ public:
 
     // Renderowanie pomocniczych elementów
     void renderGrid(double gridSize) override;
-
     void renderText(const QPointF &position, const QString &text);
-
     void renderAxes() override;
     void renderAxisTicks();
     void renderSelectionMarker(const QPointF& position) override;
+
+    // Renderowanie punktów kontrolnych
+    void renderControlPoint(const QPointF& position, bool isSelected = false, bool isActive = false) override;
+    void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int activeIndex = -1) override;
+    void renderControlPolygon(const std::vector<Point>& points) override;
 
     // Metody do ustawiania stylów rysowania
     void setPointStyle(const QColor& color, float size) override;
@@ -49,15 +52,17 @@ public:
     void setSelectionStyle(const QColor& color, float size) override;
     void setGridStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) override;
     void setAxesStyle(const QColor& color, float width) override;
+    void setControlPointStyle(const QColor& normalColor, const QColor& selectedColor, const QColor& activeColor, float size) override;
+    void setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) override;
 
     // Włączanie/wyłączanie elementów
     void setDrawGrid(bool draw) override;
     void setDrawAxes(bool draw) override;
+    void setDrawControlPolygon(bool draw) override;
 
-private:;
+private:
     class QtRendererPrivate;
     std::unique_ptr<QtRendererPrivate> m_dPtr;
 };
-
 
 #endif

@@ -1,4 +1,4 @@
-// Plik wygenerowany automatycznie 2025-04-12 18:53:29
+// Plik wygenerowany automatycznie 2025-04-13 12:46:54
 // Zawiera 28 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
@@ -177,7 +177,6 @@ bool AddObjectCommand::undo() {
     if (m_objectId < 0) {
         return false;
     }
-
     return removeObjectFromScene(m_objectId);
 }
 
@@ -316,6 +315,181 @@ bool CompoundCommand::redo() {
     return success;
 }
 
+// Implementacja nowych komend do manipulacji punktami kontrolnymi krzywych
+
+// Implementacja AddControlPointCommand
+AddControlPointCommand::AddControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, const Point& point, int index)
+    : m_curve(curve), m_point(point), m_index(index), m_addedIndex(-1) {
+}
+
+bool AddControlPointCommand::execute() {
+    if (!m_curve) {
+        return false;
+    }
+
+    if (m_index < 0 || m_index > static_cast<int>(m_curve->getPointCount())) {
+        // Dodaj na końcu krzywej
+        m_curve->addPoint(m_point);
+        m_addedIndex = static_cast<int>(m_curve->getPointCount()) - 1;
+    } else {
+        // Dodaj pod określonym indeksem
+        m_curve->insertPoint(m_index, m_point);
+        m_addedIndex = m_index;
+    }
+
+    return true;
+}
+
+bool AddControlPointCommand::undo() {
+    if (!m_curve || m_addedIndex < 0 ||
+        m_addedIndex >= static_cast<int>(m_curve->getPointCount())) {
+        return false;
+    }
+
+    m_curve->removePoint(m_addedIndex);
+    return true;
+}
+
+bool AddControlPointCommand::redo() {
+    if (!m_curve) {
+        return false;
+    }
+
+    if (m_addedIndex < 0) {
+        return execute(); // Pierwszy raz wykonujemy execute()
+    }
+
+    // Ponowne dodanie punktu na odpowiednim indeksie
+    if (m_addedIndex > static_cast<int>(m_curve->getPointCount())) {
+        m_curve->addPoint(m_point);
+    } else {
+        m_curve->insertPoint(m_addedIndex, m_point);
+    }
+
+    return true;
+}
+
+// Implementacja MoveControlPointCommand
+MoveControlPointCommand::MoveControlPointCommand(std::shared_ptr<InterpolatedCurve> curve,
+                                               int pointIndex,
+                                               const Point& newPosition)
+    : m_curve(curve), m_pointIndex(pointIndex), m_newPosition(newPosition) {
+
+    // Zapisz obecną pozycję punktu dla operacji undo
+    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getPointCount())) {
+        const auto& points = m_curve->getPoints();
+        m_oldPosition = points[m_pointIndex];
+    }
+}
+
+bool MoveControlPointCommand::execute() {
+    if (!m_curve || m_pointIndex < 0 ||
+        m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        return false;
+    }
+
+    m_curve->movePoint(m_pointIndex, m_newPosition);
+    return true;
+}
+
+bool MoveControlPointCommand::undo() {
+    if (!m_curve || m_pointIndex < 0 ||
+        m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        return false;
+    }
+
+    m_curve->movePoint(m_pointIndex, m_oldPosition);
+    return true;
+}
+
+bool MoveControlPointCommand::redo() {
+    return execute();
+}
+
+// Implementacja DeleteControlPointCommand
+DeleteControlPointCommand::DeleteControlPointCommand(std::shared_ptr<InterpolatedCurve> curve,
+                                                  int pointIndex)
+    : m_curve(curve), m_pointIndex(pointIndex) {
+
+    // Zapisz punkt przed usunięciem dla operacji undo
+    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getPointCount())) {
+        const auto& points = m_curve->getPoints();
+        m_deletedPoint = points[m_pointIndex];
+    }
+}
+
+bool DeleteControlPointCommand::execute() {
+    if (!m_curve || m_pointIndex < 0 ||
+        m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        return false;
+    }
+
+    // Sprawdź, czy krzywa będzie miała wystarczającą liczbę punktów po usunięciu
+    if (m_curve->getPointCount() < 3) {
+        return false; // Minimum 2 punkty do interpolacji
+    }
+
+    m_curve->removePoint(m_pointIndex);
+    return true;
+}
+
+bool DeleteControlPointCommand::undo() {
+    if (!m_curve) {
+        return false;
+    }
+
+    // Przywróć punkt na odpowiedni indeks
+    if (m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        m_curve->addPoint(m_deletedPoint);
+    } else {
+        m_curve->insertPoint(m_pointIndex, m_deletedPoint);
+    }
+
+    return true;
+}
+
+bool DeleteControlPointCommand::redo() {
+    return execute();
+}
+
+// Implementacja BatchControlPointsCommand
+BatchControlPointsCommand::BatchControlPointsCommand(std::shared_ptr<InterpolatedCurve> curve,
+                                                   const std::vector<Point>& newPoints)
+    : m_curve(curve), m_newPoints(newPoints) {
+
+    // Zapisz obecne punkty dla operacji undo
+    if (m_curve) {
+        m_oldPoints = m_curve->getPoints();
+    }
+}
+
+bool BatchControlPointsCommand::execute() {
+    if (!m_curve) {
+        return false;
+    }
+
+    // Wymaga minimum dwóch punktów do utworzenia krzywej
+    if (m_newPoints.size() < 2) {
+        return false;
+    }
+
+    m_curve->setPoints(m_newPoints);
+    return true;
+}
+
+bool BatchControlPointsCommand::undo() {
+    if (!m_curve) {
+        return false;
+    }
+
+    m_curve->setPoints(m_oldPoints);
+    return true;
+}
+
+bool BatchControlPointsCommand::redo() {
+    return execute();
+}
+
 // Implementacja funkcji globalnych do zarządzania sceną
 namespace {
     // Te implementacje byłyby zastąpione rzeczywistym kodem zarządzania sceną
@@ -367,6 +541,8 @@ namespace {
 #include <Eigen/Dense>
 #include "AbstractCommand.h"
 #include "../Geometry/GeometricObject.h"
+#include "../Geometry/Point.h"
+#include "../Geometry/InterpolatedCurve.h"
 
 // Command to add a geometric object to the scene
 class AddObjectCommand : public AbstractCommand {
@@ -451,6 +627,69 @@ public:
 private:
     std::vector<std::unique_ptr<AbstractCommand>> m_commands;
     std::string m_name;
+};
+
+// Commands for manipulating control points of curves
+class AddControlPointCommand : public AbstractCommand {
+public:
+    AddControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, const Point& point, int index = -1);
+    ~AddControlPointCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<InterpolatedCurve> m_curve;
+    Point m_point;
+    int m_index;       // Pozycja do wstawienia lub -1 dla dodania na końcu
+    int m_addedIndex;  // Rzeczywisty indeks po dodaniu
+};
+
+class MoveControlPointCommand : public AbstractCommand {
+public:
+    MoveControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, int pointIndex, const Point& newPosition);
+    ~MoveControlPointCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<InterpolatedCurve> m_curve;
+    int m_pointIndex;
+    Point m_oldPosition;
+    Point m_newPosition;
+};
+
+class DeleteControlPointCommand : public AbstractCommand {
+public:
+    DeleteControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, int pointIndex);
+    ~DeleteControlPointCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<InterpolatedCurve> m_curve;
+    int m_pointIndex;
+    Point m_deletedPoint;
+};
+
+class BatchControlPointsCommand : public AbstractCommand {
+public:
+    BatchControlPointsCommand(std::shared_ptr<InterpolatedCurve> curve, const std::vector<Point>& newPoints);
+    ~BatchControlPointsCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<InterpolatedCurve> m_curve;
+    std::vector<Point> m_oldPoints;
+    std::vector<Point> m_newPoints;
 };
 
 #endif // COMMAND_H
@@ -719,6 +958,8 @@ public:
 #include "Point.h"
 #include "../Math/IMathProvider.h"
 #include <cmath>
+#include <limits>
+#include <algorithm>
 
 InterpolatedCurve::InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
                                     InterpolationType type)
@@ -973,35 +1214,79 @@ double InterpolatedCurve::getLength() const {
 }
 
 std::vector<Point> InterpolatedCurve::getIntersectionsWith(const Curve& other) const {
-    // Uproszczona implementacja - brute force z optymalizacją
+    // Ulepszona implementacja - adaptacyjna metoda znajdowania przecięć
     std::vector<Point> result;
-    const int steps = 25;
-    const double tolerance = 1e-4;
 
-    for (int i = 0; i <= steps; ++i) {
-        double t1 = static_cast<double>(i) / steps;
-        Point p1 = getPointAt(t1);
+    // Najpierw sprawdzamy otoczki wypukłe obu krzywych
+    // Jeśli się nie przecinają, możemy szybko wrócić
 
-        for (int j = 0; j <= steps; ++j) {
-            double t2 = static_cast<double>(j) / steps;
-            Point p2 = other.getPointAt(t2);
+    // Adaptacyjny podział przestrzeni dla efektywnego znajdowania przecięć
+    const int initialSteps = 20;
+    const double initialTolerance = 1e-3;
+    const double finalTolerance = 1e-6;
+    const int maxRecursionDepth = 8;
 
-            if (p1.distanceTo(p2) < tolerance) {
-                // Sprawdź czy punkt już istnieje w wynikach
+    std::function<void(double, double, double, double, int)> findIntersectionsRecursive =
+        [&](double t1Start, double t1End, double t2Start, double t2End, int depth) {
+            Point p1Start = this->getPointAt(t1Start);
+            Point p1End = this->getPointAt(t1End);
+            Point p2Start = other.getPointAt(t2Start);
+            Point p2End = other.getPointAt(t2End);
+
+            // Sprawdzenie, czy prostokąty ograniczające mogą się przecinać
+            double minX1 = std::min(p1Start.x(), p1End.x());
+            double maxX1 = std::max(p1Start.x(), p1End.x());
+            double minY1 = std::min(p1Start.y(), p1End.y());
+            double maxY1 = std::max(p1Start.y(), p1End.y());
+
+            double minX2 = std::min(p2Start.x(), p2End.x());
+            double maxX2 = std::max(p2Start.x(), p2End.x());
+            double minY2 = std::min(p2Start.y(), p2End.y());
+            double maxY2 = std::max(p2Start.y(), p2End.y());
+
+            // Jeśli prostokąty się nie przecinają, kończymy rekurencję
+            if (maxX1 < minX2 || minX1 > maxX2 || maxY1 < minY2 || minY1 > maxY2) {
+                return;
+            }
+
+            // Sprawdzenie punktu środkowego
+            double t1Mid = (t1Start + t1End) / 2.0;
+            double t2Mid = (t2Start + t2End) / 2.0;
+            Point p1Mid = this->getPointAt(t1Mid);
+            Point p2Mid = other.getPointAt(t2Mid);
+
+            double distance = p1Mid.distanceTo(p2Mid);
+
+            // Jeśli znaleźliśmy przecięcie lub osiągnęliśmy maksymalną głębokość rekurencji
+            if (distance < finalTolerance || depth >= maxRecursionDepth) {
+                // Sprawdź, czy ten punkt nie został już dodany
                 bool exists = false;
                 for (const auto& p : result) {
-                    if (p.distanceTo(p1) < tolerance) {
+                    if (p1Mid.distanceTo(p) < finalTolerance) {
                         exists = true;
                         break;
                     }
                 }
-                if (!exists) {
-                    result.push_back(p1);
+
+                if (!exists && distance < initialTolerance) {
+                    // Dodajemy średni punkt jako przybliżenie przecięcia
+                    Point intersection((p1Mid.x() + p2Mid.x()) / 2.0,
+                                      (p1Mid.y() + p2Mid.y()) / 2.0,
+                                      (p1Mid.z() + p2Mid.z()) / 2.0);
+                    result.push_back(intersection);
                 }
-                break;
+                return;
             }
-        }
-    }
+
+            // Kontynuujemy rekurencyjne przeszukiwanie
+            findIntersectionsRecursive(t1Start, t1Mid, t2Start, t2Mid, depth + 1);
+            findIntersectionsRecursive(t1Start, t1Mid, t2Mid, t2End, depth + 1);
+            findIntersectionsRecursive(t1Mid, t1End, t2Start, t2Mid, depth + 1);
+            findIntersectionsRecursive(t1Mid, t1End, t2Mid, t2End, depth + 1);
+        };
+
+    // Uruchomienie rekurencyjnego wyszukiwania
+    findIntersectionsRecursive(0.0, 1.0, 0.0, 1.0, 0);
 
     return result;
 }
@@ -1076,6 +1361,197 @@ void InterpolatedCurve::setRotation(const Eigen::Quaterniond& rotation) {
     needsRebuild = true;
 }
 
+// Nowe metody dla zaawansowanych operacji na krzywych
+
+int InterpolatedCurve::findNearestControlPoint(const Point& point, double* outDistance) const {
+    if (points.empty()) {
+        if (outDistance) *outDistance = std::numeric_limits<double>::max();
+        return -1;
+    }
+
+    int nearestIdx = 0;
+    double minDistance = points[0].distanceTo(point);
+
+    for (size_t i = 1; i < points.size(); ++i) {
+        double dist = points[i].distanceTo(point);
+        if (dist < minDistance) {
+            minDistance = dist;
+            nearestIdx = static_cast<int>(i);
+        }
+    }
+
+    if (outDistance) *outDistance = minDistance;
+    return nearestIdx;
+}
+
+std::vector<double> InterpolatedCurve::generateEvenlySpacedParameters(int count) const {
+    std::vector<double> parameters;
+    if (count <= 0) return parameters;
+
+    for (int i = 0; i < count; ++i) {
+        double t = static_cast<double>(i) / (count - 1);
+        parameters.push_back(t);
+    }
+
+    return parameters;
+}
+
+std::vector<Point> InterpolatedCurve::samplePoints(int count) const {
+    std::vector<Point> sampledPoints;
+    if (count <= 0 || points.empty()) return sampledPoints;
+
+    auto params = generateEvenlySpacedParameters(count);
+    for (double t : params) {
+        sampledPoints.push_back(getPointAt(t));
+    }
+
+    return sampledPoints;
+}
+
+void InterpolatedCurve::simplify(double tolerance) {
+    if (points.size() <= 2) return; // Nie można uprościć krzywej z mniej niż 3 punktami
+
+    std::vector<Point> result;
+    result.push_back(points.front());
+
+    // Algorytm Douglas-Peucker do upraszczania krzywych
+    std::function<void(size_t, size_t)> simplifySegment = [&](size_t start, size_t end) {
+        if (end <= start + 1) return;
+
+        double maxDistance = 0.0;
+        size_t maxIndex = start;
+
+        // Znajdź punkt najbardziej oddalony od linii prostej
+        Point startPoint = points[start];
+        Point endPoint = points[end];
+
+        for (size_t i = start + 1; i < end; ++i) {
+            double distance = distancePointToLine(points[i], startPoint, endPoint);
+            if (distance > maxDistance) {
+                maxDistance = distance;
+                maxIndex = i;
+            }
+        }
+
+        // Jeśli najdalszy punkt jest dalej niż tolerancja, zachowaj go i rekurencyjnie kontynuuj
+        if (maxDistance > tolerance) {
+            simplifySegment(start, maxIndex);
+            result.push_back(points[maxIndex]);
+            simplifySegment(maxIndex, end);
+        }
+    };
+
+    // Uruchomienie rekurencyjnej procedury upraszczania
+    simplifySegment(0, points.size() - 1);
+    result.push_back(points.back());
+
+    // Zastąp punkty kontrolne nowymi, uproszczonymi punktami
+    points = result;
+    needsRebuild = true;
+}
+
+double InterpolatedCurve::distancePointToLine(const Point& point, const Point& lineStart, const Point& lineEnd) const {
+    double lineLength = lineStart.distanceTo(lineEnd);
+    if (lineLength < 1e-10) return point.distanceTo(lineStart);
+
+    // Obliczenie wektora kierunkowego linii
+    Vector lineDirection(
+        lineEnd.x() - lineStart.x(),
+        lineEnd.y() - lineStart.y(),
+        lineEnd.z() - lineStart.z()
+    );
+    lineDirection.normalize();
+
+    // Wektor od punktu początkowego linii do badanego punktu
+    Vector pointVector(
+        point.x() - lineStart.x(),
+        point.y() - lineStart.y(),
+        point.z() - lineStart.z()
+    );
+
+    // Obliczenie rzutu wektora pointVector na kierunek linii
+    double projection = pointVector.dot(lineDirection);
+
+    // Jeśli projekcja jest ujemna, najbliższy jest punkt początkowy
+    if (projection < 0) {
+        return point.distanceTo(lineStart);
+    }
+    // Jeśli projekcja jest większa niż długość linii, najbliższy jest punkt końcowy
+    else if (projection > lineLength) {
+        return point.distanceTo(lineEnd);
+    }
+    // W przeciwnym razie oblicz odległość od prostej
+    else {
+        Vector projectionPoint(
+            lineStart.x() + projection * lineDirection.x(),
+            lineStart.y() + projection * lineDirection.y(),
+            lineStart.z() + projection * lineDirection.z()
+        );
+
+        return std::sqrt(
+            std::pow(point.x() - projectionPoint.x(), 2) +
+            std::pow(point.y() - projectionPoint.y(), 2) +
+            std::pow(point.z() - projectionPoint.z(), 2)
+        );
+    }
+}
+
+void InterpolatedCurve::reparameterize() {
+    if (points.size() <= 1) return;
+
+    // Oblicz długości łuków
+    std::vector<double> arcLengths;
+    arcLengths.push_back(0.0);
+
+    double totalLength = 0.0;
+    const int samples = 100;
+
+    Point prevPoint = points[0];
+    for (int i = 1; i <= samples; ++i) {
+        double t = static_cast<double>(i) / samples;
+        Point currPoint = getPointAt(t);
+        totalLength += prevPoint.distanceTo(currPoint);
+        arcLengths.push_back(totalLength);
+        prevPoint = currPoint;
+    }
+
+    // Normalizacja długości łuków
+    for (auto& length : arcLengths) {
+        length /= totalLength;
+    }
+
+    // Nowe punkty kontrolne
+    std::vector<Point> newPoints;
+    newPoints.push_back(points.front());
+
+    // Równomierne próbkowanie po długości łuku, pomijając pierwszy i ostatni punkt
+    for (size_t i = 1; i < points.size() - 1; ++i) {
+        double targetArcLength = static_cast<double>(i) / (points.size() - 1);
+
+        // Znajdź indeks w tablicy arcLengths, gdzie targetArcLength znajduje się między wartościami
+        auto it = std::lower_bound(arcLengths.begin(), arcLengths.end(), targetArcLength);
+        size_t idx = std::distance(arcLengths.begin(), it);
+
+        // Interpolacja liniowa dla znalezienia odpowiedniego parametru t
+        if (idx > 0 && idx < arcLengths.size()) {
+            double t1 = static_cast<double>(idx - 1) / samples;
+            double t2 = static_cast<double>(idx) / samples;
+            double a1 = arcLengths[idx - 1];
+            double a2 = arcLengths[idx];
+
+            // Interpolacja liniowa parametru t na podstawie długości łuku
+            double t = t1 + (targetArcLength - a1) * (t2 - t1) / (a2 - a1);
+            newPoints.push_back(getPointAt(t));
+        }
+    }
+
+    newPoints.push_back(points.back());
+
+    // Zastąp punkty kontrolne nowymi
+    points = newPoints;
+    needsRebuild = true;
+}
+
 //===== END FILE: Geometry\InterpolatedCurve.cpp =====//
 
 //===== START FILE: Geometry\InterpolatedCurve.h =====//
@@ -1132,6 +1608,18 @@ public:
     void setScale(const Vector& scale) override;
     Eigen::Quaterniond getRotation() const override;
     void setRotation(const Eigen::Quaterniond& rotation) override;
+
+    int findNearestControlPoint(const Point &point, double *outDistance) const;
+
+    std::vector<double> generateEvenlySpacedParameters(int count) const;
+
+    std::vector<Point> samplePoints(int count) const;
+
+    void simplify(double tolerance);
+
+    double distancePointToLine(const Point &point, const Point &lineStart, const Point &lineEnd) const;
+
+    void reparameterize();
 
 private:
     std::vector<Point> points;
@@ -1360,6 +1848,7 @@ private:
 #include "Canvas.h"
 
 #include <utility>
+#include <QMessageBox>
 
 class Canvas::CanvasPrivate {
 public:
@@ -1375,6 +1864,13 @@ public:
     QPointF lastMousePos;
     QPointF selectionPoint;
     bool isSelecting = false;
+
+    // Zmienne do edycji punktów kontrolnych
+    EditMode editMode = EditMode::None;
+    int selectedControlPointIndex = -1;
+    int activeControlPointIndex = -1;
+    bool isEditingPoints = false;
+    bool isDraggingPoint = false;
 };
 
 Canvas::Canvas(QWidget* parent)
@@ -1437,6 +1933,16 @@ void Canvas::selectObject(std::shared_ptr<GeometricObject> object)
 {
     if (m_dPtr->selectedObject != object) {
         m_dPtr->selectedObject = object;
+
+        // Resetuj zmienne edycji punktów przy zmianie zaznaczenia
+        m_dPtr->selectedControlPointIndex = -1;
+        m_dPtr->activeControlPointIndex = -1;
+
+        // Jeśli jesteśmy w trybie edycji punktów, a zmieniamy obiekt, zakończ edycję
+        if (m_dPtr->isEditingPoints && !std::dynamic_pointer_cast<InterpolatedCurve>(object)) {
+            finishEditing();
+        }
+
         emit objectSelected(object);
         update();
     }
@@ -1446,6 +1952,16 @@ void Canvas::clearSelection()
 {
     if (m_dPtr->selectedObject) {
         m_dPtr->selectedObject = nullptr;
+
+        // Resetuj zmienne edycji punktów przy usunięciu zaznaczenia
+        m_dPtr->selectedControlPointIndex = -1;
+        m_dPtr->activeControlPointIndex = -1;
+
+        // Jeśli jesteśmy w trybie edycji punktów, zakończ edycję
+        if (m_dPtr->isEditingPoints) {
+            finishEditing();
+        }
+
         emit selectionCleared();
         update();
     }
@@ -1525,12 +2041,141 @@ void Canvas::refresh()
     }
 }
 
+void Canvas::setEditMode(EditMode mode) {
+    m_dPtr->editMode = mode;
+
+    if (mode == EditMode::None) {
+        finishEditing();
+    } else {
+        // Jeśli nie mamy zaznaczonej krzywej, a próbujemy edytować punkty, anuluj
+        if ((mode == EditMode::AddPoint || mode == EditMode::MovePoint) && !getSelectedCurve()) {
+            m_dPtr->editMode = EditMode::None;
+            QMessageBox::warning(this, "Edycja punktów",
+                "Najpierw wybierz krzywą do edycji punktów kontrolnych.");
+            return;
+        }
+
+        m_dPtr->isEditingPoints = true;
+        emit editingStarted();
+        update();
+    }
+}
+
+Canvas::EditMode Canvas::getEditMode() const {
+    return m_dPtr->editMode;
+}
+
+bool Canvas::isEditingCurve() const {
+    return m_dPtr->isEditingPoints;
+}
+
+void Canvas::finishEditing() {
+    m_dPtr->editMode = EditMode::None;
+    m_dPtr->isEditingPoints = false;
+    m_dPtr->isDraggingPoint = false;
+    m_dPtr->selectedControlPointIndex = -1;
+    m_dPtr->activeControlPointIndex = -1;
+
+    emit editingFinished();
+    update();
+}
+
+std::shared_ptr<InterpolatedCurve> Canvas::getSelectedCurve() const {
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return nullptr;
+
+    return std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj);
+}
+
+int Canvas::hitTestControlPoint(const QPointF& pos, double tolerance) {
+    auto curve = getSelectedCurve();
+    if (!curve || !m_dPtr->viewportManager) return -1;
+
+    const auto& points = curve->getPoints();
+    for (size_t i = 0; i < points.size(); ++i) {
+        QPointF screenPos = m_dPtr->viewportManager->worldToScreen(
+            QPointF(points[i].x(), points[i].y()));
+
+        if (QLineF(pos, screenPos).length() <= tolerance) {
+            return static_cast<int>(i);
+        }
+    }
+
+    return -1;
+}
+
+bool Canvas::addControlPoint(const QPointF& screenPos) {
+    auto curve = getSelectedCurve();
+    if (!curve || !m_dPtr->viewportManager) return false;
+
+    // Konwertuj współrzędne ekranu na współrzędne świata
+    QPointF worldPos = m_dPtr->viewportManager->screenToWorld(screenPos);
+
+    // Dodaj punkt do krzywej
+    curve->addPoint(Point(worldPos.x(), worldPos.y()));
+
+    // Ustal indeks nowego punktu (ostatni punkt)
+    int newPointIndex = static_cast<int>(curve->getPointCount()) - 1;
+
+    // Zaznacz nowy punkt
+    selectControlPoint(newPointIndex);
+
+    // Emituj sygnał
+    emit controlPointAdded(newPointIndex);
+
+    update();
+    return true;
+}
+
+bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
+    auto curve = getSelectedCurve();
+    if (!curve || !m_dPtr->viewportManager ||
+        pointIndex < 0 || pointIndex >= static_cast<int>(curve->getPointCount())) {
+        return false;
+    }
+
+    // Konwertuj współrzędne ekranu na współrzędne świata
+    QPointF worldPos = m_dPtr->viewportManager->screenToWorld(screenPos);
+
+    // Przesuń punkt
+    const auto& points = curve->getPoints();
+    auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
+    curve->movePoint(pointIndex, newPoint);
+
+    // Emituj sygnał
+    emit controlPointMoved(pointIndex);
+
+    update();
+    return true;
+}
+
+void Canvas::selectControlPoint(int pointIndex) {
+    auto curve = getSelectedCurve();
+    if (!curve) return;
+
+    if (pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
+        m_dPtr->selectedControlPointIndex = pointIndex;
+        emit controlPointSelected(pointIndex);
+    } else {
+        m_dPtr->selectedControlPointIndex = -1;
+    }
+
+    update();
+}
+
+void Canvas::startAddingControlPoints() {
+    setEditMode(EditMode::AddPoint);
+}
+
+void Canvas::startMovingControlPoints() {
+    setEditMode(EditMode::MovePoint);
+}
+
 void Canvas::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event);
 
     if (!isVisible() || width() <= 0 || height() <= 0) return;
-
 
     QPainter painter(this);
     if (!painter.isActive()) {
@@ -1553,6 +2198,7 @@ void Canvas::paintEvent(QPaintEvent* event)
         m_dPtr->renderer->renderObject(*object);
     }
 
+    // Rysowanie markera zaznaczenia dla wybranego obiektu
     if (m_dPtr->selectedObject) {
         const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_dPtr->selectedObject.get());
         if (geometricObj) {
@@ -1562,9 +2208,26 @@ void Canvas::paintEvent(QPaintEvent* event)
         }
     }
 
+    // Rysowanie punktów kontrolnych jeśli jesteśmy w trybie edycji
+    if (m_dPtr->isEditingPoints && m_dPtr->selectedObject) {
+        drawControlPoints();
+    }
+
     m_dPtr->renderer->endRender();
 }
 
+void Canvas::drawControlPoints() {
+    auto curve = getSelectedCurve();
+    if (!curve || !m_dPtr->renderer) return;
+
+    const auto& points = curve->getPoints();
+
+    // Najpierw narysuj poligon kontrolny
+    m_dPtr->renderer->renderControlPolygon(points);
+
+    // Potem narysuj punkty kontrolne
+    m_dPtr->renderer->renderControlPoints(points, m_dPtr->selectedControlPointIndex, m_dPtr->activeControlPointIndex);
+}
 
 void Canvas::resizeEvent(QResizeEvent* event)
 {
@@ -1581,10 +2244,30 @@ void Canvas::mousePressEvent(QMouseEvent* event)
     m_dPtr->lastMousePos = event->pos();
 
     if (event->button() == Qt::LeftButton) {
-        m_dPtr->isSelecting = true;
-        m_dPtr->selectionPoint = event->pos();
+        if (m_dPtr->editMode == EditMode::AddPoint) {
+            // Dodaj nowy punkt kontrolny
+            addControlPoint(event->pos());
+            return;
+        }
+        else if (m_dPtr->editMode == EditMode::MovePoint) {
+            // Sprawdź czy kliknięto na punkt kontrolny
+            int pointIndex = hitTestControlPoint(event->pos());
+            if (pointIndex >= 0) {
+                selectControlPoint(pointIndex);
+                m_dPtr->isDraggingPoint = true;
+                m_dPtr->activeControlPointIndex = pointIndex;
+                setCursor(Qt::ClosedHandCursor);
+                return;
+            }
+        }
+        else {
+            // Tryb zaznaczania obiektu
+            m_dPtr->isSelecting = true;
+            m_dPtr->selectionPoint = event->pos();
 
-        // Tutaj można dodać kod do zaznaczania obiektów pod kursorem
+            // Sprawdź czy kliknięto na obiekt
+            // Ta logika mogłaby być rozszerzona w przyszłości
+        }
     }
     else if (event->button() == Qt::MiddleButton) {
         m_dPtr->isPanning = true;
@@ -1599,11 +2282,24 @@ void Canvas::mouseMoveEvent(QMouseEvent* event)
     QPointF currentPos = event->pos();
     QPointF delta = currentPos - m_dPtr->lastMousePos;
 
-    if (m_dPtr->isPanning) {
+    if (m_dPtr->isDraggingPoint && m_dPtr->activeControlPointIndex >= 0) {
+        // Przesuń punkt kontrolny
+        moveControlPoint(m_dPtr->activeControlPointIndex, currentPos);
+    }
+    else if (m_dPtr->isPanning) {
         if (m_dPtr->viewportManager) {
             m_dPtr->viewportManager->pan(delta);
             emit viewportChanged();
             update();
+        }
+    }
+    else if (m_dPtr->editMode == EditMode::MovePoint) {
+        // Sprawdź czy kursor jest nad punktem kontrolnym
+        int pointIndex = hitTestControlPoint(currentPos);
+        if (pointIndex >= 0) {
+            setCursor(Qt::OpenHandCursor);
+        } else {
+            setCursor(Qt::ArrowCursor);
         }
     }
 
@@ -1614,7 +2310,17 @@ void Canvas::mouseMoveEvent(QMouseEvent* event)
 void Canvas::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton) {
-        if (m_dPtr->isSelecting) {
+        if (m_dPtr->isDraggingPoint) {
+            m_dPtr->isDraggingPoint = false;
+            m_dPtr->activeControlPointIndex = -1;
+
+            if (m_dPtr->editMode == EditMode::MovePoint) {
+                setCursor(Qt::OpenHandCursor);
+            } else {
+                setCursor(Qt::ArrowCursor);
+            }
+        }
+        else if (m_dPtr->isSelecting) {
             // Tutaj logika zaznaczania obiektu
             m_dPtr->isSelecting = false;
         }
@@ -1642,6 +2348,33 @@ void Canvas::wheelEvent(QWheelEvent* event)
     event->accept();
 }
 
+void Canvas::keyPressEvent(QKeyEvent* event)
+{
+    if (event->key() == Qt::Key_Escape) {
+        // Escape wychodzi z trybu edycji
+        finishEditing();
+    }
+    else if (event->key() == Qt::Key_Delete && m_dPtr->selectedControlPointIndex >= 0) {
+        // Usuń wybrany punkt kontrolny
+        auto curve = getSelectedCurve();
+        if (curve && m_dPtr->selectedControlPointIndex >= 0 &&
+            m_dPtr->selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
+
+            // Upewnij się, że krzywa będzie miała co najmniej 2 punkty
+            if (curve->getPointCount() > 2) {
+                curve->removePoint(m_dPtr->selectedControlPointIndex);
+                m_dPtr->selectedControlPointIndex = -1;
+                update();
+            } else {
+                QMessageBox::warning(this, "Usuwanie punktu",
+                    "Krzywa musi mieć co najmniej 2 punkty.");
+            }
+        }
+    }
+
+    QWidget::keyPressEvent(event);
+}
+
 //===== END FILE: Graphics\Canvas.cpp =====//
 
 //===== START FILE: Graphics\Canvas.h =====//
@@ -1655,6 +2388,8 @@ void Canvas::wheelEvent(QWheelEvent* event)
 #include "ViewportManager.h"
 #include "IRenderer.h"
 #include "../Geometry/GeometricObject.h"
+#include "../Geometry/InterpolatedCurve.h"
+#include "../Geometry/Point.h"
 #include <QPainter>
 #include <QPaintEvent>
 #include <QMouseEvent>
@@ -1675,6 +2410,14 @@ class Canvas : public QWidget {
     Q_OBJECT
 
 public:
+    // Tryby edycji
+    enum class EditMode {
+        None,           // Brak trybu edycji
+        SelectObject,   // Wybieranie obiektów
+        AddPoint,       // Dodawanie nowych punktów kontrolnych
+        MovePoint       // Przesuwanie punktów kontrolnych
+    };
+
     explicit Canvas(QWidget* parent = nullptr);
     ~Canvas() override;
 
@@ -1702,15 +2445,31 @@ public:
     void setRenderer(std::shared_ptr<IRenderer> renderer);
     IRenderer* renderer() const;
 
-    public slots:
-        void refresh();
+    // Tryb edycji
+    void setEditMode(EditMode mode);
+    EditMode getEditMode() const;
+    bool isEditingCurve() const;
+    void finishEditing();
 
-    signals:
-        void objectAdded(std::shared_ptr<GeometricObject> object);
+    std::shared_ptr<InterpolatedCurve> getSelectedCurve() const;
+    void selectControlPoint(int pointIndex);
+
+public slots:
+    void refresh();
+    void startAddingControlPoints();
+    void startMovingControlPoints();
+
+signals:
+    void objectAdded(std::shared_ptr<GeometricObject> object);
     void objectRemoved(std::shared_ptr<GeometricObject> object);
     void objectSelected(std::shared_ptr<GeometricObject> object);
     void selectionCleared();
     void viewportChanged();
+    void controlPointAdded(int pointIndex);
+    void controlPointMoved(int pointIndex);
+    void controlPointSelected(int pointIndex);
+    void editingStarted();
+    void editingFinished();
 
 protected:
     // Przeciążone metody QWidget
@@ -1720,8 +2479,16 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
 
 private:
+    // Metody pomocnicze do obsługi interakcji
+    int hitTestControlPoint(const QPointF& pos, double tolerance = 10.0);
+    bool addControlPoint(const QPointF& screenPos);
+    bool moveControlPoint(int pointIndex, const QPointF& screenPos);
+    void drawControlPoints();
+
+
     class CanvasPrivate;
     std::unique_ptr<CanvasPrivate> m_dPtr;
 };
@@ -1746,8 +2513,6 @@ class QPointF;
 class GeometricObject;
 class Point;
 class Curve;
-
-
 class ViewportManager;
 
 class IRenderer {
@@ -1757,18 +2522,23 @@ public:
     // Inicjalizacja i konfiguracja
     virtual void beginRender(QPainter* painter, ViewportManager* viewportManager) = 0;
     virtual void endRender() = 0;
-    
+
     // Metody renderowania konkretnych typów obiektów
     virtual void renderPoint(const Point& point) = 0;
     virtual void renderCurve(const Curve& curve) = 0;
-    
+
     // Ogólna metoda do renderowania obiektów geometrycznych
     virtual void renderObject(const GeometricObject& object) = 0;
-    
+
     // Renderowanie pomocniczych elementów
     virtual void renderGrid(double gridSize) = 0;
     virtual void renderAxes() = 0;
     virtual void renderSelectionMarker(const QPointF& position) = 0;
+
+    // Renderowanie punktów kontrolnych dla krzywych
+    virtual void renderControlPoint(const QPointF& position, bool isSelected = false, bool isActive = false) = 0;
+    virtual void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int activeIndex = -1) = 0;
+    virtual void renderControlPolygon(const std::vector<Point>& points) = 0;
 
     // Metody do ustawiania stylów rysowania
     virtual void setPointStyle(const QColor& color, float size) = 0;
@@ -1776,12 +2546,14 @@ public:
     virtual void setSelectionStyle(const QColor& color, float size) = 0;
     virtual void setGridStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) = 0;
     virtual void setAxesStyle(const QColor& color, float width) = 0;
-    
+    virtual void setControlPointStyle(const QColor& normalColor, const QColor& selectedColor, const QColor& activeColor, float size) = 0;
+    virtual void setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) = 0;
+
     // Włączanie/wyłączanie elementów
     virtual void setDrawGrid(bool draw) = 0;
     virtual void setDrawAxes(bool draw) = 0;
+    virtual void setDrawControlPolygon(bool draw) = 0;
 };
-
 
 #endif
 
@@ -1806,8 +2578,16 @@ public:
         , gridStyle(Qt::DotLine)
         , axesColor(Qt::black)
         , axesWidth(1.0f)
+        , controlPointNormalColor(Qt::blue)
+        , controlPointSelectedColor(Qt::red)
+        , controlPointActiveColor(Qt::green)
+        , controlPointSize(5.0f)
+        , controlPolygonColor(Qt::darkGray)
+        , controlPolygonWidth(1.0f)
+        , controlPolygonStyle(Qt::DashLine)
         , drawGrid(true)
         , drawAxes(true)
+        , drawControlPolygon(true)
         , painter(nullptr)
         , viewportManager(nullptr)
     {}
@@ -1825,10 +2605,18 @@ public:
     Qt::PenStyle gridStyle;
     QColor axesColor;
     float axesWidth;
+    QColor controlPointNormalColor;
+    QColor controlPointSelectedColor;
+    QColor controlPointActiveColor;
+    float controlPointSize;
+    QColor controlPolygonColor;
+    float controlPolygonWidth;
+    Qt::PenStyle controlPolygonStyle;
 
     // Opcje rysowania
     bool drawGrid;
     bool drawAxes;
+    bool drawControlPolygon;
 
     // Obiekty używane podczas rysowania
     QPainter* painter;
@@ -1920,7 +2708,6 @@ void QtRenderer::renderObject(const GeometricObject& object)
     const Curve* curve = dynamic_cast<const Curve*>(&object);
     if (curve)
         renderCurve(*curve);
-
 }
 
 void QtRenderer::renderGrid(double gridSize) {
@@ -1997,7 +2784,6 @@ void QtRenderer::renderAxes()
 
 void QtRenderer::renderAxisTicks() {
     if (!m_dPtr->painter || !m_dPtr->viewportManager || !m_dPtr->painter->isActive()) return;
-
 
     QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
     double zoomFactor = m_dPtr->viewportManager->zoomFactor();
@@ -2097,6 +2883,149 @@ void QtRenderer::renderSelectionMarker(const QPointF& position)
     m_dPtr->painter->restore();
 }
 
+void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bool isActive)
+{
+    if (!m_dPtr->painter || !m_dPtr->painter->isActive()) {
+        return;
+    }
+
+    m_dPtr->painter->save();
+    m_dPtr->painter->resetTransform();
+
+    // Wybór koloru w zależności od stanu punktu
+    QColor fillColor;
+    if (isActive) {
+        fillColor = m_dPtr->controlPointActiveColor;
+    } else if (isSelected) {
+        fillColor = m_dPtr->controlPointSelectedColor;
+    } else {
+        fillColor = m_dPtr->controlPointNormalColor;
+    }
+
+    // Warstwa tła (cień)
+    QPen shadowPen(Qt::black, 1.0);
+    QBrush shadowBrush(QColor(0, 0, 0, 50));
+    m_dPtr->painter->setPen(shadowPen);
+    m_dPtr->painter->setBrush(shadowBrush);
+    m_dPtr->painter->drawEllipse(position + QPointF(1, 1), m_dPtr->controlPointSize + 1, m_dPtr->controlPointSize + 1);
+
+    // Warstwa główna (punkt kontrolny)
+    QPen pen(Qt::black, 1.0);
+    QBrush brush(fillColor);
+    m_dPtr->painter->setPen(pen);
+    m_dPtr->painter->setBrush(brush);
+    m_dPtr->painter->drawEllipse(position, m_dPtr->controlPointSize, m_dPtr->controlPointSize);
+
+    // Dodaj numer punktu kontrolnego jeśli jest wybrany
+    if (isSelected) {
+        m_dPtr->painter->setPen(Qt::white);
+        QFont font = m_dPtr->painter->font();
+        font.setPointSize(9);
+        m_dPtr->painter->setFont(font);
+
+        // Obliczanie offsetu tekstu dla wyśrodkowania
+        QFontMetrics fm(font);
+        QString text = QString::number(isActive ? 1 : 0); // Przykładowy tekst
+        QRect textRect = fm.boundingRect(text);
+        QPointF textPos = position - QPointF(textRect.width() / 2.0, -textRect.height() / 4.0);
+
+        m_dPtr->painter->drawText(textPos, text);
+    }
+
+    m_dPtr->painter->restore();
+}
+
+void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selectedIndex, int activeIndex)
+{
+    if (!m_dPtr->painter || !m_dPtr->viewportManager || points.empty()) {
+        return;
+    }
+
+    // Rysowanie poligonu kontrolnego (linie łączące punkty)
+    if (m_dPtr->drawControlPolygon && points.size() >= 2) {
+        renderControlPolygon(points);
+    }
+
+    // Buforowanie pozycji punktów kontrolnych na ekranie (dla wydajności)
+    std::vector<QPointF> screenPositions;
+    screenPositions.reserve(points.size());
+
+    for (const auto& point : points) {
+        screenPositions.push_back(
+            m_dPtr->viewportManager->worldToScreen(QPointF(point.x(), point.y()))
+        );
+    }
+
+    // Najpierw rysujemy zwykłe punkty kontrolne
+    for (size_t i = 0; i < points.size(); ++i) {
+        if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != activeIndex) {
+            renderControlPoint(screenPositions[i], false, false);
+        }
+    }
+
+    // Następnie rysujemy zaznaczony punkt (jeśli istnieje)
+    if (selectedIndex >= 0 && selectedIndex < static_cast<int>(points.size())) {
+        renderControlPoint(screenPositions[selectedIndex], true, false);
+    }
+
+    // Na końcu rysujemy aktywny punkt (jeśli istnieje i jest inny niż zaznaczony)
+    if (activeIndex >= 0 && activeIndex < static_cast<int>(points.size()) && activeIndex != selectedIndex) {
+        renderControlPoint(screenPositions[activeIndex], false, true);
+    }
+
+    // Rysujemy etykiety z numerami punktów
+    m_dPtr->painter->save();
+    m_dPtr->painter->resetTransform();
+    QPen textPen(Qt::black);
+    m_dPtr->painter->setPen(textPen);
+
+    QFont font = m_dPtr->painter->font();
+    font.setPointSize(8);
+    m_dPtr->painter->setFont(font);
+
+    for (size_t i = 0; i < points.size(); ++i) {
+        QString label = QString::number(i);
+        QFontMetrics fm(font);
+        QRect textRect = fm.boundingRect(label);
+
+        QPointF textPos = screenPositions[i] + QPointF(m_dPtr->controlPointSize + 2,
+                                                      m_dPtr->controlPointSize / 2.0);
+
+        // Tło dla tekstu dla lepszej czytelności
+        QRectF bgRect = QRectF(textPos.x() - 1, textPos.y() - textRect.height(),
+                              textRect.width() + 2, textRect.height() + 2);
+        m_dPtr->painter->fillRect(bgRect, QColor(255, 255, 255, 180));
+
+        m_dPtr->painter->drawText(textPos, label);
+    }
+
+    m_dPtr->painter->restore();
+}
+
+void QtRenderer::renderControlPolygon(const std::vector<Point>& points)
+{
+    if (!m_dPtr->painter || !m_dPtr->viewportManager || points.size() < 2) {
+        return;
+    }
+
+    m_dPtr->painter->save();
+    m_dPtr->painter->resetTransform();
+
+    QPen pen(m_dPtr->controlPolygonColor, m_dPtr->controlPolygonWidth, m_dPtr->controlPolygonStyle);
+    m_dPtr->painter->setPen(pen);
+    m_dPtr->painter->setBrush(Qt::NoBrush);
+
+    QPolygonF polygon;
+    for (const auto& point : points) {
+        QPointF screenPos = m_dPtr->viewportManager->worldToScreen(QPointF(point.x(), point.y()));
+        polygon << screenPos;
+    }
+
+    m_dPtr->painter->drawPolyline(polygon);
+
+    m_dPtr->painter->restore();
+}
+
 void QtRenderer::setPointStyle(const QColor& color, float size)
 {
     m_dPtr->pointColor = color;
@@ -2129,6 +3058,22 @@ void QtRenderer::setAxesStyle(const QColor& color, float width)
     m_dPtr->axesWidth = width;
 }
 
+void QtRenderer::setControlPointStyle(const QColor& normalColor, const QColor& selectedColor,
+                                    const QColor& activeColor, float size)
+{
+    m_dPtr->controlPointNormalColor = normalColor;
+    m_dPtr->controlPointSelectedColor = selectedColor;
+    m_dPtr->controlPointActiveColor = activeColor;
+    m_dPtr->controlPointSize = size;
+}
+
+void QtRenderer::setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style)
+{
+    m_dPtr->controlPolygonColor = color;
+    m_dPtr->controlPolygonWidth = width;
+    m_dPtr->controlPolygonStyle = style;
+}
+
 void QtRenderer::setDrawGrid(bool draw)
 {
     m_dPtr->drawGrid = draw;
@@ -2137,6 +3082,11 @@ void QtRenderer::setDrawGrid(bool draw)
 void QtRenderer::setDrawAxes(bool draw)
 {
     m_dPtr->drawAxes = draw;
+}
+
+void QtRenderer::setDrawControlPolygon(bool draw)
+{
+    m_dPtr->drawControlPolygon = draw;
 }
 
 //===== END FILE: Graphics\QtRenderer.cpp =====//
@@ -2181,12 +3131,15 @@ public:
 
     // Renderowanie pomocniczych elementów
     void renderGrid(double gridSize) override;
-
     void renderText(const QPointF &position, const QString &text);
-
     void renderAxes() override;
     void renderAxisTicks();
     void renderSelectionMarker(const QPointF& position) override;
+
+    // Renderowanie punktów kontrolnych
+    void renderControlPoint(const QPointF& position, bool isSelected = false, bool isActive = false) override;
+    void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int activeIndex = -1) override;
+    void renderControlPolygon(const std::vector<Point>& points) override;
 
     // Metody do ustawiania stylów rysowania
     void setPointStyle(const QColor& color, float size) override;
@@ -2194,16 +3147,18 @@ public:
     void setSelectionStyle(const QColor& color, float size) override;
     void setGridStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) override;
     void setAxesStyle(const QColor& color, float width) override;
+    void setControlPointStyle(const QColor& normalColor, const QColor& selectedColor, const QColor& activeColor, float size) override;
+    void setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) override;
 
     // Włączanie/wyłączanie elementów
     void setDrawGrid(bool draw) override;
     void setDrawAxes(bool draw) override;
+    void setDrawControlPolygon(bool draw) override;
 
-private:;
+private:
     class QtRendererPrivate;
     std::unique_ptr<QtRendererPrivate> m_dPtr;
 };
-
 
 #endif
 
@@ -2693,6 +3648,10 @@ public:
 #include <QListWidget>
 #include <QStatusBar>
 #include <QLabel>
+#include <QTreeWidget>
+#include <QKeySequence>
+#include <QActionGroup>
+#include <QIcon>
 #include <cmath>
 
 #include "Graphics/Canvas.h"
@@ -2715,37 +3674,66 @@ int main(int argc, char *argv[]) {
 
     // Menu Plik
     QMenu *fileMenu = menuBar->addMenu("Plik");
-    QAction *newAction = fileMenu->addAction("Nowy");
+    QAction *newAction = fileMenu->addAction(QIcon::fromTheme("document-new"), "Nowy");
     newAction->setShortcut(QKeySequence::New);
-    QAction *openAction = fileMenu->addAction("Otwórz...");
+    QAction *openAction = fileMenu->addAction(QIcon::fromTheme("document-open"), "Otwórz...");
     openAction->setShortcut(QKeySequence::Open);
-    QAction *saveAction = fileMenu->addAction("Zapisz");
+    QAction *saveAction = fileMenu->addAction(QIcon::fromTheme("document-save"), "Zapisz");
     saveAction->setShortcut(QKeySequence::Save);
-    QAction *saveAsAction = fileMenu->addAction("Zapisz jako...");
+    QAction *saveAsAction = fileMenu->addAction(QIcon::fromTheme("document-save-as"), "Zapisz jako...");
     saveAsAction->setShortcut(QKeySequence::SaveAs);
     fileMenu->addSeparator();
-    QAction *exitAction = fileMenu->addAction("Wyjście");
+    QAction *exitAction = fileMenu->addAction(QIcon::fromTheme("application-exit"), "Wyjście");
     exitAction->setShortcut(QKeySequence::Quit);
 
     // Menu Edycja
     QMenu *editMenu = menuBar->addMenu("Edycja");
-    QAction *undoAction = editMenu->addAction("Cofnij");
+    QAction *undoAction = editMenu->addAction(QIcon::fromTheme("edit-undo"), "Cofnij");
     undoAction->setShortcut(QKeySequence::Undo);
-    QAction *redoAction = editMenu->addAction("Ponów");
+    QAction *redoAction = editMenu->addAction(QIcon::fromTheme("edit-redo"), "Ponów");
     redoAction->setShortcut(QKeySequence::Redo);
     editMenu->addSeparator();
-    QAction *deleteAction = editMenu->addAction("Usuń");
+    QAction *deleteAction = editMenu->addAction(QIcon::fromTheme("edit-delete"), "Usuń");
     deleteAction->setShortcut(QKeySequence::Delete);
+
+    // Nowe podmenu do edycji punktów kontrolnych
+    editMenu->addSeparator();
+    QMenu *controlPointsMenu = editMenu->addMenu("Edycja punktów kontrolnych");
+
+    QAction *selectModeAction = controlPointsMenu->addAction(QIcon::fromTheme("edit-select"), "Zaznacz punkt");
+    selectModeAction->setCheckable(true);
+    selectModeAction->setShortcut(QKeySequence("Ctrl+1"));
+
+    QAction *addPointModeAction = controlPointsMenu->addAction(QIcon::fromTheme("list-add"), "Dodaj punkt");
+    addPointModeAction->setCheckable(true);
+    addPointModeAction->setShortcut(QKeySequence("Ctrl+2"));
+
+    QAction *movePointModeAction = controlPointsMenu->addAction(QIcon::fromTheme("transform-move"), "Przesuń punkt");
+    movePointModeAction->setCheckable(true);
+    movePointModeAction->setShortcut(QKeySequence("Ctrl+3"));
+
+    QAction *deletePointAction = controlPointsMenu->addAction(QIcon::fromTheme("edit-delete"), "Usuń punkt");
+    deletePointAction->setShortcut(QKeySequence("Ctrl+D"));
+
+    QAction *finishEditingAction = controlPointsMenu->addAction(QIcon::fromTheme("dialog-cancel"), "Zakończ edycję");
+    finishEditingAction->setShortcut(QKeySequence("Esc"));
+
+    // Grupa akcji do trybów edycji punktów (tylko jeden może być aktywny)
+    QActionGroup *editModeGroup = new QActionGroup(&mainWindow);
+    editModeGroup->addAction(selectModeAction);
+    editModeGroup->addAction(addPointModeAction);
+    editModeGroup->addAction(movePointModeAction);
+    selectModeAction->setChecked(true); // Domyślnie tryb zaznaczania
 
     // Menu Widok
     QMenu *viewMenu = menuBar->addMenu("Widok");
-    QAction *zoomInAction = viewMenu->addAction("Przybliż");
+    QAction *zoomInAction = viewMenu->addAction(QIcon::fromTheme("zoom-in"), "Przybliż");
     zoomInAction->setShortcut(QKeySequence::ZoomIn);
-    QAction *zoomOutAction = viewMenu->addAction("Oddal");
+    QAction *zoomOutAction = viewMenu->addAction(QIcon::fromTheme("zoom-out"), "Oddal");
     zoomOutAction->setShortcut(QKeySequence::ZoomOut);
-    QAction *resetViewAction = viewMenu->addAction("Resetuj widok");
+    QAction *resetViewAction = viewMenu->addAction(QIcon::fromTheme("zoom-original"), "Resetuj widok");
     resetViewAction->setShortcut(QKeySequence("Ctrl+0"));
-    QAction *fitContentAction = viewMenu->addAction("Dopasuj do zawartości");
+    QAction *fitContentAction = viewMenu->addAction(QIcon::fromTheme("zoom-fit-best"), "Dopasuj do zawartości");
 
     // Menu Krzywe
     QMenu *curvesMenu = menuBar->addMenu("Krzywe");
@@ -2755,9 +3743,9 @@ int main(int argc, char *argv[]) {
 
     // Menu Pomoc
     QMenu *helpMenu = menuBar->addMenu("Pomoc");
-    QAction *aboutAction = helpMenu->addAction("O programie");
+    QAction *aboutAction = helpMenu->addAction(QIcon::fromTheme("help-about"), "O programie");
 
-    // Pasek narzędzi
+    // Pasek narzędzi głównych
     QToolBar *toolBar = new QToolBar("Narzędzia główne", &mainWindow);
     mainWindow.addToolBar(toolBar);
 
@@ -2776,6 +3764,17 @@ int main(int argc, char *argv[]) {
     toolBar->addAction(zoomOutAction);
     toolBar->addAction(resetViewAction);
 
+    // Pasek narzędzi edycji punktów kontrolnych
+    QToolBar *editToolBar = new QToolBar("Narzędzia edycji punktów", &mainWindow);
+    mainWindow.addToolBar(Qt::TopToolBarArea, editToolBar);
+
+    editToolBar->addAction(selectModeAction);
+    editToolBar->addAction(addPointModeAction);
+    editToolBar->addAction(movePointModeAction);
+    editToolBar->addSeparator();
+    editToolBar->addAction(deletePointAction);
+    editToolBar->addAction(finishEditingAction);
+
     // Centralny widget
     QWidget *centralWidget = new QWidget(&mainWindow);
     QVBoxLayout *layout = new QVBoxLayout(centralWidget);
@@ -2790,12 +3789,17 @@ int main(int argc, char *argv[]) {
     // Ustawienie centralnego widgetu
     mainWindow.setCentralWidget(centralWidget);
 
-    // Doker z listą obiektów
-    QDockWidget *objectsDock = new QDockWidget("Obiekty", &mainWindow);
+    // Doker z listą obiektów i punktów kontrolnych
+    QDockWidget *objectsDock = new QDockWidget("Obiekty i punkty kontrolne", &mainWindow);
     objectsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    QListWidget *objectsList = new QListWidget(objectsDock);
-    objectsDock->setWidget(objectsList);
+    // Zamiast prostej listy, używamy drzewa dla hierarchii obiektów i punktów
+    QTreeWidget *objectsTree = new QTreeWidget(objectsDock);
+    objectsTree->setHeaderLabels(QStringList() << "Nazwa" << "Współrzędne");
+    objectsTree->setColumnCount(2);
+    objectsTree->setRootIsDecorated(true);
+    objectsTree->setExpandsOnDoubleClick(true);
+    objectsDock->setWidget(objectsTree);
 
     mainWindow.addDockWidget(Qt::RightDockWidgetArea, objectsDock);
 
@@ -2812,6 +3816,8 @@ int main(int argc, char *argv[]) {
 
     // Pasek statusu
     QStatusBar *statusBar = mainWindow.statusBar();
+    QLabel *modeLabel = new QLabel("Tryb: Normalny");
+    statusBar->addPermanentWidget(modeLabel);
     statusBar->showMessage("Gotowy");
 
     // Inicjalizacja narzędzi matematycznych
@@ -2820,14 +3826,68 @@ int main(int argc, char *argv[]) {
     // Inicjalizacja managera poleceń
     CommandManager commandManager;
 
-    // Połączenia akcji
+    // Funkcja do aktualizacji drzewa obiektów
+    auto updateObjectsTree = [objectsTree, canvas]() {
+        objectsTree->clear();
+
+        // Dodaj wszystkie obiekty geometryczne do drzewa
+        int index = 0;
+        for (const auto& obj : canvas->objects()) {
+            QTreeWidgetItem* item = new QTreeWidgetItem(objectsTree);
+            item->setText(0, QString("Obiekt %1").arg(std::to_string(index + 1)));
+
+            // Sprawdź typ obiektu
+            auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(obj);
+            if (curve) {
+                item->setText(1, "Krzywa");
+
+                // Dodaj punkty kontrolne jako dzieci
+                const auto& points = curve->getPoints();
+                for (size_t i = 0; i < points.size(); ++i) {
+                    QTreeWidgetItem* pointItem = new QTreeWidgetItem(item);
+                    const Point& p = points[i];
+                    pointItem->setText(0, QString("Punkt %1").arg(std::to_string(i)));
+                    pointItem->setText(1, QString("(%.2f, %.2f)").arg(std::to_string(p.x()), std::to_string(p.y())));
+                    pointItem->setData(0, Qt::UserRole, QVariant::fromValue(static_cast<int>(i)));
+                    pointItem->setData(0, Qt::UserRole + 1, QVariant::fromValue(index));
+                }
+            } else {
+                item->setText(1, "Inny");
+            }
+
+            item->setData(0, Qt::UserRole, QVariant::fromValue(index));
+            index++;
+        }
+
+        objectsTree->expandAll();
+    };
+
+    // Funkcja do aktualizacji etykiety trybu w pasku statusu
+    auto updateModeLabel = [modeLabel, canvas]() {
+        switch (canvas->getEditMode()) {
+            case Canvas::EditMode::None:
+                modeLabel->setText("Tryb: Normalny");
+                break;
+            case Canvas::EditMode::SelectObject:
+                modeLabel->setText("Tryb: Zaznaczanie obiektu");
+                break;
+            case Canvas::EditMode::AddPoint:
+                modeLabel->setText("Tryb: Dodawanie punktu");
+                break;
+            case Canvas::EditMode::MovePoint:
+                modeLabel->setText("Tryb: Przesuwanie punktu");
+                break;
+        }
+    };
+
+    // Połączenia akcji podstawowych
     QObject::connect(exitAction, &QAction::triggered, &app, &QApplication::quit);
 
     QObject::connect(newAction, &QAction::triggered, [&]() {
         canvas->clearObjects();
         commandManager.clearHistory();
         canvas->resetView();
-        objectsList->clear();
+        updateObjectsTree();
         statusBar->showMessage("Utworzono nowy projekt");
     });
 
@@ -2855,6 +3915,7 @@ int main(int argc, char *argv[]) {
         if (commandManager.canUndo()) {
             commandManager.undo();
             canvas->refresh();
+            updateObjectsTree();
             statusBar->showMessage("Cofnięto ostatnią operację");
         }
     });
@@ -2863,6 +3924,7 @@ int main(int argc, char *argv[]) {
         if (commandManager.canRedo()) {
             commandManager.redo();
             canvas->refresh();
+            updateObjectsTree();
             statusBar->showMessage("Ponowiono operację");
         }
     });
@@ -2872,6 +3934,7 @@ int main(int argc, char *argv[]) {
         if (selectedObject) {
             canvas->removeObject(selectedObject);
             canvas->refresh();
+            updateObjectsTree();
             statusBar->showMessage("Usunięto wybrany obiekt");
         }
     });
@@ -2904,6 +3967,7 @@ int main(int argc, char *argv[]) {
         curve->addPoint(Point(100, 0));
         canvas->addObject(curve);
         canvas->refresh();
+        updateObjectsTree();
         statusBar->showMessage("Utworzono krzywą interpolowaną");
     });
 
@@ -2912,42 +3976,218 @@ int main(int argc, char *argv[]) {
             "<h3>Edytor Krzywych</h3>"
             "<p>Wersja 1.0</p>"
             "<p>Program do tworzenia i edycji krzywych matematycznych.</p>"
-            "<p>Używa biblioteki Eigen do obliczeń matematycznych.</p>");
+            "<p>Używa biblioteki Eigen do obliczeń matematycznych.</p>"
+            "<p><b>Funkcjonalności edycji punktów kontrolnych:</b></p>"
+            "<ul>"
+            "<li>Dodawanie nowych punktów kontrolnych</li>"
+            "<li>Przesuwanie istniejących punktów</li>"
+            "<li>Usuwanie wybranych punktów</li>"
+            "<li>Wizualizacja punktów kontrolnych</li>"
+            "</ul>");
     });
 
-    // Aktualizacja listy obiektów
-    QObject::connect(canvas, &Canvas::objectAdded, [objectsList, &statusBar](std::shared_ptr<GeometricObject> obj) {
-        const QString str = "Obiekt " + QString::number(objectsList->count() + 1);
-        objectsList->addItem(str);
+    // Połączenia dla akcji edycji punktów kontrolnych
+    QObject::connect(selectModeAction, &QAction::triggered, [&]() {
+        canvas->setEditMode(Canvas::EditMode::SelectObject);
+        updateModeLabel();
+        statusBar->showMessage("Przełączono na tryb zaznaczania obiektu");
+    });
+
+    QObject::connect(addPointModeAction, &QAction::triggered, [&]() {
+        if (canvas->getSelectedCurve()) {
+            canvas->startAddingControlPoints();
+            updateModeLabel();
+            statusBar->showMessage("Tryb dodawania punktów kontrolnych. Kliknij w obszarze rysowania, aby dodać punkt.");
+        } else {
+            QMessageBox::warning(&mainWindow, "Edycja punktów kontrolnych",
+                                "Najpierw zaznacz krzywą, aby dodać do niej punkty kontrolne.");
+            selectModeAction->setChecked(true);
+        }
+    });
+
+    QObject::connect(movePointModeAction, &QAction::triggered, [&]() {
+        if (canvas->getSelectedCurve()) {
+            canvas->startMovingControlPoints();
+            updateModeLabel();
+            statusBar->showMessage("Tryb przesuwania punktów kontrolnych. Kliknij i przeciągnij punkt kontrolny.");
+        } else {
+            QMessageBox::warning(&mainWindow, "Edycja punktów kontrolnych",
+                                "Najpierw zaznacz krzywą, aby przesuwać jej punkty kontrolne.");
+            selectModeAction->setChecked(true);
+        }
+    });
+
+    QObject::connect(deletePointAction, &QAction::triggered, [&]() {
+        // Usunięcie aktualnie zaznaczonego punktu kontrolnego
+        auto curve = canvas->getSelectedCurve();
+        if (curve) {
+            // Wysyłamy zdarzenie Delete do canvas, aby usunąć zaznaczony punkt
+            QKeyEvent keyEvent(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
+            QApplication::sendEvent(canvas, &keyEvent);
+
+            updateObjectsTree();
+            statusBar->showMessage("Usunięto punkt kontrolny");
+        } else {
+            statusBar->showMessage("Nie wybrano krzywej lub punktu kontrolnego");
+        }
+    });
+
+    QObject::connect(finishEditingAction, &QAction::triggered, [&]() {
+        canvas->finishEditing();
+        selectModeAction->setChecked(true);
+        updateModeLabel();
+        statusBar->showMessage("Zakończono edycję punktów kontrolnych");
+    });
+
+    // Obsługa sygnałów z Canvas
+    QObject::connect(canvas, &Canvas::objectAdded, [&](std::shared_ptr<GeometricObject> obj) {
+        updateObjectsTree();
         statusBar->showMessage("Dodano nowy obiekt");
     });
 
-    QObject::connect(canvas, &Canvas::objectRemoved, [objectsList, canvas, &statusBar](std::shared_ptr<GeometricObject> obj) {
-        objectsList->clear();
-        for (size_t i = 0; i < canvas->objects().size(); ++i) {
-            const QString str = "Obiekt " + QString::number(i + 1);
-            objectsList->addItem(QString(str));
-        }
+    QObject::connect(canvas, &Canvas::objectRemoved, [&](std::shared_ptr<GeometricObject> obj) {
+        updateObjectsTree();
         statusBar->showMessage("Usunięto obiekt");
     });
 
-    QObject::connect(objectsList, &QListWidget::currentRowChanged, [canvas, objectsList, &statusBar](int row) {
-        if (row >= 0 && row < static_cast<int>(canvas->objects().size())) {
-            canvas->selectObject(canvas->objects()[row]);
-            canvas->refresh();
-            const QString message = "Wybrano obiekt " + QString::number(row + 1);
-            statusBar->showMessage(message);
-        }
-    });
+    QObject::connect(canvas, &Canvas::objectSelected, [&](std::shared_ptr<GeometricObject> obj) {
+        updateObjectsTree();
 
-    QObject::connect(canvas, &Canvas::objectSelected, [canvas, objectsList](std::shared_ptr<GeometricObject> obj) {
+        // Znajdź element w drzewie odpowiadający wybranemu obiektowi
         auto objects = canvas->objects();
         auto it = std::find(objects.begin(), objects.end(), obj);
         if (it != objects.end()) {
-            int row = static_cast<int>(std::distance(objects.begin(), it));
-            objectsList->setCurrentRow(row);
+            int index = static_cast<int>(std::distance(objects.begin(), it));
+
+            // Znajdź element w drzewie i zaznacz go
+            for (int i = 0; i < objectsTree->topLevelItemCount(); ++i) {
+                QTreeWidgetItem* item = objectsTree->topLevelItem(i);
+                if (item->data(0, Qt::UserRole).toInt() == index) {
+                    objectsTree->setCurrentItem(item);
+                    break;
+                }
+            }
+        }
+
+        statusBar->showMessage("Wybrano obiekt");
+    });
+
+    QObject::connect(canvas, &Canvas::selectionCleared, [&]() {
+        objectsTree->clearSelection();
+        statusBar->showMessage("Anulowano zaznaczenie");
+    });
+
+    QObject::connect(canvas, &Canvas::controlPointAdded, [&](int pointIndex) {
+        updateObjectsTree();
+        statusBar->showMessage(QString("Dodano punkt kontrolny %1").arg(std::to_string(pointIndex)));
+    });
+
+    QObject::connect(canvas, &Canvas::controlPointMoved, [&](int pointIndex) {
+        updateObjectsTree();
+        statusBar->showMessage(QString("Przesunięto punkt kontrolny %1").arg(std::to_string(pointIndex)));
+    });
+
+    QObject::connect(canvas, &Canvas::controlPointSelected, [&](int pointIndex) {
+        updateObjectsTree();
+
+        // Znajdź element w drzewie odpowiadający wybranemu punktowi kontrolnemu
+        auto selectedObj = canvas->selectedObject();
+        auto objects = canvas->objects();
+        auto it = std::find(objects.begin(), objects.end(), selectedObj);
+
+        if (it != objects.end()) {
+            int objectIndex = static_cast<int>(std::distance(objects.begin(), it));
+
+            // Znajdź element obiektu w drzewie
+            for (int i = 0; i < objectsTree->topLevelItemCount(); ++i) {
+                QTreeWidgetItem* objectItem = objectsTree->topLevelItem(i);
+                if (objectItem->data(0, Qt::UserRole).toInt() == objectIndex) {
+                    // Znajdź element punktu kontrolnego
+                    for (int j = 0; j < objectItem->childCount(); ++j) {
+                        QTreeWidgetItem* pointItem = objectItem->child(j);
+                        if (pointItem->data(0, Qt::UserRole).toInt() == pointIndex) {
+                            objectsTree->setCurrentItem(pointItem);
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        statusBar->showMessage(QString("Wybrano punkt kontrolny %1").arg(std::to_string(pointIndex)));
+    });
+
+    QObject::connect(canvas, &Canvas::editingStarted, [&]() {
+        updateModeLabel();
+        statusBar->showMessage("Rozpoczęto edycję punktów kontrolnych");
+    });
+
+    QObject::connect(canvas, &Canvas::editingFinished, [&]() {
+        selectModeAction->setChecked(true);
+        updateModeLabel();
+        statusBar->showMessage("Zakończono edycję punktów kontrolnych");
+    });
+
+    // Obsługa zaznaczania w drzewie obiektów
+    QObject::connect(objectsTree, &QTreeWidget::itemClicked, [&](QTreeWidgetItem* item, int column) {
+        // Sprawdź, czy kliknięto element najwyższego poziomu (obiekt)
+        if (item->parent() == nullptr) {
+            int index = item->data(0, Qt::UserRole).toInt();
+            if (index >= 0 && index < static_cast<int>(canvas->objects().size())) {
+                canvas->selectObject(canvas->objects()[index]);
+                canvas->finishEditing();
+                selectModeAction->setChecked(true);
+                updateModeLabel();
+            }
+        }
+        // Sprawdź, czy kliknięto element podrzędny (punkt kontrolny)
+        else {
+            int pointIndex = item->data(0, Qt::UserRole).toInt();
+            int objectIndex = item->data(0, Qt::UserRole + 1).toInt();
+
+            if (objectIndex >= 0 && objectIndex < static_cast<int>(canvas->objects().size())) {
+                // Zaznacz najpierw obiekt (krzywą)
+                canvas->selectObject(canvas->objects()[objectIndex]);
+
+                // Przełącz na tryb edycji punktów i zaznacz punkt
+                auto curve = canvas->getSelectedCurve();
+                if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
+                    canvas->startMovingControlPoints();
+                    movePointModeAction->setChecked(true);
+                    canvas->selectControlPoint(pointIndex);
+                    updateModeLabel();
+                }
+            }
         }
     });
+
+    // Obsługa podwójnego kliknięcia w drzewie obiektów dla szybkiej edycji
+    QObject::connect(objectsTree, &QTreeWidget::itemDoubleClicked, [&](QTreeWidgetItem* item, int column) {
+        // Jeśli kliknięto punkt kontrolny
+        if (item->parent() != nullptr) {
+            int pointIndex = item->data(0, Qt::UserRole).toInt();
+            int objectIndex = item->data(0, Qt::UserRole + 1).toInt();
+
+            if (objectIndex >= 0 && objectIndex < static_cast<int>(canvas->objects().size())) {
+                // Zaznacz obiekt
+                canvas->selectObject(canvas->objects()[objectIndex]);
+
+                // Przełącz na tryb przesuwania punktów i zaznacz punkt
+                auto curve = canvas->getSelectedCurve();
+                if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
+                    canvas->startMovingControlPoints();
+                    movePointModeAction->setChecked(true);
+                    canvas->selectControlPoint(pointIndex);
+                    updateModeLabel();
+                    statusBar->showMessage(QString("Edytowanie punktu kontrolnego %1. Możesz go przesunąć na canvasie.").arg(std::to_string(pointIndex)));
+                }
+            }
+        }
+    });
+
+    // Inicjalne wypełnienie drzewa obiektów
+    updateObjectsTree();
 
     // Wyświetlenie okna
     mainWindow.show();
