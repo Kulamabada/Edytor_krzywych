@@ -1,4 +1,3 @@
-// File: GeometricObject.h
 #pragma once
 
 #include <memory>

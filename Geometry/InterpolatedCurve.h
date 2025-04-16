@@ -48,7 +48,6 @@ private:
     InterpolationType type;
     std::shared_ptr<IMathProvider> mathProvider;
 
-    // Buforowane dane interpolacyjne
     mutable std::vector<Eigen::Matrix<double, 4, 2>> coefficients;
     mutable bool needsRebuild{true};
 

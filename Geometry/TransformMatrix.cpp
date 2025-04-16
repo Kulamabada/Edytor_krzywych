@@ -1,7 +1,5 @@
-// File: TransformMatrix.cpp
 #include "TransformMatrix.h"
 
-// StandardTransformMatrix implementation
 StandardTransformMatrix::StandardTransformMatrix()
     : m_matrix(Eigen::Matrix4d::Identity()) {
 }

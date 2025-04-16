@@ -1,4 +1,3 @@
-// File: Point.cpp
 #include "Point.h"
 #include "TransformMatrix.h"
 #include <cmath>
@@ -55,14 +54,13 @@ void Point::transform(const TransformMatrix& matrix) {
 
     Eigen::Vector4d transformedPoint = matrix.getMatrix() * homogeneousPoint;
 
-    if (std::abs(transformedPoint(3)) > 1e-10) {  // Unikamy dzielenia przez zero
+    if (std::abs(transformedPoint(3)) > 1e-10) {
         setX(transformedPoint(0) / transformedPoint(3));
         setY(transformedPoint(1) / transformedPoint(3));
         setZ(transformedPoint(2) / transformedPoint(3));
     }
 }
 
-// Implementacja metod z GeometricObject
 Eigen::Vector3d Point::getPosition() const {
     return Eigen::Vector3d(x(), y(), z());
 }

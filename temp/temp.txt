@@ -1,5 +1,5 @@
-// Plik wygenerowany automatycznie 2025-04-16 00:27:20
-// Zawiera 27 plików z projektu edytora krzywych
+// Plik wygenerowany automatycznie 2025-04-16 10:36:09
+// Zawiera 29 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
 
@@ -132,34 +132,24 @@ private:
 
 //===== START FILE: Core\Command.cpp =====//
 
-// File: Command.cpp
 #include "Command.h"
 #include <algorithm>
 #include <cassert>
 
-// Deklaracje funkcji globalnych do zarządzania sceną
-// W rzeczywistej aplikacji byłyby to metody odpowiedniego menedżera sceny
 namespace {
-    // Dodaje obiekt do sceny, zwraca przypisane ID obiektu
     int addObjectToScene(std::shared_ptr<GeometricObject> object);
 
-    // Usuwa obiekt ze sceny po ID
     bool removeObjectFromScene(int objectId);
 
-    // Pobiera obiekt ze sceny po ID
     std::shared_ptr<GeometricObject> getObjectFromScene(int objectId);
 
-    // Stosuje transformację do obiektu
     bool transformObject(int objectId, const Eigen::Matrix3d& transform);
 
-    // Pobiera aktualny styl obiektu
     ObjectStyle getObjectStyle(int objectId);
 
-    // Ustawia styl dla obiektu
     bool setObjectStyle(int objectId, const ObjectStyle& style);
 }
 
-// Implementacja AddObjectCommand
 AddObjectCommand::AddObjectCommand(std::shared_ptr<GeometricObject> object)
     : m_object(std::move(object)), m_objectId(-1) {
 }
@@ -184,13 +174,11 @@ bool AddObjectCommand::redo() {
     return execute();
 }
 
-// Implementacja RemoveObjectCommand
 RemoveObjectCommand::RemoveObjectCommand(int objectId)
     : m_objectId(objectId), m_removedObject(nullptr) {
 }
 
 bool RemoveObjectCommand::execute() {
-    // Zapisz obiekt przed usunięciem
     m_removedObject = getObjectFromScene(m_objectId);
     if (!m_removedObject) {
         return false;
@@ -204,7 +192,6 @@ bool RemoveObjectCommand::undo() {
         return false;
     }
 
-    // Dodaj obiekt z powrotem do sceny
     m_objectId = addObjectToScene(m_removedObject);
     return m_objectId >= 0;
 }
@@ -213,10 +200,8 @@ bool RemoveObjectCommand::redo() {
     return execute();
 }
 
-// Implementacja TransformObjectCommand
 TransformObjectCommand::TransformObjectCommand(int objectId, const Eigen::Matrix3d& transformation)
     : m_objectId(objectId), m_forwardTransform(transformation) {
-    // Oblicz odwrotną transformację dla operacji undo
     m_inverseTransform = transformation.inverse();
 }
 
@@ -232,10 +217,8 @@ bool TransformObjectCommand::redo() {
     return execute();
 }
 
-// Implementacja ModifyObjectStyleCommand
 ModifyObjectStyleCommand::ModifyObjectStyleCommand(int objectId, const ObjectStyle& newStyle)
     : m_objectId(objectId), m_newStyle(newStyle) {
-    // Zapisz aktualny styl dla operacji undo
     m_oldStyle = getObjectStyle(m_objectId);
 }
 
@@ -251,7 +234,6 @@ bool ModifyObjectStyleCommand::redo() {
     return execute();
 }
 
-// Implementacja CompoundCommand
 CompoundCommand::CompoundCommand(const std::string& name)
     : m_name(name) {
 }
@@ -266,7 +248,6 @@ bool CompoundCommand::execute() {
     bool success = true;
     size_t executedCommands = 0;
 
-    // Wykonaj wszystkie komendy po kolei
     for (size_t i = 0; i < m_commands.size(); ++i) {
         if (!m_commands[i]->execute()) {
             success = false;
@@ -276,7 +257,6 @@ bool CompoundCommand::execute() {
         executedCommands = i + 1;
     }
 
-    // Jeśli którakolwiek komenda nie powiodła się, cofnij wszystkie wykonane w odwrotnej kolejności
     if (!success) {
         for (size_t i = 0; i < executedCommands; ++i) {
             size_t index = executedCommands - i - 1;
@@ -290,7 +270,6 @@ bool CompoundCommand::execute() {
 bool CompoundCommand::undo() {
     bool success = true;
 
-    // Cofnij wszystkie komendy w odwrotnej kolejności
     for (auto it = m_commands.rbegin(); it != m_commands.rend(); ++it) {
         if (!(*it)->undo()) {
             success = false;
@@ -304,7 +283,6 @@ bool CompoundCommand::undo() {
 bool CompoundCommand::redo() {
     bool success = true;
 
-    // Ponownie wykonaj wszystkie komendy po kolei
     for (auto& command : m_commands) {
         if (!command->redo()) {
             success = false;
@@ -315,9 +293,7 @@ bool CompoundCommand::redo() {
     return success;
 }
 
-// Implementacja nowych komend do manipulacji punktami kontrolnymi krzywych
 
-// Implementacja AddControlPointCommand
 AddControlPointCommand::AddControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, const Point& point, int index)
     : m_curve(curve), m_point(point), m_index(index), m_addedIndex(-1) {
 }
@@ -328,11 +304,9 @@ bool AddControlPointCommand::execute() {
     }
 
     if (m_index < 0 || m_index > static_cast<int>(m_curve->getPointCount())) {
-        // Dodaj na końcu krzywej
         m_curve->addPoint(m_point);
         m_addedIndex = static_cast<int>(m_curve->getPointCount()) - 1;
     } else {
-        // Dodaj pod określonym indeksem
         m_curve->insertPoint(m_index, m_point);
         m_addedIndex = m_index;
     }
@@ -356,10 +330,9 @@ bool AddControlPointCommand::redo() {
     }
 
     if (m_addedIndex < 0) {
-        return execute(); // Pierwszy raz wykonujemy execute()
+        return execute();
     }
 
-    // Ponowne dodanie punktu na odpowiednim indeksie
     if (m_addedIndex > static_cast<int>(m_curve->getPointCount())) {
         m_curve->addPoint(m_point);
     } else {
@@ -369,13 +342,11 @@ bool AddControlPointCommand::redo() {
     return true;
 }
 
-// Implementacja MoveControlPointCommand
 MoveControlPointCommand::MoveControlPointCommand(std::shared_ptr<InterpolatedCurve> curve,
                                                int pointIndex,
                                                const Point& newPosition)
     : m_curve(curve), m_pointIndex(pointIndex), m_newPosition(newPosition) {
 
-    // Zapisz obecną pozycję punktu dla operacji undo
     if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getPointCount())) {
         const auto& points = m_curve->getPoints();
         m_oldPosition = points[m_pointIndex];
@@ -406,12 +377,10 @@ bool MoveControlPointCommand::redo() {
     return execute();
 }
 
-// Implementacja DeleteControlPointCommand
 DeleteControlPointCommand::DeleteControlPointCommand(std::shared_ptr<InterpolatedCurve> curve,
                                                   int pointIndex)
     : m_curve(curve), m_pointIndex(pointIndex) {
 
-    // Zapisz punkt przed usunięciem dla operacji undo
     if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getPointCount())) {
         const auto& points = m_curve->getPoints();
         m_deletedPoint = points[m_pointIndex];
@@ -424,9 +393,8 @@ bool DeleteControlPointCommand::execute() {
         return false;
     }
 
-    // Sprawdź, czy krzywa będzie miała wystarczającą liczbę punktów po usunięciu
     if (m_curve->getPointCount() < 3) {
-        return false; // Minimum 2 punkty do interpolacji
+        return false;
     }
 
     m_curve->removePoint(m_pointIndex);
@@ -438,7 +406,6 @@ bool DeleteControlPointCommand::undo() {
         return false;
     }
 
-    // Przywróć punkt na odpowiedni indeks
     if (m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
         m_curve->addPoint(m_deletedPoint);
     } else {
@@ -452,12 +419,10 @@ bool DeleteControlPointCommand::redo() {
     return execute();
 }
 
-// Implementacja BatchControlPointsCommand
 BatchControlPointsCommand::BatchControlPointsCommand(std::shared_ptr<InterpolatedCurve> curve,
                                                    const std::vector<Point>& newPoints)
     : m_curve(curve), m_newPoints(newPoints) {
 
-    // Zapisz obecne punkty dla operacji undo
     if (m_curve) {
         m_oldPoints = m_curve->getPoints();
     }
@@ -468,7 +433,6 @@ bool BatchControlPointsCommand::execute() {
         return false;
     }
 
-    // Wymaga minimum dwóch punktów do utworzenia krzywej
     if (m_newPoints.size() < 2) {
         return false;
     }
@@ -490,40 +454,29 @@ bool BatchControlPointsCommand::redo() {
     return execute();
 }
 
-// Implementacja funkcji globalnych do zarządzania sceną
 namespace {
-    // Te implementacje byłyby zastąpione rzeczywistym kodem zarządzania sceną
-    // w prawdziwej aplikacji
-
     int addObjectToScene(std::shared_ptr<GeometricObject> object) {
-        // Tymczasowa implementacja - dodałaby obiekt do sceny i zwróciła ID
         static int nextId = 0;
         return ++nextId;
     }
 
     bool removeObjectFromScene(int objectId) {
-        // Tymczasowa implementacja - usunęłaby obiekt ze sceny
         return objectId > 0;
     }
 
     std::shared_ptr<GeometricObject> getObjectFromScene(int objectId) {
-        // Tymczasowa implementacja - pobrałaby obiekt ze sceny
-        // Zwraca nullptr, ponieważ nie możemy utworzyć rzeczywistej instancji
         return nullptr;
     }
 
     bool transformObject(int objectId, const Eigen::Matrix3d& transform) {
-        // Tymczasowa implementacja - zastosowałaby transformację
         return objectId > 0;
     }
 
     ObjectStyle getObjectStyle(int objectId) {
-        // Tymczasowa implementacja - pobrałaby styl obiektu
         return ObjectStyle{QColor(0, 0, 0), 1.0, Qt::SolidLine};
     }
 
     bool setObjectStyle(int objectId, const ObjectStyle& style) {
-        // Tymczasowa implementacja - ustawiłaby styl obiektu
         return objectId > 0;
     }
 }
@@ -904,7 +857,6 @@ public:
 
 //===== START FILE: Geometry\GeometricObject.h =====//
 
-// File: GeometricObject.h
 #pragma once
 
 #include <memory>
@@ -1130,9 +1082,8 @@ Point InterpolatedCurve::getPointAt(double t) const {
     double localT = (t - segmentIndex * segmentLength) / segmentLength;
 
     if (type == InterpolationType::NIFS3 || type == InterpolationType::OIFS3) {
-        if (segmentIndex >= coefficients.size()) {
+        if (segmentIndex >= coefficients.size())
             return points[points.size() - 1];
-        }
 
         const auto& coef = coefficients[segmentIndex];
         Eigen::Vector4d tVec;
@@ -1266,6 +1217,7 @@ void InterpolatedCurve::setPosition(const Eigen::Vector3d& position) {
 #include <vector>
 #include <memory>
 #include <Eigen/Dense>
+#include "NaturalSpline.h"
 
 class IMathProvider;
 class Point;
@@ -1309,7 +1261,6 @@ private:
     InterpolationType type;
     std::shared_ptr<IMathProvider> mathProvider;
 
-    // Buforowane dane interpolacyjne
     mutable std::vector<Eigen::Matrix<double, 4, 2>> coefficients;
     mutable bool needsRebuild{true};
 
@@ -1323,9 +1274,221 @@ private:
 
 //===== END FILE: Geometry\InterpolatedCurve.h =====//
 
+//===== START FILE: Geometry\NaturalSpline.cpp =====//
+
+#include "NaturalSpline.h"
+#include <algorithm>
+#include <stdexcept>
+
+NaturalSpline::NaturalSpline(const std::vector<Point2D>& points) : m_points(points) {
+    if (points.size() < 2) {
+        throw std::invalid_argument("Potrzebne są co najmniej 2 punkty do utworzenia spline'a");
+    }
+    calculateCoefficients();
+}
+
+void NaturalSpline::setPoints(const std::vector<Point2D>& points) {
+    if (points.size() < 2) {
+        throw std::invalid_argument("Potrzebne są co najmniej 2 punkty do utworzenia spline'a");
+    }
+    m_points = points;
+    calculateCoefficients();
+}
+
+const std::vector<NaturalSpline::Point2D>& NaturalSpline::getPoints() const {
+    return m_points;
+}
+
+std::vector<double> NaturalSpline::calculateDifferences(
+    const std::vector<double>& values,
+    const std::vector<double>& knots) const {
+
+    const size_t n = values.size() - 1;
+    std::vector<double> result;
+
+    for (size_t i = 1; i < n; ++i) {
+        double forward = (values[i+1] - values[i]) / (knots[i+1] - knots[i]);
+        double backward = (values[i] - values[i-1]) / (knots[i] - knots[i-1]);
+        double diff = (forward - backward) / (knots[i+1] - knots[i-1]);
+        result.push_back(6.0 * diff);
+    }
+
+    return result;
+}
+
+std::vector<double> NaturalSpline::calculatePCoefficients(const std::vector<double>& knots) const {
+    const size_t n = knots.size() - 1;
+    std::vector<double> result = {0.0};
+
+    for (size_t i = 1; i < n - 1; ++i) {
+        double lambda = (knots[i] - knots[i-1]) / (knots[i+1] - knots[i-1]);
+        double p = (lambda - 1.0) / (lambda * result[i-1] + 2.0);
+        result.push_back(p);
+    }
+
+    return result;
+}
+
+std::vector<double> NaturalSpline::calculateQCoefficients(
+    const std::vector<double>& knots,
+    const std::vector<double>& differences,
+    const std::vector<double>& pCoeffs) const {
+
+    const size_t n = knots.size() - 1;
+    std::vector<double> result = {0.0};
+
+    for (size_t i = 1; i < n; ++i) {
+        double lambda = (knots[i] - knots[i-1]) / (knots[i+1] - knots[i-1]);
+        double q = (differences[i-1] - lambda * result[i-1]) / (lambda * pCoeffs[i-1] + 2.0);
+        result.push_back(q);
+    }
+
+    return result;
+}
+
+std::vector<double> NaturalSpline::calculateMoments(
+    const std::vector<double>& pCoeffs,
+    const std::vector<double>& qCoeffs) const {
+
+    const size_t n = m_points.size() - 1;
+    std::vector<double> moments = {0.0};
+
+    moments.push_back(qCoeffs.back());
+
+    for (size_t i = n - 2; i > 0; --i)
+        moments.push_back(pCoeffs[i] * moments.back() + qCoeffs[i]);
+
+    moments.push_back(0.0);
+
+    std::reverse(moments.begin(), moments.end());
+    return moments;
+}
+
+void NaturalSpline::calculateCoefficients() {
+    m_coeffsX.clear();
+    m_coeffsY.clear();
+
+    const size_t n = m_points.size();
+    if (n < 2) return;
+
+    std::vector<double> knots(n);
+    for (size_t i = 0; i < n; ++i) {
+        knots[i] = static_cast<double>(i) / (n - 1);
+    }
+
+    std::vector<double> xValues(n), yValues(n);
+    for (size_t i = 0; i < n; ++i) {
+        xValues[i] = m_points[i].first;
+        yValues[i] = m_points[i].second;
+    }
+
+    std::vector<double> pCoeffs = calculatePCoefficients(knots);
+    std::vector<double> dxDiffs = calculateDifferences(xValues, knots);
+    std::vector<double> qxCoeffs = calculateQCoefficients(knots, dxDiffs, pCoeffs);
+    std::vector<double> xMoments = calculateMoments(pCoeffs, qxCoeffs);
+
+    std::vector<double> dyDiffs = calculateDifferences(yValues, knots);
+    std::vector<double> qyCoeffs = calculateQCoefficients(knots, dyDiffs, pCoeffs);
+    std::vector<double> yMoments = calculateMoments(pCoeffs, qyCoeffs);
+
+    for (size_t i = 0; i < n - 1; ++i) {
+        double h = knots[i+1] - knots[i];
+
+        std::vector<double> xCoeffs(4);
+        xCoeffs[0] = xValues[i];
+        xCoeffs[1] = xMoments[i] / 2.0;
+        xCoeffs[2] = (xValues[i+1] - xValues[i]) / h - h * (2.0 * xMoments[i] + xMoments[i+1]) / 6.0;
+        xCoeffs[3] = (xMoments[i+1] - xMoments[i]) / (6.0 * h);
+
+        std::vector<double> yCoeffs(4);
+        yCoeffs[0] = yValues[i];
+        yCoeffs[1] = yMoments[i] / 2.0;
+        yCoeffs[2] = (yValues[i+1] - yValues[i]) / h - h * (2.0 * yMoments[i] + yMoments[i+1]) / 6.0;
+        yCoeffs[3] = (yMoments[i+1] - yMoments[i]) / (6.0 * h);
+
+        m_coeffsX.push_back(xCoeffs);
+        m_coeffsY.push_back(yCoeffs);
+    }
+}
+
+NaturalSpline::Point2D NaturalSpline::evaluate(double t) const {
+    if (m_points.empty()) {
+        return {0.0, 0.0};
+    }
+
+    if (m_points.size() == 1) {
+        return m_points[0];
+    }
+
+    t = std::max(0.0, std::min(1.0, t));
+
+    const size_t n = m_points.size();
+    const double scaledT = t * (n - 1);
+
+    size_t segment = static_cast<size_t>(scaledT);
+    if (segment >= n - 1) {
+        segment = n - 2;
+    }
+
+    double u = scaledT - segment;
+
+    const auto& xCoeffs = m_coeffsX[segment];
+    const auto& yCoeffs = m_coeffsY[segment];
+
+    double x = xCoeffs[0] + u * (xCoeffs[1] + u * (xCoeffs[2] + u * xCoeffs[3]));
+    double y = yCoeffs[0] + u * (yCoeffs[1] + u * (yCoeffs[2] + u * yCoeffs[3]));
+
+    return {x, y};
+}
+
+//===== END FILE: Geometry\NaturalSpline.cpp =====//
+
+//===== START FILE: Geometry\NaturalSpline.h =====//
+
+#pragma once
+
+#include <vector>
+#include <utility>
+#include <cmath>
+
+class NaturalSpline {
+public:
+    using Point2D = std::pair<double, double>;
+
+    explicit NaturalSpline(const std::vector<Point2D>& points);
+
+    //t ∈ [0,1]
+    Point2D evaluate(double t) const;
+
+    void setPoints(const std::vector<Point2D>& points);
+
+    const std::vector<Point2D>& getPoints() const;
+
+private:
+    std::vector<Point2D> m_points;
+
+    std::vector<std::vector<double>> m_coeffsX;
+    std::vector<std::vector<double>> m_coeffsY;
+
+    std::vector<double> calculateDifferences(const std::vector<double>& values,
+                                           const std::vector<double>& knots) const;
+
+    std::vector<double> calculatePCoefficients(const std::vector<double>& knots) const;
+
+    std::vector<double> calculateQCoefficients(const std::vector<double>& knots,
+                                             const std::vector<double>& differences,
+                                             const std::vector<double>& pCoeffs) const;
+
+    std::vector<double> calculateMoments(const std::vector<double>& pCoeffs,
+                                        const std::vector<double>& qCoeffs) const;
+
+    void calculateCoefficients();
+};
+
+//===== END FILE: Geometry\NaturalSpline.h =====//
+
 //===== START FILE: Geometry\Point.cpp =====//
 
-// File: Point.cpp
 #include "Point.h"
 #include "TransformMatrix.h"
 #include <cmath>
@@ -1377,22 +1540,18 @@ Point Point::midPoint(const Point& other) const {
 }
 
 void Point::transform(const TransformMatrix& matrix) {
-    // Konwertujemy punkt do formatu Eigen::Vector4d (reprezentacja homogeniczna)
     Eigen::Vector4d homogeneousPoint;
     homogeneousPoint << x(), y(), z(), 1.0;
 
-    // Pobieramy macierz transformacji i aplikujemy transformację
     Eigen::Vector4d transformedPoint = matrix.getMatrix() * homogeneousPoint;
 
-    // Konwertujemy z powrotem do współrzędnych kartezjańskich (z normalizacją)
-    if (std::abs(transformedPoint(3)) > 1e-10) {  // Unikamy dzielenia przez zero
+    if (std::abs(transformedPoint(3)) > 1e-10) {
         setX(transformedPoint(0) / transformedPoint(3));
         setY(transformedPoint(1) / transformedPoint(3));
         setZ(transformedPoint(2) / transformedPoint(3));
     }
 }
 
-// Implementacja metod z GeometricObject
 Eigen::Vector3d Point::getPosition() const {
     return Eigen::Vector3d(x(), y(), z());
 }
@@ -1445,10 +1604,8 @@ private:
 
 //===== START FILE: Geometry\TransformMatrix.cpp =====//
 
-// File: TransformMatrix.cpp
 #include "TransformMatrix.h"
 
-// StandardTransformMatrix implementation
 StandardTransformMatrix::StandardTransformMatrix()
     : m_matrix(Eigen::Matrix4d::Identity()) {
 }
@@ -1520,13 +1677,11 @@ public:
     std::unique_ptr<ViewportManager> viewportManager;
     std::shared_ptr<IRenderer> renderer;
 
-    // Zmienne do obsługi interakcji myszy
     bool isPanning = false;
     QPointF lastMousePos;
     QPointF selectionPoint;
     bool isSelecting = false;
 
-    // Zmienne do edycji punktów kontrolnych
     EditMode editMode = EditMode::None;
     int selectedControlPointIndex = -1;
     int activeControlPointIndex = -1;
@@ -1542,7 +1697,6 @@ Canvas::Canvas(QWidget* parent)
     setAttribute(Qt::WA_OpaquePaintEvent);
     setAttribute(Qt::WA_NoSystemBackground);
     setAutoFillBackground(false);
-    // Dodane, aby zapewnić poprawne odświeżanie przy zmianie stanu
     setAttribute(Qt::WA_StaticContents, false);
 
     if (m_dPtr->viewportManager) {
@@ -1595,14 +1749,11 @@ void Canvas::selectObject(std::shared_ptr<GeometricObject> object)
     if (m_dPtr->selectedObject != object) {
         m_dPtr->selectedObject = object;
 
-        // Resetuj zmienne edycji punktów przy zmianie zaznaczenia
         m_dPtr->selectedControlPointIndex = -1;
         m_dPtr->activeControlPointIndex = -1;
 
-        // Jeśli jesteśmy w trybie edycji punktów, a zmieniamy obiekt, zakończ edycję
-        if (m_dPtr->isEditingPoints && !std::dynamic_pointer_cast<InterpolatedCurve>(object)) {
+        if (m_dPtr->isEditingPoints && !std::dynamic_pointer_cast<InterpolatedCurve>(object))
             finishEditing();
-        }
 
         emit objectSelected(object);
         update();
@@ -1614,14 +1765,11 @@ void Canvas::clearSelection()
     if (m_dPtr->selectedObject) {
         m_dPtr->selectedObject = nullptr;
 
-        // Resetuj zmienne edycji punktów przy usunięciu zaznaczenia
         m_dPtr->selectedControlPointIndex = -1;
         m_dPtr->activeControlPointIndex = -1;
 
-        // Jeśli jesteśmy w trybie edycji punktów, zakończ edycję
-        if (m_dPtr->isEditingPoints) {
+        if (m_dPtr->isEditingPoints)
             finishEditing();
-        }
 
         emit selectionCleared();
         update();
@@ -1669,8 +1817,7 @@ void Canvas::fitToContents()
         return;
     }
 
-    // Obliczenie granic wszystkich obiektów geometrycznych
-    QRectF bounds(-10, -10, 20, 20); // Domyślne granice
+    QRectF bounds(-10, -10, 20, 20);
 
     if (m_dPtr->viewportManager) {
         m_dPtr->viewportManager->fitView(bounds);
@@ -1708,7 +1855,6 @@ void Canvas::setEditMode(EditMode mode) {
     if (mode == EditMode::None) {
         finishEditing();
     } else {
-        // Jeśli nie mamy zaznaczonej krzywej, a próbujemy edytować punkty, anuluj
         if ((mode == EditMode::AddPoint || mode == EditMode::MovePoint) && !getSelectedCurve()) {
             m_dPtr->editMode = EditMode::None;
             QMessageBox::warning(this, "Edycja punktów",
@@ -1769,19 +1915,14 @@ bool Canvas::addControlPoint(const QPointF& screenPos) {
     auto curve = getSelectedCurve();
     if (!curve || !m_dPtr->viewportManager) return false;
 
-    // Konwertuj współrzędne ekranu na współrzędne świata
     QPointF worldPos = m_dPtr->viewportManager->screenToWorld(screenPos);
 
-    // Dodaj punkt do krzywej
     curve->addPoint(Point(worldPos.x(), worldPos.y()));
 
-    // Ustal indeks nowego punktu (ostatni punkt)
     int newPointIndex = static_cast<int>(curve->getPointCount()) - 1;
 
-    // Zaznacz nowy punkt
     selectControlPoint(newPointIndex);
 
-    // Emituj sygnał
     emit controlPointAdded(newPointIndex);
 
     update();
@@ -1795,15 +1936,12 @@ bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
         return false;
     }
 
-    // Konwertuj współrzędne ekranu na współrzędne świata
     QPointF worldPos = m_dPtr->viewportManager->screenToWorld(screenPos);
 
-    // Przesuń punkt
     const auto& points = curve->getPoints();
     auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
     curve->movePoint(pointIndex, newPoint);
 
-    // Emituj sygnał
     emit controlPointMoved(pointIndex);
 
     update();
@@ -1850,16 +1988,13 @@ void Canvas::paintEvent(QPaintEvent* event)
 
     m_dPtr->renderer->beginRender(&painter, m_dPtr->viewportManager.get());
 
-    // Rysowanie elementów pomocniczych
     m_dPtr->renderer->renderGrid(1.0);
     m_dPtr->renderer->renderAxes();
 
-    // Rysowanie obiektów geometrycznych
     for (const auto& object : m_dPtr->objects) {
         m_dPtr->renderer->renderObject(*object);
     }
 
-    // Rysowanie markera zaznaczenia dla wybranego obiektu
     if (m_dPtr->selectedObject) {
         const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_dPtr->selectedObject.get());
         if (geometricObj) {
@@ -1869,7 +2004,6 @@ void Canvas::paintEvent(QPaintEvent* event)
         }
     }
 
-    // Rysowanie punktów kontrolnych jeśli jesteśmy w trybie edycji
     if (m_dPtr->isEditingPoints && m_dPtr->selectedObject) {
         drawControlPoints();
     }
@@ -1883,10 +2017,8 @@ void Canvas::drawControlPoints() {
 
     const auto& points = curve->getPoints();
 
-    // Najpierw narysuj poligon kontrolny
     m_dPtr->renderer->renderControlPolygon(points);
 
-    // Potem narysuj punkty kontrolne
     m_dPtr->renderer->renderControlPoints(points, m_dPtr->selectedControlPointIndex, m_dPtr->activeControlPointIndex);
 }
 
@@ -1906,12 +2038,10 @@ void Canvas::mousePressEvent(QMouseEvent* event)
 
     if (event->button() == Qt::LeftButton) {
         if (m_dPtr->editMode == EditMode::AddPoint) {
-            // Dodaj nowy punkt kontrolny
             addControlPoint(event->pos());
             return;
         }
         else if (m_dPtr->editMode == EditMode::MovePoint) {
-            // Sprawdź czy kliknięto na punkt kontrolny
             int pointIndex = hitTestControlPoint(event->pos());
             if (pointIndex >= 0) {
                 selectControlPoint(pointIndex);
@@ -1922,12 +2052,8 @@ void Canvas::mousePressEvent(QMouseEvent* event)
             }
         }
         else {
-            // Tryb zaznaczania obiektu
             m_dPtr->isSelecting = true;
             m_dPtr->selectionPoint = event->pos();
-
-            // Sprawdź czy kliknięto na obiekt
-            // Ta logika mogłaby być rozszerzona w przyszłości
         }
     }
     else if (event->button() == Qt::MiddleButton) {
@@ -1944,7 +2070,6 @@ void Canvas::mouseMoveEvent(QMouseEvent* event)
     QPointF delta = currentPos - m_dPtr->lastMousePos;
 
     if (m_dPtr->isDraggingPoint && m_dPtr->activeControlPointIndex >= 0) {
-        // Przesuń punkt kontrolny
         moveControlPoint(m_dPtr->activeControlPointIndex, currentPos);
     }
     else if (m_dPtr->isPanning) {
@@ -1955,7 +2080,6 @@ void Canvas::mouseMoveEvent(QMouseEvent* event)
         }
     }
     else if (m_dPtr->editMode == EditMode::MovePoint) {
-        // Sprawdź czy kursor jest nad punktem kontrolnym
         int pointIndex = hitTestControlPoint(currentPos);
         if (pointIndex >= 0) {
             setCursor(Qt::OpenHandCursor);
@@ -1982,7 +2106,6 @@ void Canvas::mouseReleaseEvent(QMouseEvent* event)
             }
         }
         else if (m_dPtr->isSelecting) {
-            // Tutaj logika zaznaczania obiektu
             m_dPtr->isSelecting = false;
         }
     }
@@ -2012,16 +2135,13 @@ void Canvas::wheelEvent(QWheelEvent* event)
 void Canvas::keyPressEvent(QKeyEvent* event)
 {
     if (event->key() == Qt::Key_Escape) {
-        // Escape wychodzi z trybu edycji
         finishEditing();
     }
     else if (event->key() == Qt::Key_Delete && m_dPtr->selectedControlPointIndex >= 0) {
-        // Usuń wybrany punkt kontrolny
         auto curve = getSelectedCurve();
         if (curve && m_dPtr->selectedControlPointIndex >= 0 &&
             m_dPtr->selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
 
-            // Upewnij się, że krzywa będzie miała co najmniej 2 punkty
             if (curve->getPointCount() > 2) {
                 curve->removePoint(m_dPtr->selectedControlPointIndex);
                 m_dPtr->selectedControlPointIndex = -1;
@@ -2180,28 +2300,22 @@ class IRenderer {
 public:
     virtual ~IRenderer() = default;
 
-    // Inicjalizacja i konfiguracja
     virtual void beginRender(QPainter* painter, ViewportManager* viewportManager) = 0;
     virtual void endRender() = 0;
 
-    // Metody renderowania konkretnych typów obiektów
     virtual void renderPoint(const Point& point) = 0;
     virtual void renderCurve(const Curve& curve) = 0;
 
-    // Ogólna metoda do renderowania obiektów geometrycznych
     virtual void renderObject(const GeometricObject& object) = 0;
 
-    // Renderowanie pomocniczych elementów
     virtual void renderGrid(double gridSize) = 0;
     virtual void renderAxes() = 0;
     virtual void renderSelectionMarker(const QPointF& position) = 0;
 
-    // Renderowanie punktów kontrolnych dla krzywych
     virtual void renderControlPoint(const QPointF& position, bool isSelected = false, bool isActive = false) = 0;
     virtual void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int activeIndex = -1) = 0;
     virtual void renderControlPolygon(const std::vector<Point>& points) = 0;
 
-    // Metody do ustawiania stylów rysowania
     virtual void setPointStyle(const QColor& color, float size) = 0;
     virtual void setCurveStyle(const QColor& color, float width, Qt::PenStyle style = Qt::SolidLine) = 0;
     virtual void setSelectionStyle(const QColor& color, float size) = 0;
@@ -2210,7 +2324,6 @@ public:
     virtual void setControlPointStyle(const QColor& normalColor, const QColor& selectedColor, const QColor& activeColor, float size) = 0;
     virtual void setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) = 0;
 
-    // Włączanie/wyłączanie elementów
     virtual void setDrawGrid(bool draw) = 0;
     virtual void setDrawAxes(bool draw) = 0;
     virtual void setDrawControlPolygon(bool draw) = 0;
@@ -2253,7 +2366,6 @@ public:
         , viewportManager(nullptr)
     {}
 
-    // Style rysowania
     QColor pointColor;
     float pointSize;
     QColor curveColor;
@@ -2274,12 +2386,10 @@ public:
     float controlPolygonWidth;
     Qt::PenStyle controlPolygonStyle;
 
-    // Opcje rysowania
     bool drawGrid;
     bool drawAxes;
     bool drawControlPolygon;
 
-    // Obiekty używane podczas rysowania
     QPainter* painter;
     ViewportManager* viewportManager;
 };
@@ -2376,7 +2486,6 @@ void QtRenderer::renderGrid(double gridSize) {
 
     QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
 
-    // Linie pomocnicze
     QPen smallPen(QColor(230, 230, 230), 0.5, Qt::DotLine);
     m_dPtr->painter->setPen(smallPen);
 
@@ -2387,7 +2496,6 @@ void QtRenderer::renderGrid(double gridSize) {
         m_dPtr->painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
     }
 
-    // Linie główne
     QPen mainPen(QColor(200, 200, 200), 1.0, Qt::SolidLine);
     m_dPtr->painter->setPen(mainPen);
 
@@ -2418,7 +2526,6 @@ void QtRenderer::renderAxes()
 
     QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
 
-    // Rysowanie głównych osi
     m_dPtr->painter->drawLine(QPointF(visibleRect.left(), 0), QPointF(visibleRect.right(), 0));
     m_dPtr->painter->drawLine(QPointF(0, visibleRect.top()), QPointF(0, visibleRect.bottom()));
 
@@ -2449,16 +2556,13 @@ void QtRenderer::renderAxisTicks() {
     QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
     double zoomFactor = m_dPtr->viewportManager->zoomFactor();
 
-    // Obliczenie optymalnej odległości między przedziałkami w zależności od szerokości widocznego obszaru
     double viewportWidth = visibleRect.width();
     double viewportHeight = visibleRect.height();
 
-    // Chcemy mieć około 5-10 przedziałek na widocznym obszarze
     double desiredTickCount = 16.0;
     double optimalSpacingX = viewportWidth / desiredTickCount;
     double optimalSpacingY = viewportHeight / desiredTickCount;
 
-    // Funkcja pomocnicza do znajdowania "ładnej" wartości odstępu
     auto findNiceSpacing = [](double optimalSpacing) -> double {
         double magnitude = pow(10, floor(log10(optimalSpacing)));
         double normalized = optimalSpacing / magnitude;
@@ -2472,7 +2576,6 @@ void QtRenderer::renderAxisTicks() {
     double tickSpacingX = findNiceSpacing(optimalSpacingX);
     double tickSpacingY = findNiceSpacing(optimalSpacingY);
 
-    // Minimalna i maksymalna wartość dla przedziałek
     double xMin = floor(visibleRect.left() / tickSpacingX) * tickSpacingX;
     double xMax = ceil(visibleRect.right() / tickSpacingX) * tickSpacingX;
     double yMin = floor(visibleRect.top() / tickSpacingY) * tickSpacingY;
@@ -2493,7 +2596,6 @@ void QtRenderer::renderAxisTicks() {
 
         m_dPtr->painter->drawLine(QPointF(x, -tickLength/2), QPointF(x, tickLength/2));
         QString label = QString::number(x, 'f', xPrecision);
-        // Usunięcie zbędnych zer na końcu
         while (label.contains('.') && label.endsWith('0'))
             label.chop(1);
 
@@ -2503,13 +2605,11 @@ void QtRenderer::renderAxisTicks() {
         renderText(QPointF(x, -tickLength - 5.0/zoomFactor), label);
     }
 
-    // Rysowanie przedziałek dla osi Y
     for (double y = yMin; y <= yMax; y += tickSpacingY) {
         if (std::abs(y) < 1e-6) continue;
 
         m_dPtr->painter->drawLine(QPointF(-tickLength/2, y), QPointF(tickLength/2, y));
         QString label = QString::number(y, 'f', yPrecision);
-        // Usunięcie zbędnych zer na końcu
         while (label.contains('.') && label.endsWith('0'))
             label.chop(1);
 
@@ -2535,7 +2635,6 @@ void QtRenderer::renderSelectionMarker(const QPointF& position)
     double size = m_dPtr->selectionSize;
     m_dPtr->painter->drawEllipse(position, size, size);
 
-    // Narysuj krzyżyk w środku
     m_dPtr->painter->drawLine(position - QPointF(size / 2, 0),
                              position + QPointF(size / 2, 0));
     m_dPtr->painter->drawLine(position - QPointF(0, size / 2),
@@ -2553,7 +2652,6 @@ void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bo
     m_dPtr->painter->save();
     m_dPtr->painter->resetTransform();
 
-    // Wybór koloru w zależności od stanu punktu
     QColor fillColor;
     if (isActive) {
         fillColor = m_dPtr->controlPointActiveColor;
@@ -2563,30 +2661,26 @@ void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bo
         fillColor = m_dPtr->controlPointNormalColor;
     }
 
-    // Warstwa tła (cień)
     QPen shadowPen(Qt::black, 1.0);
     QBrush shadowBrush(QColor(0, 0, 0, 50));
     m_dPtr->painter->setPen(shadowPen);
     m_dPtr->painter->setBrush(shadowBrush);
     m_dPtr->painter->drawEllipse(position + QPointF(1, 1), m_dPtr->controlPointSize + 1, m_dPtr->controlPointSize + 1);
 
-    // Warstwa główna (punkt kontrolny)
     QPen pen(Qt::black, 1.0);
     QBrush brush(fillColor);
     m_dPtr->painter->setPen(pen);
     m_dPtr->painter->setBrush(brush);
     m_dPtr->painter->drawEllipse(position, m_dPtr->controlPointSize, m_dPtr->controlPointSize);
 
-    // Dodaj numer punktu kontrolnego jeśli jest wybrany
     if (isSelected) {
         m_dPtr->painter->setPen(Qt::white);
         QFont font = m_dPtr->painter->font();
         font.setPointSize(9);
         m_dPtr->painter->setFont(font);
 
-        // Obliczanie offsetu tekstu dla wyśrodkowania
         QFontMetrics fm(font);
-        QString text = QString::number(isActive ? 1 : 0); // Przykładowy tekst
+        QString text = QString::number(isActive ? 1 : 0);
         QRect textRect = fm.boundingRect(text);
         QPointF textPos = position - QPointF(textRect.width() / 2.0, -textRect.height() / 4.0);
 
@@ -2602,12 +2696,10 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         return;
     }
 
-    // Rysowanie poligonu kontrolnego (linie łączące punkty)
     if (m_dPtr->drawControlPolygon && points.size() >= 2) {
         renderControlPolygon(points);
     }
 
-    // Buforowanie pozycji punktów kontrolnych na ekranie (dla wydajności)
     std::vector<QPointF> screenPositions;
     screenPositions.reserve(points.size());
 
@@ -2617,24 +2709,20 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         );
     }
 
-    // Najpierw rysujemy zwykłe punkty kontrolne
     for (size_t i = 0; i < points.size(); ++i) {
         if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != activeIndex) {
             renderControlPoint(screenPositions[i], false, false);
         }
     }
 
-    // Następnie rysujemy zaznaczony punkt (jeśli istnieje)
     if (selectedIndex >= 0 && selectedIndex < static_cast<int>(points.size())) {
         renderControlPoint(screenPositions[selectedIndex], true, false);
     }
 
-    // Na końcu rysujemy aktywny punkt (jeśli istnieje i jest inny niż zaznaczony)
     if (activeIndex >= 0 && activeIndex < static_cast<int>(points.size()) && activeIndex != selectedIndex) {
         renderControlPoint(screenPositions[activeIndex], false, true);
     }
 
-    // Rysujemy etykiety z numerami punktów
     m_dPtr->painter->save();
     m_dPtr->painter->resetTransform();
     QPen textPen(Qt::black);
@@ -2652,7 +2740,6 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         QPointF textPos = screenPositions[i] + QPointF(m_dPtr->controlPointSize + 2,
                                                       m_dPtr->controlPointSize / 2.0);
 
-        // Tło dla tekstu dla lepszej czytelności
         QRectF bgRect = QRectF(textPos.x() - 1, textPos.y() - textRect.height(),
                               textRect.width() + 2, textRect.height() + 2);
         m_dPtr->painter->fillRect(bgRect, QColor(255, 255, 255, 180));
@@ -3129,16 +3216,13 @@ private:
 
 //===== START FILE: Math\EigenMathAdapter.cpp =====//
 
-// File: EigenMathAdapter.cpp
 #include "EigenMathAdapter.h"
 #include "../Geometry/TransformMatrix.h"
 #include <stdexcept>
 
 EigenMathAdapter::EigenMathAdapter() {
-    // Inicjalizacja (opcjonalna)
 }
 
-// Implementacja metod operacji na macierzach
 std::shared_ptr<TransformMatrix> EigenMathAdapter::createRotationMatrix(double angle, const std::array<double, 3>& axis) {
     Eigen::Vector3d eigenAxis(axis[0], axis[1], axis[2]);
     Eigen::AngleAxisd rotation(angle, eigenAxis.normalized());
@@ -3167,14 +3251,11 @@ std::vector<double> EigenMathAdapter::solveLinearSystem(
     const std::vector<std::vector<double>>& coefficients,
     const std::vector<double>& constants) {
 
-    // Konwersja danych wejściowych
     Eigen::MatrixXd A = toEigenMatrix(coefficients);
     Eigen::VectorXd b = Eigen::Map<const Eigen::VectorXd>(constants.data(), constants.size());
 
-    // Rozwiązanie układu równań (Ax = b)
     Eigen::VectorXd x = A.colPivHouseholderQr().solve(b);
 
-    // Konwersja wyniku
     return std::vector<double>(x.data(), x.data() + x.size());
 }
 

@@ -12,13 +12,11 @@ public:
     std::unique_ptr<ViewportManager> viewportManager;
     std::shared_ptr<IRenderer> renderer;
 
-    // Zmienne do obsługi interakcji myszy
     bool isPanning = false;
     QPointF lastMousePos;
     QPointF selectionPoint;
     bool isSelecting = false;
 
-    // Zmienne do edycji punktów kontrolnych
     EditMode editMode = EditMode::None;
     int selectedControlPointIndex = -1;
     int activeControlPointIndex = -1;
@@ -34,7 +32,6 @@ Canvas::Canvas(QWidget* parent)
     setAttribute(Qt::WA_OpaquePaintEvent);
     setAttribute(Qt::WA_NoSystemBackground);
     setAutoFillBackground(false);
-    // Dodane, aby zapewnić poprawne odświeżanie przy zmianie stanu
     setAttribute(Qt::WA_StaticContents, false);
 
     if (m_dPtr->viewportManager) {
@@ -87,14 +84,11 @@ void Canvas::selectObject(std::shared_ptr<GeometricObject> object)
     if (m_dPtr->selectedObject != object) {
         m_dPtr->selectedObject = object;
 
-        // Resetuj zmienne edycji punktów przy zmianie zaznaczenia
         m_dPtr->selectedControlPointIndex = -1;
         m_dPtr->activeControlPointIndex = -1;
 
-        // Jeśli jesteśmy w trybie edycji punktów, a zmieniamy obiekt, zakończ edycję
-        if (m_dPtr->isEditingPoints && !std::dynamic_pointer_cast<InterpolatedCurve>(object)) {
+        if (m_dPtr->isEditingPoints && !std::dynamic_pointer_cast<InterpolatedCurve>(object))
             finishEditing();
-        }
 
         emit objectSelected(object);
         update();
@@ -106,14 +100,11 @@ void Canvas::clearSelection()
     if (m_dPtr->selectedObject) {
         m_dPtr->selectedObject = nullptr;
 
-        // Resetuj zmienne edycji punktów przy usunięciu zaznaczenia
         m_dPtr->selectedControlPointIndex = -1;
         m_dPtr->activeControlPointIndex = -1;
 
-        // Jeśli jesteśmy w trybie edycji punktów, zakończ edycję
-        if (m_dPtr->isEditingPoints) {
+        if (m_dPtr->isEditingPoints)
             finishEditing();
-        }
 
         emit selectionCleared();
         update();
@@ -161,8 +152,7 @@ void Canvas::fitToContents()
         return;
     }
 
-    // Obliczenie granic wszystkich obiektów geometrycznych
-    QRectF bounds(-10, -10, 20, 20); // Domyślne granice
+    QRectF bounds(-10, -10, 20, 20);
 
     if (m_dPtr->viewportManager) {
         m_dPtr->viewportManager->fitView(bounds);
@@ -200,7 +190,6 @@ void Canvas::setEditMode(EditMode mode) {
     if (mode == EditMode::None) {
         finishEditing();
     } else {
-        // Jeśli nie mamy zaznaczonej krzywej, a próbujemy edytować punkty, anuluj
         if ((mode == EditMode::AddPoint || mode == EditMode::MovePoint) && !getSelectedCurve()) {
             m_dPtr->editMode = EditMode::None;
             QMessageBox::warning(this, "Edycja punktów",
@@ -261,19 +250,14 @@ bool Canvas::addControlPoint(const QPointF& screenPos) {
     auto curve = getSelectedCurve();
     if (!curve || !m_dPtr->viewportManager) return false;
 
-    // Konwertuj współrzędne ekranu na współrzędne świata
     QPointF worldPos = m_dPtr->viewportManager->screenToWorld(screenPos);
 
-    // Dodaj punkt do krzywej
     curve->addPoint(Point(worldPos.x(), worldPos.y()));
 
-    // Ustal indeks nowego punktu (ostatni punkt)
     int newPointIndex = static_cast<int>(curve->getPointCount()) - 1;
 
-    // Zaznacz nowy punkt
     selectControlPoint(newPointIndex);
 
-    // Emituj sygnał
     emit controlPointAdded(newPointIndex);
 
     update();
@@ -287,15 +271,12 @@ bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
         return false;
     }
 
-    // Konwertuj współrzędne ekranu na współrzędne świata
     QPointF worldPos = m_dPtr->viewportManager->screenToWorld(screenPos);
 
-    // Przesuń punkt
     const auto& points = curve->getPoints();
     auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
     curve->movePoint(pointIndex, newPoint);
 
-    // Emituj sygnał
     emit controlPointMoved(pointIndex);
 
     update();
@@ -342,16 +323,13 @@ void Canvas::paintEvent(QPaintEvent* event)
 
     m_dPtr->renderer->beginRender(&painter, m_dPtr->viewportManager.get());
 
-    // Rysowanie elementów pomocniczych
     m_dPtr->renderer->renderGrid(1.0);
     m_dPtr->renderer->renderAxes();
 
-    // Rysowanie obiektów geometrycznych
     for (const auto& object : m_dPtr->objects) {
         m_dPtr->renderer->renderObject(*object);
     }
 
-    // Rysowanie markera zaznaczenia dla wybranego obiektu
     if (m_dPtr->selectedObject) {
         const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_dPtr->selectedObject.get());
         if (geometricObj) {
@@ -361,7 +339,6 @@ void Canvas::paintEvent(QPaintEvent* event)
         }
     }
 
-    // Rysowanie punktów kontrolnych jeśli jesteśmy w trybie edycji
     if (m_dPtr->isEditingPoints && m_dPtr->selectedObject) {
         drawControlPoints();
     }
@@ -375,10 +352,8 @@ void Canvas::drawControlPoints() {
 
     const auto& points = curve->getPoints();
 
-    // Najpierw narysuj poligon kontrolny
     m_dPtr->renderer->renderControlPolygon(points);
 
-    // Potem narysuj punkty kontrolne
     m_dPtr->renderer->renderControlPoints(points, m_dPtr->selectedControlPointIndex, m_dPtr->activeControlPointIndex);
 }
 
@@ -398,12 +373,10 @@ void Canvas::mousePressEvent(QMouseEvent* event)
 
     if (event->button() == Qt::LeftButton) {
         if (m_dPtr->editMode == EditMode::AddPoint) {
-            // Dodaj nowy punkt kontrolny
             addControlPoint(event->pos());
             return;
         }
         else if (m_dPtr->editMode == EditMode::MovePoint) {
-            // Sprawdź czy kliknięto na punkt kontrolny
             int pointIndex = hitTestControlPoint(event->pos());
             if (pointIndex >= 0) {
                 selectControlPoint(pointIndex);
@@ -414,12 +387,8 @@ void Canvas::mousePressEvent(QMouseEvent* event)
             }
         }
         else {
-            // Tryb zaznaczania obiektu
             m_dPtr->isSelecting = true;
             m_dPtr->selectionPoint = event->pos();
-
-            // Sprawdź czy kliknięto na obiekt
-            // Ta logika mogłaby być rozszerzona w przyszłości
         }
     }
     else if (event->button() == Qt::MiddleButton) {
@@ -436,7 +405,6 @@ void Canvas::mouseMoveEvent(QMouseEvent* event)
     QPointF delta = currentPos - m_dPtr->lastMousePos;
 
     if (m_dPtr->isDraggingPoint && m_dPtr->activeControlPointIndex >= 0) {
-        // Przesuń punkt kontrolny
         moveControlPoint(m_dPtr->activeControlPointIndex, currentPos);
     }
     else if (m_dPtr->isPanning) {
@@ -447,7 +415,6 @@ void Canvas::mouseMoveEvent(QMouseEvent* event)
         }
     }
     else if (m_dPtr->editMode == EditMode::MovePoint) {
-        // Sprawdź czy kursor jest nad punktem kontrolnym
         int pointIndex = hitTestControlPoint(currentPos);
         if (pointIndex >= 0) {
             setCursor(Qt::OpenHandCursor);
@@ -474,7 +441,6 @@ void Canvas::mouseReleaseEvent(QMouseEvent* event)
             }
         }
         else if (m_dPtr->isSelecting) {
-            // Tutaj logika zaznaczania obiektu
             m_dPtr->isSelecting = false;
         }
     }
@@ -504,16 +470,13 @@ void Canvas::wheelEvent(QWheelEvent* event)
 void Canvas::keyPressEvent(QKeyEvent* event)
 {
     if (event->key() == Qt::Key_Escape) {
-        // Escape wychodzi z trybu edycji
         finishEditing();
     }
     else if (event->key() == Qt::Key_Delete && m_dPtr->selectedControlPointIndex >= 0) {
-        // Usuń wybrany punkt kontrolny
         auto curve = getSelectedCurve();
         if (curve && m_dPtr->selectedControlPointIndex >= 0 &&
             m_dPtr->selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
 
-            // Upewnij się, że krzywa będzie miała co najmniej 2 punkty
             if (curve->getPointCount() > 2) {
                 curve->removePoint(m_dPtr->selectedControlPointIndex);
                 m_dPtr->selectedControlPointIndex = -1;

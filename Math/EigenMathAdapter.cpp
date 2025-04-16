@@ -1,13 +1,10 @@
-// File: EigenMathAdapter.cpp
 #include "EigenMathAdapter.h"
 #include "../Geometry/TransformMatrix.h"
 #include <stdexcept>
 
 EigenMathAdapter::EigenMathAdapter() {
-    // Inicjalizacja (opcjonalna)
 }
 
-// Implementacja metod operacji na macierzach
 std::shared_ptr<TransformMatrix> EigenMathAdapter::createRotationMatrix(double angle, const std::array<double, 3>& axis) {
     Eigen::Vector3d eigenAxis(axis[0], axis[1], axis[2]);
     Eigen::AngleAxisd rotation(angle, eigenAxis.normalized());
@@ -36,14 +33,11 @@ std::vector<double> EigenMathAdapter::solveLinearSystem(
     const std::vector<std::vector<double>>& coefficients,
     const std::vector<double>& constants) {
 
-    // Konwersja danych wejściowych
     Eigen::MatrixXd A = toEigenMatrix(coefficients);
     Eigen::VectorXd b = Eigen::Map<const Eigen::VectorXd>(constants.data(), constants.size());
 
-    // Rozwiązanie układu równań (Ax = b)
     Eigen::VectorXd x = A.colPivHouseholderQr().solve(b);
 
-    // Konwersja wyniku
     return std::vector<double>(x.data(), x.data() + x.size());
 }
 
