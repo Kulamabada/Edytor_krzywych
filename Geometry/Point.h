@@ -27,10 +27,6 @@ public:
     void transform(const TransformMatrix& matrix) override;
     Eigen::Vector3d getPosition() const override;
     void setPosition(const Eigen::Vector3d& position) override;
-    Eigen::Vector3d getScale() const override;
-    void setScale(const Eigen::Vector3d& scale) override;
-    Eigen::Quaterniond getRotation() const override;
-    void setRotation(const Eigen::Quaterniond& rotation) override;
 
 private:
     std::array<double, 3> m_coordinates;

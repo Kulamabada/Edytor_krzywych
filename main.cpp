@@ -15,6 +15,9 @@
 #include <QActionGroup>
 #include <QIcon>
 #include <cmath>
+#include <QToolButton>
+#include <QComboBox>
+#include <QPushButton>
 
 #include "Graphics/Canvas.h"
 #include "Core/CommandManager.h"
@@ -26,15 +29,12 @@
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
 
-    // Główne okno aplikacji
     QMainWindow mainWindow;
     mainWindow.setWindowTitle("Edytor Krzywych");
     mainWindow.resize(1024, 768);
 
-    // Menu aplikacji
     QMenuBar *menuBar = mainWindow.menuBar();
 
-    // Menu Plik
     QMenu *fileMenu = menuBar->addMenu("Plik");
     QAction *newAction = fileMenu->addAction(QIcon::fromTheme("document-new"), "Nowy");
     newAction->setShortcut(QKeySequence::New);
@@ -48,7 +48,6 @@ int main(int argc, char *argv[]) {
     QAction *exitAction = fileMenu->addAction(QIcon::fromTheme("application-exit"), "Wyjście");
     exitAction->setShortcut(QKeySequence::Quit);
 
-    // Menu Edycja
     QMenu *editMenu = menuBar->addMenu("Edycja");
     QAction *undoAction = editMenu->addAction(QIcon::fromTheme("edit-undo"), "Cofnij");
     undoAction->setShortcut(QKeySequence::Undo);
@@ -58,7 +57,6 @@ int main(int argc, char *argv[]) {
     QAction *deleteAction = editMenu->addAction(QIcon::fromTheme("edit-delete"), "Usuń");
     deleteAction->setShortcut(QKeySequence::Delete);
 
-    // Nowe podmenu do edycji punktów kontrolnych
     editMenu->addSeparator();
     QMenu *controlPointsMenu = editMenu->addMenu("Edycja punktów kontrolnych");
 
@@ -80,14 +78,12 @@ int main(int argc, char *argv[]) {
     QAction *finishEditingAction = controlPointsMenu->addAction(QIcon::fromTheme("dialog-cancel"), "Zakończ edycję");
     finishEditingAction->setShortcut(QKeySequence("Esc"));
 
-    // Grupa akcji do trybów edycji punktów (tylko jeden może być aktywny)
     auto *editModeGroup = new QActionGroup(&mainWindow);
     editModeGroup->addAction(selectModeAction);
     editModeGroup->addAction(addPointModeAction);
     editModeGroup->addAction(movePointModeAction);
     selectModeAction->setChecked(true); // Domyślnie tryb zaznaczania
 
-    // Menu Widok
     auto *viewMenu = menuBar->addMenu("Widok");
     QAction *zoomInAction = viewMenu->addAction(QIcon::fromTheme("zoom-in"), "Przybliż");
     zoomInAction->setShortcut(QKeySequence::ZoomIn);
@@ -97,17 +93,22 @@ int main(int argc, char *argv[]) {
     resetViewAction->setShortcut(QKeySequence("Ctrl+0"));
     QAction *fitContentAction = viewMenu->addAction(QIcon::fromTheme("zoom-fit-best"), "Dopasuj do zawartości");
 
-    // Menu Krzywe
     QMenu *curvesMenu = menuBar->addMenu("Krzywe");
-    QAction *bezierAction = curvesMenu->addAction("Krzywa Beziera");
-    QAction *interpolatedAction = curvesMenu->addAction("Krzywa interpolowana");
-    QAction *parametricAction = curvesMenu->addAction("Krzywa parametryczna");
+    // QAction *bezierAction = curvesMenu->addAction("Krzywa Beziera");
+    QMenu *interpolatedCurvesMenu = curvesMenu->addMenu("Krzywa interpolacyjna");
+    QAction *nifsAction = interpolatedCurvesMenu->addAction("NIFS3 (Natural Cubic Spline)");
+    QAction *oifsAction = interpolatedCurvesMenu->addAction("OIFS3 (Closed Cubic Spline)");
+    QAction *lagrangeAction = interpolatedCurvesMenu->addAction("Lagrange");
+    QAction *barycentricAction = interpolatedCurvesMenu->addAction("Barycentric");
 
-    // Menu Pomoc
+    auto interpolatedButton = new QToolButton();
+    interpolatedButton->setText("Krzywa interpolacyjna");
+    interpolatedButton->setPopupMode(QToolButton::InstantPopup);
+    interpolatedButton->setMenu(interpolatedCurvesMenu);
+
     QMenu *helpMenu = menuBar->addMenu("Pomoc");
     QAction *aboutAction = helpMenu->addAction(QIcon::fromTheme("help-about"), "O programie");
 
-    // Pasek narzędzi głównych
     auto *toolBar = new QToolBar("Narzędzia główne", &mainWindow);
     mainWindow.addToolBar(toolBar);
 
@@ -118,15 +119,13 @@ int main(int argc, char *argv[]) {
     toolBar->addAction(undoAction);
     toolBar->addAction(redoAction);
     toolBar->addSeparator();
-    toolBar->addAction(bezierAction);
-    toolBar->addAction(interpolatedAction);
-    toolBar->addAction(parametricAction);
+    // toolBar->addAction(bezierAction);
+    toolBar->addWidget(interpolatedButton);
     toolBar->addSeparator();
     toolBar->addAction(zoomInAction);
     toolBar->addAction(zoomOutAction);
     toolBar->addAction(resetViewAction);
 
-    // Pasek narzędzi edycji punktów kontrolnych
     auto *editToolBar = new QToolBar("Narzędzia edycji punktów", &mainWindow);
     mainWindow.addToolBar(Qt::TopToolBarArea, editToolBar);
 
@@ -137,25 +136,20 @@ int main(int argc, char *argv[]) {
     editToolBar->addAction(deletePointAction);
     editToolBar->addAction(finishEditingAction);
 
-    // Centralny widget
     auto *centralWidget = new QWidget(&mainWindow);
     auto *layout = new QVBoxLayout(centralWidget);
 
-    // Canvas do rysowania
     Canvas *canvas = new Canvas(centralWidget);
     layout->addWidget(canvas);
 
     auto renderer = std::make_shared<QtRenderer>();
     canvas->setRenderer(renderer);
 
-    // Ustawienie centralnego widgetu
     mainWindow.setCentralWidget(centralWidget);
 
-    // Doker z listą obiektów i punktów kontrolnych
     QDockWidget *objectsDock = new QDockWidget("Obiekty i punkty kontrolne", &mainWindow);
     objectsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    // Zamiast prostej listy, używamy drzewa dla hierarchii obiektów i punktów
     QTreeWidget *objectsTree = new QTreeWidget(objectsDock);
     objectsTree->setHeaderLabels(QStringList() << "Nazwa" << "Współrzędne");
     objectsTree->setColumnCount(2);
@@ -165,7 +159,6 @@ int main(int argc, char *argv[]) {
 
     mainWindow.addDockWidget(Qt::RightDockWidgetArea, objectsDock);
 
-    // Doker z właściwościami
     QDockWidget *propertiesDock = new QDockWidget("Właściwości", &mainWindow);
     propertiesDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
@@ -176,34 +169,27 @@ int main(int argc, char *argv[]) {
 
     mainWindow.addDockWidget(Qt::RightDockWidgetArea, propertiesDock);
 
-    // Pasek statusu
     QStatusBar *statusBar = mainWindow.statusBar();
     QLabel *modeLabel = new QLabel("Tryb: Normalny");
     statusBar->addPermanentWidget(modeLabel);
     statusBar->showMessage("Gotowy");
 
-    // Inicjalizacja narzędzi matematycznych
     auto mathProvider = std::make_shared<EigenMathAdapter>();
 
-    // Inicjalizacja managera poleceń
     CommandManager commandManager;
 
-    // Funkcja do aktualizacji drzewa obiektów
     auto updateObjectsTree = [objectsTree, canvas]() {
         objectsTree->clear();
 
-        // Dodaj wszystkie obiekty geometryczne do drzewa
         int index = 0;
         for (const auto& obj : canvas->objects()) {
             QTreeWidgetItem* item = new QTreeWidgetItem(objectsTree);
             item->setText(0, QString("Obiekt %1").arg(std::to_string(index + 1)));
 
-            // Sprawdź typ obiektu
             auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(obj);
             if (curve) {
                 item->setText(1, "Krzywa");
 
-                // Dodaj punkty kontrolne jako dzieci
                 const auto& points = curve->getPoints();
                 for (size_t i = 0; i < points.size(); ++i) {
                     QTreeWidgetItem* pointItem = new QTreeWidgetItem(item);
@@ -226,7 +212,63 @@ int main(int argc, char *argv[]) {
         objectsTree->expandAll();
     };
 
-    // Funkcja do aktualizacji etykiety trybu w pasku statusu
+    auto updatePropertiesPanel = [&]() {
+        QLayoutItem* child;
+        while ((child = propertiesLayout->takeAt(0)) != nullptr) {
+            delete child->widget();
+            delete child;
+        }
+
+        auto selectedObject = canvas->selectedObject();
+        if (!selectedObject) {
+            propertiesLayout->addWidget(new QLabel("Wybierz obiekt, aby edytować jego właściwości"));
+            return;
+        }
+
+        auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObject);
+        if (curve) {
+            propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej interpolowanej</b>"));
+
+            // propertiesLayout->addWidget(new QLabel(QString("Liczba punktów kontrolnych: %1")
+            //     .arg(curve->getPointCount())));
+
+            propertiesLayout->addWidget(new QLabel("Typ interpolacji:"));
+
+            QComboBox* typeCombo = new QComboBox();
+            typeCombo->addItem("NIFS3 (Natural Cubic Spline)", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::NIFS3)));
+            typeCombo->addItem("OIFS3 (Closed Cubic Spline)", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::OIFS3)));
+            typeCombo->addItem("Lagrange", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Lagrange)));
+            typeCombo->addItem("Barycentric", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Barycentric)));
+
+            typeCombo->setCurrentIndex(static_cast<int>(curve->getInterpolationType()));
+
+            propertiesLayout->addWidget(typeCombo);
+
+            QObject::connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                [curve, statusBar, canvas](int index) {
+                    auto type = static_cast<InterpolatedCurve::InterpolationType>(index);
+                    curve->setInterpolationType(type);
+                    canvas->refresh();
+
+                    QString typeName;
+                    switch (type) {
+                        case InterpolatedCurve::InterpolationType::NIFS3: typeName = "NIFS3"; break;
+                        case InterpolatedCurve::InterpolationType::OIFS3: typeName = "OIFS3"; break;
+                        case InterpolatedCurve::InterpolationType::Lagrange: typeName = "Lagrange"; break;
+                        case InterpolatedCurve::InterpolationType::Barycentric: typeName = "Barycentric"; break;
+                    }
+
+                    statusBar->showMessage(QString("Zmieniono typ interpolacji na %1").arg(typeName));
+                });
+
+            propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: -"))); //%1")
+                //.arg(QString::number(curve->getLength(), 'f', 2))));
+        } else {
+            propertiesLayout->addWidget(new QLabel("Wybierz krzywą interpolowaną, aby edytować jej właściwości"));
+        }
+        propertiesLayout->addStretch();
+    };
+
     auto updateModeLabel = [modeLabel, canvas]() {
         switch (canvas->getEditMode()) {
             case Canvas::EditMode::None:
@@ -244,7 +286,6 @@ int main(int argc, char *argv[]) {
         }
     };
 
-    // Połączenia akcji podstawowych
     QObject::connect(exitAction, &QAction::triggered, &app, &QApplication::quit);
 
     QObject::connect(newAction, &QAction::triggered, [&]() {
@@ -323,17 +364,34 @@ int main(int argc, char *argv[]) {
         statusBar->showMessage("Dopasowano widok do zawartości");
     });
 
-    QObject::connect(interpolatedAction, &QAction::triggered, [&]() {
-        auto curve = std::make_shared<InterpolatedCurve>(mathProvider);
-        // Dodanie przykładowych punktów
+    auto createInterpolatedCurve = [&](InterpolatedCurve::InterpolationType type, const QString &typeName) {
+        auto curve = std::make_shared<InterpolatedCurve>(mathProvider, type);
         curve->addPoint(Point(0, 0));
         curve->addPoint(Point(50, 100));
         curve->addPoint(Point(100, 0));
         canvas->addObject(curve);
+        canvas->selectObject(curve);
         canvas->refresh();
         updateObjectsTree();
-        statusBar->showMessage("Utworzono krzywą interpolowaną");
+        statusBar->showMessage(QString("Utworzono krzywą interpolowaną typu %1").arg(typeName));
+    };
+
+    QObject::connect(nifsAction, &QAction::triggered, [&]() {
+        createInterpolatedCurve(InterpolatedCurve::InterpolationType::NIFS3, "NIFS3");
     });
+
+    QObject::connect(oifsAction, &QAction::triggered, [&]() {
+        createInterpolatedCurve(InterpolatedCurve::InterpolationType::OIFS3, "OIFS3");
+    });
+
+    QObject::connect(lagrangeAction, &QAction::triggered, [&]() {
+        createInterpolatedCurve(InterpolatedCurve::InterpolationType::Lagrange, "Lagrange");
+    });
+
+    QObject::connect(barycentricAction, &QAction::triggered, [&]() {
+        createInterpolatedCurve(InterpolatedCurve::InterpolationType::Barycentric, "Barycentric");
+    });
+
 
     QObject::connect(aboutAction, &QAction::triggered, [&]() {
         QMessageBox::about(&mainWindow, "O programie",
@@ -350,7 +408,6 @@ int main(int argc, char *argv[]) {
             "</ul>");
     });
 
-    // Połączenia dla akcji edycji punktów kontrolnych
     QObject::connect(selectModeAction, &QAction::triggered, [&]() {
         canvas->setEditMode(Canvas::EditMode::SelectObject);
         updateModeLabel();
@@ -382,10 +439,8 @@ int main(int argc, char *argv[]) {
     });
 
     QObject::connect(deletePointAction, &QAction::triggered, [&]() {
-        // Usunięcie aktualnie zaznaczonego punktu kontrolnego
         auto curve = canvas->getSelectedCurve();
         if (curve) {
-            // Wysyłamy zdarzenie Delete do canvas, aby usunąć zaznaczony punkt
             QKeyEvent keyEvent(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
             QApplication::sendEvent(canvas, &keyEvent);
 
@@ -403,7 +458,6 @@ int main(int argc, char *argv[]) {
         statusBar->showMessage("Zakończono edycję punktów kontrolnych");
     });
 
-    // Obsługa sygnałów z Canvas
     QObject::connect(canvas, &Canvas::objectAdded, [&](std::shared_ptr<GeometricObject> obj) {
         updateObjectsTree();
         statusBar->showMessage("Dodano nowy obiekt");
@@ -416,14 +470,12 @@ int main(int argc, char *argv[]) {
 
     QObject::connect(canvas, &Canvas::objectSelected, [&](std::shared_ptr<GeometricObject> obj) {
         updateObjectsTree();
-
-        // Znajdź element w drzewie odpowiadający wybranemu obiektowi
+        updatePropertiesPanel();
         auto objects = canvas->objects();
         auto it = std::find(objects.begin(), objects.end(), obj);
         if (it != objects.end()) {
             int index = static_cast<int>(std::distance(objects.begin(), it));
 
-            // Znajdź element w drzewie i zaznacz go
             for (int i = 0; i < objectsTree->topLevelItemCount(); ++i) {
                 QTreeWidgetItem* item = objectsTree->topLevelItem(i);
                 if (item->data(0, Qt::UserRole).toInt() == index) {
@@ -438,6 +490,7 @@ int main(int argc, char *argv[]) {
 
     QObject::connect(canvas, &Canvas::selectionCleared, [&]() {
         objectsTree->clearSelection();
+        updatePropertiesPanel();
         statusBar->showMessage("Anulowano zaznaczenie");
     });
 
@@ -454,7 +507,6 @@ int main(int argc, char *argv[]) {
     QObject::connect(canvas, &Canvas::controlPointSelected, [&](int pointIndex) {
         updateObjectsTree();
 
-        // Znajdź element w drzewie odpowiadający wybranemu punktowi kontrolnemu
         auto selectedObj = canvas->selectedObject();
         auto objects = canvas->objects();
         auto it = std::find(objects.begin(), objects.end(), selectedObj);
@@ -462,11 +514,9 @@ int main(int argc, char *argv[]) {
         if (it != objects.end()) {
             int objectIndex = static_cast<int>(std::distance(objects.begin(), it));
 
-            // Znajdź element obiektu w drzewie
             for (int i = 0; i < objectsTree->topLevelItemCount(); ++i) {
                 QTreeWidgetItem* objectItem = objectsTree->topLevelItem(i);
                 if (objectItem->data(0, Qt::UserRole).toInt() == objectIndex) {
-                    // Znajdź element punktu kontrolnego
                     for (int j = 0; j < objectItem->childCount(); ++j) {
                         QTreeWidgetItem* pointItem = objectItem->child(j);
                         if (pointItem->data(0, Qt::UserRole).toInt() == pointIndex) {
@@ -493,9 +543,7 @@ int main(int argc, char *argv[]) {
         statusBar->showMessage("Zakończono edycję punktów kontrolnych");
     });
 
-    // Obsługa zaznaczania w drzewie obiektów
     QObject::connect(objectsTree, &QTreeWidget::itemClicked, [&](QTreeWidgetItem* item, int column) {
-        // Sprawdź, czy kliknięto element najwyższego poziomu (obiekt)
         if (item->parent() == nullptr) {
             int index = item->data(0, Qt::UserRole).toInt();
             if (index >= 0 && index < static_cast<int>(canvas->objects().size())) {
@@ -505,16 +553,13 @@ int main(int argc, char *argv[]) {
                 updateModeLabel();
             }
         }
-        // Sprawdź, czy kliknięto element podrzędny (punkt kontrolny)
         else {
             int pointIndex = item->data(0, Qt::UserRole).toInt();
             int objectIndex = item->data(0, Qt::UserRole + 1).toInt();
 
             if (objectIndex >= 0 && objectIndex < static_cast<int>(canvas->objects().size())) {
-                // Zaznacz najpierw obiekt (krzywą)
                 canvas->selectObject(canvas->objects()[objectIndex]);
 
-                // Przełącz na tryb edycji punktów i zaznacz punkt
                 auto curve = canvas->getSelectedCurve();
                 if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
                     canvas->startMovingControlPoints();
@@ -526,18 +571,14 @@ int main(int argc, char *argv[]) {
         }
     });
 
-    // Obsługa podwójnego kliknięcia w drzewie obiektów dla szybkiej edycji
     QObject::connect(objectsTree, &QTreeWidget::itemDoubleClicked, [&](QTreeWidgetItem* item, int column) {
-        // Jeśli kliknięto punkt kontrolny
         if (item->parent() != nullptr) {
             int pointIndex = item->data(0, Qt::UserRole).toInt();
             int objectIndex = item->data(0, Qt::UserRole + 1).toInt();
 
             if (objectIndex >= 0 && objectIndex < static_cast<int>(canvas->objects().size())) {
-                // Zaznacz obiekt
                 canvas->selectObject(canvas->objects()[objectIndex]);
 
-                // Przełącz na tryb przesuwania punktów i zaznacz punkt
                 auto curve = canvas->getSelectedCurve();
                 if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
                     canvas->startMovingControlPoints();
@@ -550,13 +591,10 @@ int main(int argc, char *argv[]) {
         }
     });
 
-    // Inicjalne wypełnienie drzewa obiektów
     updateObjectsTree();
 
-    // Wyświetlenie okna
     mainWindow.show();
     statusBar->showMessage("Aplikacja gotowa do użycia");
 
-    // Uruchomienie pętli zdarzeń aplikacji
     return app.exec();
 }

@@ -50,14 +50,11 @@ Point Point::midPoint(const Point& other) const {
 }
 
 void Point::transform(const TransformMatrix& matrix) {
-    // Konwertujemy punkt do formatu Eigen::Vector4d (reprezentacja homogeniczna)
     Eigen::Vector4d homogeneousPoint;
     homogeneousPoint << x(), y(), z(), 1.0;
 
-    // Pobieramy macierz transformacji i aplikujemy transformację
     Eigen::Vector4d transformedPoint = matrix.getMatrix() * homogeneousPoint;
 
-    // Konwertujemy z powrotem do współrzędnych kartezjańskich (z normalizacją)
     if (std::abs(transformedPoint(3)) > 1e-10) {  // Unikamy dzielenia przez zero
         setX(transformedPoint(0) / transformedPoint(3));
         setY(transformedPoint(1) / transformedPoint(3));
@@ -74,24 +71,4 @@ void Point::setPosition(const Eigen::Vector3d& position) {
     setX(position.x());
     setY(position.y());
     setZ(position.z());
-}
-
-Eigen::Vector3d Point::getScale() const {
-    // Punkt nie ma skali, więc zwracamy jednostkowy wektor
-    return Eigen::Vector3d::Ones();
-}
-
-void Point::setScale(const Eigen::Vector3d& scale) {
-    // Operacja skalowania nie ma zastosowania dla punktu
-    // Implementacja pozostaje pusta
-}
-
-Eigen::Quaterniond Point::getRotation() const {
-    // Punkt nie ma orientacji, zwracamy domyślny kwaternion (brak rotacji)
-    return Eigen::Quaterniond::Identity();
-}
-
-void Point::setRotation(const Eigen::Quaterniond& rotation) {
-    // Operacja rotacji nie ma zastosowania dla punktu
-    // Implementacja pozostaje pusta
 }

@@ -20,7 +20,6 @@ add_executable(edytor_krzywych
 
         Geometry/GeometricObject.h
         Geometry/Curve.h
-        Geometry/Curve.cpp
         Geometry/Point.cpp
         Geometry/Point.h
         Geometry/TransformMatrix.cpp
@@ -47,6 +46,8 @@ add_executable(edytor_krzywych
         Math/IMathProvider.h
         Math/EigenMathAdapter.cpp
         Math/EigenMathAdapter.h
+        Geometry/NaturalSpline.cpp
+        Geometry/NaturalSpline.h
 )
 
 find_package(Qt6 COMPONENTS Core Gui Widgets REQUIRED)

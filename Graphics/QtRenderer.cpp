@@ -29,7 +29,6 @@ public:
         , viewportManager(nullptr)
     {}
 
-    // Style rysowania
     QColor pointColor;
     float pointSize;
     QColor curveColor;
@@ -50,12 +49,10 @@ public:
     float controlPolygonWidth;
     Qt::PenStyle controlPolygonStyle;
 
-    // Opcje rysowania
     bool drawGrid;
     bool drawAxes;
     bool drawControlPolygon;
 
-    // Obiekty używane podczas rysowania
     QPainter* painter;
     ViewportManager* viewportManager;
 };
@@ -122,7 +119,7 @@ void QtRenderer::renderCurve(const Curve& curve)
     m_dPtr->painter->setPen(pen);
     m_dPtr->painter->setBrush(Qt::NoBrush);
 
-    constexpr int numSegments = 100;
+    constexpr int numSegments = 5000;
     QPolygonF points;
 
     for (int i = 0; i <= numSegments; ++i) {
@@ -152,7 +149,6 @@ void QtRenderer::renderGrid(double gridSize) {
 
     QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
 
-    // Linie pomocnicze
     QPen smallPen(QColor(230, 230, 230), 0.5, Qt::DotLine);
     m_dPtr->painter->setPen(smallPen);
 
@@ -163,7 +159,6 @@ void QtRenderer::renderGrid(double gridSize) {
         m_dPtr->painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
     }
 
-    // Linie główne
     QPen mainPen(QColor(200, 200, 200), 1.0, Qt::SolidLine);
     m_dPtr->painter->setPen(mainPen);
 
@@ -194,7 +189,6 @@ void QtRenderer::renderAxes()
 
     QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
 
-    // Rysowanie głównych osi
     m_dPtr->painter->drawLine(QPointF(visibleRect.left(), 0), QPointF(visibleRect.right(), 0));
     m_dPtr->painter->drawLine(QPointF(0, visibleRect.top()), QPointF(0, visibleRect.bottom()));
 
@@ -225,16 +219,13 @@ void QtRenderer::renderAxisTicks() {
     QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
     double zoomFactor = m_dPtr->viewportManager->zoomFactor();
 
-    // Obliczenie optymalnej odległości między przedziałkami w zależności od szerokości widocznego obszaru
     double viewportWidth = visibleRect.width();
     double viewportHeight = visibleRect.height();
 
-    // Chcemy mieć około 5-10 przedziałek na widocznym obszarze
     double desiredTickCount = 16.0;
     double optimalSpacingX = viewportWidth / desiredTickCount;
     double optimalSpacingY = viewportHeight / desiredTickCount;
 
-    // Funkcja pomocnicza do znajdowania "ładnej" wartości odstępu
     auto findNiceSpacing = [](double optimalSpacing) -> double {
         double magnitude = pow(10, floor(log10(optimalSpacing)));
         double normalized = optimalSpacing / magnitude;
@@ -248,7 +239,6 @@ void QtRenderer::renderAxisTicks() {
     double tickSpacingX = findNiceSpacing(optimalSpacingX);
     double tickSpacingY = findNiceSpacing(optimalSpacingY);
 
-    // Minimalna i maksymalna wartość dla przedziałek
     double xMin = floor(visibleRect.left() / tickSpacingX) * tickSpacingX;
     double xMax = ceil(visibleRect.right() / tickSpacingX) * tickSpacingX;
     double yMin = floor(visibleRect.top() / tickSpacingY) * tickSpacingY;
@@ -269,7 +259,6 @@ void QtRenderer::renderAxisTicks() {
 
         m_dPtr->painter->drawLine(QPointF(x, -tickLength/2), QPointF(x, tickLength/2));
         QString label = QString::number(x, 'f', xPrecision);
-        // Usunięcie zbędnych zer na końcu
         while (label.contains('.') && label.endsWith('0'))
             label.chop(1);
 
@@ -279,13 +268,11 @@ void QtRenderer::renderAxisTicks() {
         renderText(QPointF(x, -tickLength - 5.0/zoomFactor), label);
     }
 
-    // Rysowanie przedziałek dla osi Y
     for (double y = yMin; y <= yMax; y += tickSpacingY) {
         if (std::abs(y) < 1e-6) continue;
 
         m_dPtr->painter->drawLine(QPointF(-tickLength/2, y), QPointF(tickLength/2, y));
         QString label = QString::number(y, 'f', yPrecision);
-        // Usunięcie zbędnych zer na końcu
         while (label.contains('.') && label.endsWith('0'))
             label.chop(1);
 
@@ -311,7 +298,6 @@ void QtRenderer::renderSelectionMarker(const QPointF& position)
     double size = m_dPtr->selectionSize;
     m_dPtr->painter->drawEllipse(position, size, size);
 
-    // Narysuj krzyżyk w środku
     m_dPtr->painter->drawLine(position - QPointF(size / 2, 0),
                              position + QPointF(size / 2, 0));
     m_dPtr->painter->drawLine(position - QPointF(0, size / 2),
@@ -329,7 +315,6 @@ void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bo
     m_dPtr->painter->save();
     m_dPtr->painter->resetTransform();
 
-    // Wybór koloru w zależności od stanu punktu
     QColor fillColor;
     if (isActive) {
         fillColor = m_dPtr->controlPointActiveColor;
@@ -339,30 +324,26 @@ void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bo
         fillColor = m_dPtr->controlPointNormalColor;
     }
 
-    // Warstwa tła (cień)
     QPen shadowPen(Qt::black, 1.0);
     QBrush shadowBrush(QColor(0, 0, 0, 50));
     m_dPtr->painter->setPen(shadowPen);
     m_dPtr->painter->setBrush(shadowBrush);
     m_dPtr->painter->drawEllipse(position + QPointF(1, 1), m_dPtr->controlPointSize + 1, m_dPtr->controlPointSize + 1);
 
-    // Warstwa główna (punkt kontrolny)
     QPen pen(Qt::black, 1.0);
     QBrush brush(fillColor);
     m_dPtr->painter->setPen(pen);
     m_dPtr->painter->setBrush(brush);
     m_dPtr->painter->drawEllipse(position, m_dPtr->controlPointSize, m_dPtr->controlPointSize);
 
-    // Dodaj numer punktu kontrolnego jeśli jest wybrany
     if (isSelected) {
         m_dPtr->painter->setPen(Qt::white);
         QFont font = m_dPtr->painter->font();
         font.setPointSize(9);
         m_dPtr->painter->setFont(font);
 
-        // Obliczanie offsetu tekstu dla wyśrodkowania
         QFontMetrics fm(font);
-        QString text = QString::number(isActive ? 1 : 0); // Przykładowy tekst
+        QString text = QString::number(isActive ? 1 : 0);
         QRect textRect = fm.boundingRect(text);
         QPointF textPos = position - QPointF(textRect.width() / 2.0, -textRect.height() / 4.0);
 
@@ -378,12 +359,10 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         return;
     }
 
-    // Rysowanie poligonu kontrolnego (linie łączące punkty)
     if (m_dPtr->drawControlPolygon && points.size() >= 2) {
         renderControlPolygon(points);
     }
 
-    // Buforowanie pozycji punktów kontrolnych na ekranie (dla wydajności)
     std::vector<QPointF> screenPositions;
     screenPositions.reserve(points.size());
 
@@ -393,24 +372,20 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         );
     }
 
-    // Najpierw rysujemy zwykłe punkty kontrolne
     for (size_t i = 0; i < points.size(); ++i) {
         if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != activeIndex) {
             renderControlPoint(screenPositions[i], false, false);
         }
     }
 
-    // Następnie rysujemy zaznaczony punkt (jeśli istnieje)
     if (selectedIndex >= 0 && selectedIndex < static_cast<int>(points.size())) {
         renderControlPoint(screenPositions[selectedIndex], true, false);
     }
 
-    // Na końcu rysujemy aktywny punkt (jeśli istnieje i jest inny niż zaznaczony)
     if (activeIndex >= 0 && activeIndex < static_cast<int>(points.size()) && activeIndex != selectedIndex) {
         renderControlPoint(screenPositions[activeIndex], false, true);
     }
 
-    // Rysujemy etykiety z numerami punktów
     m_dPtr->painter->save();
     m_dPtr->painter->resetTransform();
     QPen textPen(Qt::black);
@@ -428,7 +403,6 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         QPointF textPos = screenPositions[i] + QPointF(m_dPtr->controlPointSize + 2,
                                                       m_dPtr->controlPointSize / 2.0);
 
-        // Tło dla tekstu dla lepszej czytelności
         QRectF bgRect = QRectF(textPos.x() - 1, textPos.y() - textRect.height(),
                               textRect.width() + 2, textRect.height() + 2);
         m_dPtr->painter->fillRect(bgRect, QColor(255, 255, 255, 180));
