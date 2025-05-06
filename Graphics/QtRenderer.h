@@ -1,6 +1,3 @@
-#ifndef QTRENDERER_H
-#define QTRENDERER_H
-
 #include "IRenderer.h"
 #include <QColor>
 #include <Qt>
@@ -23,30 +20,19 @@ public:
     QtRenderer();
     ~QtRenderer() override;
 
-    // Inicjalizacja i konfiguracja
     void beginRender(QPainter* painter, ViewportManager* viewportManager) override;
     void endRender() override;
-
-    // Metody renderowania konkretnych typów obiektów
     void renderPoint(const Point& point) override;
     void renderCurve(const Curve& curve) override;
-
-    // Ogólna metoda do renderowania obiektów geometrycznych
     void renderObject(const GeometricObject& object) override;
-
-    // Renderowanie pomocniczych elementów
     void renderGrid(double gridSize) override;
     void renderText(const QPointF &position, const QString &text);
     void renderAxes() override;
     void renderAxisTicks();
     void renderSelectionMarker(const QPointF& position) override;
-
-    // Renderowanie punktów kontrolnych
     void renderControlPoint(const QPointF& position, bool isSelected = false, bool isActive = false) override;
     void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int activeIndex = -1) override;
     void renderControlPolygon(const std::vector<Point>& points) override;
-
-    // Metody do ustawiania stylów rysowania
     void setPointStyle(const QColor& color, float size) override;
     void setCurveStyle(const QColor& color, float width, Qt::PenStyle style = Qt::SolidLine) override;
     void setSelectionStyle(const QColor& color, float size) override;
@@ -54,15 +40,35 @@ public:
     void setAxesStyle(const QColor& color, float width) override;
     void setControlPointStyle(const QColor& normalColor, const QColor& selectedColor, const QColor& activeColor, float size) override;
     void setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) override;
-
-    // Włączanie/wyłączanie elementów
     void setDrawGrid(bool draw) override;
     void setDrawAxes(bool draw) override;
     void setDrawControlPolygon(bool draw) override;
 
 private:
-    class QtRendererPrivate;
-    std::unique_ptr<QtRendererPrivate> m_dPtr;
-};
+    QColor m_pointColor{Qt::black};
+    float m_pointSize{4.0f};
+    QColor m_curveColor{Qt::blue};
+    float m_curveWidth{1.0f};
+    Qt::PenStyle m_curveStyle{Qt::SolidLine};
+    QColor m_selectionColor{Qt::red};
+    float m_selectionSize{6.0f};
+    QColor m_gridColor{Qt::lightGray};
+    float m_gridWidth{0.5f};
+    Qt::PenStyle m_gridStyle{Qt::DotLine};
+    QColor m_axesColor{Qt::black};
+    float m_axesWidth{1.0f};
+    QColor m_controlPointNormalColor{Qt::blue};
+    QColor m_controlPointSelectedColor{Qt::red};
+    QColor m_controlPointActiveColor{Qt::green};
+    float m_controlPointSize{5.0f};
+    QColor m_controlPolygonColor{Qt::darkGray};
+    float m_controlPolygonWidth{1.0f};
+    Qt::PenStyle m_controlPolygonStyle{Qt::DashLine};
 
-#endif
+    bool m_drawGrid{true};
+    bool m_drawAxes{true};
+    bool m_drawControlPolygon{true};
+
+    QPainter* m_painter{nullptr};
+    ViewportManager* m_viewportManager{nullptr};
+};

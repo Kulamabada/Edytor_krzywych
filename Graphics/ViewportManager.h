@@ -1,6 +1,3 @@
-#ifndef VIEWPORTMANAGER_H
-#define VIEWPORTMANAGER_H
-
 #include <QPointF>
 #include <QRectF>
 #include <QTransform>
@@ -58,5 +55,3 @@ private:
     double m_minZoom;
     double m_maxZoom;
 };
-
-#endif // VIEWPORTMANAGER_H

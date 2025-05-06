@@ -1,4 +1,3 @@
-// File: TransformMatrix.h
 #pragma once
 #include <Eigen/Dense>
 #include <memory>

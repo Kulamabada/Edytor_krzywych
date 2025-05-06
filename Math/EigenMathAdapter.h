@@ -1,4 +1,3 @@
-// File: EigenMathAdapter.h
 #pragma once
 
 #include "IMathProvider.h"

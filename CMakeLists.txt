@@ -42,12 +42,12 @@ add_executable(edytor_krzywych
         Graphics/QtRenderer.cpp
         Graphics/QtRenderer.h
 
-        Math/IMathProvider.cpp
         Math/IMathProvider.h
         Math/EigenMathAdapter.cpp
         Math/EigenMathAdapter.h
         Geometry/NaturalSpline.cpp
         Geometry/NaturalSpline.h
+        Core/CurveCommand.h
 )
 
 find_package(Qt6 COMPONENTS Core Gui Widgets REQUIRED)

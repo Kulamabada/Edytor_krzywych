@@ -1,4 +1,4 @@
-// Plik wygenerowany automatycznie 2025-04-16 10:36:09
+// Plik wygenerowany automatycznie 2025-05-06 18:04:43
 // Zawiera 29 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
@@ -21,46 +21,9 @@ public:
 
 //===== START FILE: Core\ApplicationCore.cpp =====//
 
-// File: ApplicationCore.cpp
 #include "ApplicationCore.h"
 #include "CommandManager.h"
 #include <stdexcept>
-
-// Implementacja PIMPL
-class ApplicationCore::ApplicationCoreImpl {
-public:
-    ApplicationCoreImpl() : m_initialized(false), m_commandManager(std::make_unique<CommandManager>()) {}
-    ~ApplicationCoreImpl() = default;
-
-    bool initialize() {
-        if (m_initialized) {
-            return true; // Już zainicjalizowany
-        }
-
-        // Inicjalizacja menedżera komend
-        m_initialized = true;
-        return true;
-    }
-
-    void shutdown() {
-        if (!m_initialized) {
-            return; // Już zamknięty lub nie zainicjalizowany
-        }
-
-        m_initialized = false;
-    }
-
-    CommandManager& getCommandManager() {
-        if (!m_initialized) {
-            throw std::runtime_error("ApplicationCore nie został zainicjalizowany");
-        }
-        return *m_commandManager;
-    }
-
-private:
-    bool m_initialized;
-    std::unique_ptr<CommandManager> m_commandManager;
-};
 
 // Implementacja Singletona
 ApplicationCore& ApplicationCore::getInstance() {
@@ -69,7 +32,9 @@ ApplicationCore& ApplicationCore::getInstance() {
 }
 
 // Konstruktor i destruktor
-ApplicationCore::ApplicationCore() : m_pImpl(std::make_unique<ApplicationCoreImpl>()) {
+ApplicationCore::ApplicationCore()
+    : m_initialized(false)
+    , m_commandManager(std::make_unique<CommandManager>()) {
 }
 
 ApplicationCore::~ApplicationCore() {
@@ -78,16 +43,25 @@ ApplicationCore::~ApplicationCore() {
 
 // Funkcjonalność główna
 bool ApplicationCore::initialize() {
-    return m_pImpl->initialize();
+    if (m_initialized)
+        return true;
+
+    m_initialized = true;
+    return true;
 }
 
 void ApplicationCore::shutdown() {
-    m_pImpl->shutdown();
+    if (!m_initialized)
+        return;
+
+    m_initialized = false;
 }
 
-// Dostęp do menedżerów
 CommandManager& ApplicationCore::getCommandManager() {
-    return m_pImpl->getCommandManager();
+    if (!m_initialized) {
+        throw std::runtime_error("ApplicationCore nie został zainicjalizowany");
+    }
+    return *m_commandManager;
 }
 
 //===== END FILE: Core\ApplicationCore.cpp =====//
@@ -102,28 +76,22 @@ CommandManager& ApplicationCore::getCommandManager() {
 
 class ApplicationCore {
 public:
-    // Singleton pattern
     static ApplicationCore& getInstance();
 
-    // Prevent copying and assignment
     ApplicationCore(const ApplicationCore&) = delete;
     ApplicationCore& operator=(const ApplicationCore&) = delete;
 
-    // Core application functionality
     bool initialize();
     void shutdown();
 
-    // Access to managers
     CommandManager& getCommandManager();
 
 private:
-    // Private constructor & destructor (Singleton)
     ApplicationCore();
     ~ApplicationCore();
 
-    // PIMPL implementation
-    class ApplicationCoreImpl;
-    std::unique_ptr<ApplicationCoreImpl> m_pImpl;
+    bool m_initialized{false};
+    std::unique_ptr<CommandManager> m_commandManager;
 };
 
 #endif // APPLICATIONCORE_H
@@ -135,6 +103,7 @@ private:
 #include "Command.h"
 #include <algorithm>
 #include <cassert>
+#include <ranges>
 
 namespace {
     int addObjectToScene(std::shared_ptr<GeometricObject> object);
@@ -164,9 +133,9 @@ bool AddObjectCommand::execute() {
 }
 
 bool AddObjectCommand::undo() {
-    if (m_objectId < 0) {
+    if (m_objectId < 0)
         return false;
-    }
+
     return removeObjectFromScene(m_objectId);
 }
 
@@ -180,17 +149,15 @@ RemoveObjectCommand::RemoveObjectCommand(int objectId)
 
 bool RemoveObjectCommand::execute() {
     m_removedObject = getObjectFromScene(m_objectId);
-    if (!m_removedObject) {
+    if (!m_removedObject)
         return false;
-    }
 
     return removeObjectFromScene(m_objectId);
 }
 
 bool RemoveObjectCommand::undo() {
-    if (!m_removedObject) {
+    if (!m_removedObject)
         return false;
-    }
 
     m_objectId = addObjectToScene(m_removedObject);
     return m_objectId >= 0;
@@ -270,12 +237,11 @@ bool CompoundCommand::execute() {
 bool CompoundCommand::undo() {
     bool success = true;
 
-    for (auto it = m_commands.rbegin(); it != m_commands.rend(); ++it) {
-        if (!(*it)->undo()) {
+    for (const auto& m_command : std::ranges::reverse_view(m_commands))
+        if (!m_command->undo()) {
             success = false;
             break;
         }
-    }
 
     return success;
 }
@@ -283,25 +249,23 @@ bool CompoundCommand::undo() {
 bool CompoundCommand::redo() {
     bool success = true;
 
-    for (auto& command : m_commands) {
+    for (const auto& command : m_commands)
         if (!command->redo()) {
             success = false;
             break;
         }
-    }
 
     return success;
 }
 
 
 AddControlPointCommand::AddControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, const Point& point, int index)
-    : m_curve(curve), m_point(point), m_index(index), m_addedIndex(-1) {
+    : CurveCommand(curve), m_point(point), m_index(index), m_addedIndex(-1) {
 }
 
 bool AddControlPointCommand::execute() {
-    if (!m_curve) {
+    if (!m_curve)
         return false;
-    }
 
     if (m_index < 0 || m_index > static_cast<int>(m_curve->getPointCount())) {
         m_curve->addPoint(m_point);
@@ -324,28 +288,10 @@ bool AddControlPointCommand::undo() {
     return true;
 }
 
-bool AddControlPointCommand::redo() {
-    if (!m_curve) {
-        return false;
-    }
-
-    if (m_addedIndex < 0) {
-        return execute();
-    }
-
-    if (m_addedIndex > static_cast<int>(m_curve->getPointCount())) {
-        m_curve->addPoint(m_point);
-    } else {
-        m_curve->insertPoint(m_addedIndex, m_point);
-    }
-
-    return true;
-}
-
 MoveControlPointCommand::MoveControlPointCommand(std::shared_ptr<InterpolatedCurve> curve,
                                                int pointIndex,
                                                const Point& newPosition)
-    : m_curve(curve), m_pointIndex(pointIndex), m_newPosition(newPosition) {
+    : CurveCommand(curve), m_pointIndex(pointIndex), m_newPosition(newPosition) {
 
     if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getPointCount())) {
         const auto& points = m_curve->getPoints();
@@ -373,13 +319,9 @@ bool MoveControlPointCommand::undo() {
     return true;
 }
 
-bool MoveControlPointCommand::redo() {
-    return execute();
-}
-
 DeleteControlPointCommand::DeleteControlPointCommand(std::shared_ptr<InterpolatedCurve> curve,
                                                   int pointIndex)
-    : m_curve(curve), m_pointIndex(pointIndex) {
+    : CurveCommand(curve), m_pointIndex(pointIndex) {
 
     if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getPointCount())) {
         const auto& points = m_curve->getPoints();
@@ -393,65 +335,49 @@ bool DeleteControlPointCommand::execute() {
         return false;
     }
 
-    if (m_curve->getPointCount() < 3) {
+    if (m_curve->getPointCount() < 3)
         return false;
-    }
 
     m_curve->removePoint(m_pointIndex);
     return true;
 }
 
 bool DeleteControlPointCommand::undo() {
-    if (!m_curve) {
+    if (!m_curve)
         return false;
-    }
 
-    if (m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+    if (m_pointIndex >= static_cast<int>(m_curve->getPointCount()))
         m_curve->addPoint(m_deletedPoint);
-    } else {
+    else
         m_curve->insertPoint(m_pointIndex, m_deletedPoint);
-    }
 
     return true;
 }
 
-bool DeleteControlPointCommand::redo() {
-    return execute();
-}
-
 BatchControlPointsCommand::BatchControlPointsCommand(std::shared_ptr<InterpolatedCurve> curve,
                                                    const std::vector<Point>& newPoints)
-    : m_curve(curve), m_newPoints(newPoints) {
-
-    if (m_curve) {
+    : CurveCommand(curve), m_newPoints(newPoints) {
+    if (m_curve)
         m_oldPoints = m_curve->getPoints();
-    }
 }
 
 bool BatchControlPointsCommand::execute() {
-    if (!m_curve) {
+    if (!m_curve)
         return false;
-    }
 
-    if (m_newPoints.size() < 2) {
+    if (m_newPoints.size() < 2)
         return false;
-    }
 
     m_curve->setPoints(m_newPoints);
     return true;
 }
 
 bool BatchControlPointsCommand::undo() {
-    if (!m_curve) {
+    if (!m_curve)
         return false;
-    }
 
     m_curve->setPoints(m_oldPoints);
     return true;
-}
-
-bool BatchControlPointsCommand::redo() {
-    return execute();
 }
 
 namespace {
@@ -496,6 +422,7 @@ namespace {
 #include "../Geometry/GeometricObject.h"
 #include "../Geometry/Point.h"
 #include "../Geometry/InterpolatedCurve.h"
+#include "CurveCommand.h"
 
 // Command to add a geometric object to the scene
 class AddObjectCommand : public AbstractCommand {
@@ -582,65 +509,56 @@ private:
     std::string m_name;
 };
 
-// Commands for manipulating control points of curves
-class AddControlPointCommand : public AbstractCommand {
+class AddControlPointCommand : public CurveCommand {
 public:
     AddControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, const Point& point, int index = -1);
     ~AddControlPointCommand() override = default;
 
     bool execute() override;
     bool undo() override;
-    bool redo() override;
 
 private:
-    std::shared_ptr<InterpolatedCurve> m_curve;
     Point m_point;
     int m_index;       // Pozycja do wstawienia lub -1 dla dodania na końcu
     int m_addedIndex;  // Rzeczywisty indeks po dodaniu
 };
 
-class MoveControlPointCommand : public AbstractCommand {
+class MoveControlPointCommand : public CurveCommand {
 public:
     MoveControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, int pointIndex, const Point& newPosition);
     ~MoveControlPointCommand() override = default;
 
     bool execute() override;
     bool undo() override;
-    bool redo() override;
 
 private:
-    std::shared_ptr<InterpolatedCurve> m_curve;
     int m_pointIndex;
     Point m_oldPosition;
     Point m_newPosition;
 };
 
-class DeleteControlPointCommand : public AbstractCommand {
+class DeleteControlPointCommand : public CurveCommand {
 public:
     DeleteControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, int pointIndex);
     ~DeleteControlPointCommand() override = default;
 
     bool execute() override;
     bool undo() override;
-    bool redo() override;
 
 private:
-    std::shared_ptr<InterpolatedCurve> m_curve;
     int m_pointIndex;
     Point m_deletedPoint;
 };
 
-class BatchControlPointsCommand : public AbstractCommand {
+class BatchControlPointsCommand : public CurveCommand {
 public:
     BatchControlPointsCommand(std::shared_ptr<InterpolatedCurve> curve, const std::vector<Point>& newPoints);
     ~BatchControlPointsCommand() override = default;
 
     bool execute() override;
     bool undo() override;
-    bool redo() override;
 
 private:
-    std::shared_ptr<InterpolatedCurve> m_curve;
     std::vector<Point> m_oldPoints;
     std::vector<Point> m_newPoints;
 };
@@ -651,135 +569,69 @@ private:
 
 //===== START FILE: Core\CommandManager.cpp =====//
 
-// File: CommandManager.cpp
 #include "CommandManager.h"
 #include "AbstractCommand.h"
 #include <vector>
-#include <stdexcept>
-
-// Implementacja PIMPL
-class CommandManager::CommandManagerImpl {
-public:
-    CommandManagerImpl() = default;
-    ~CommandManagerImpl() = default;
-
-    bool executeCommand(std::unique_ptr<AbstractCommand> command) {
-        if (!command) {
-            return false;
-        }
-
-        // Wykonanie komendy
-        bool success = command->execute();
-        if (!success) {
-            return false;
-        }
-
-        // Po wykonaniu nowej komendy, czyścimy stos redo
-        if (!m_redoStack.empty()) {
-            m_redoStack.clear();
-        }
-
-        // Dodanie komendy do stosu undo
-        m_undoStack.push_back(std::move(command));
-        return true;
-    }
-
-    bool canUndo() const {
-        return !m_undoStack.empty();
-    }
-
-    bool canRedo() const {
-        return !m_redoStack.empty();
-    }
-
-    bool undo() {
-        if (!canUndo()) {
-            return false;
-        }
-
-        // Pobranie ostatniej komendy ze stosu undo
-        auto command = std::move(m_undoStack.back());
-        m_undoStack.pop_back();
-
-        // Cofnięcie komendy
-        bool success = command->undo();
-
-        // Przeniesienie komendy na stos redo
-        m_redoStack.push_back(std::move(command));
-        return success;
-    }
-
-    bool redo() {
-        if (!canRedo()) {
-            return false;
-        }
-
-        // Pobranie ostatniej komendy ze stosu redo
-        auto command = std::move(m_redoStack.back());
-        m_redoStack.pop_back();
-
-        // Ponowne wykonanie komendy
-        bool success = command->redo();
-
-        // Przeniesienie komendy na stos undo
-        m_undoStack.push_back(std::move(command));
-        return success;
-    }
-
-    void clearHistory() {
-        m_undoStack.clear();
-        m_redoStack.clear();
-    }
-
-    int undoStackSize() const {
-        return static_cast<int>(m_undoStack.size());
-    }
-
-    int redoStackSize() const {
-        return static_cast<int>(m_redoStack.size());
-    }
-
-private:
-    std::vector<std::unique_ptr<AbstractCommand>> m_undoStack;
-    std::vector<std::unique_ptr<AbstractCommand>> m_redoStack;
-};
-
-// Implementacja CommandManager
-CommandManager::CommandManager() : m_pImpl(std::make_unique<CommandManagerImpl>()) {
-}
-
-CommandManager::~CommandManager() = default;
 
 bool CommandManager::executeCommand(std::unique_ptr<AbstractCommand> command) {
-    return m_pImpl->executeCommand(std::move(command));
+    if (!command)
+        return false;
+
+    if (const bool success = command->execute(); !success)
+        return false;
+
+    if (!m_redoStack.empty())
+        m_redoStack.clear();
+
+    m_undoStack.push_back(std::move(command));
+    return true;
 }
 
 bool CommandManager::canUndo() const {
-    return m_pImpl->canUndo();
+    return !m_undoStack.empty();
 }
 
 bool CommandManager::canRedo() const {
-    return m_pImpl->canRedo();
+    return !m_redoStack.empty();
 }
 
 bool CommandManager::undo() {
-    return m_pImpl->undo();
+    if (!canUndo())
+        return false;
+
+    auto command = std::move(m_undoStack.back());
+    m_undoStack.pop_back();
+
+    const bool success = command->undo();
+
+    m_redoStack.push_back(std::move(command));
+    return success;
 }
 
 bool CommandManager::redo() {
-    return m_pImpl->redo();
+    if (!canRedo())
+        return false;
+
+    auto command = std::move(m_redoStack.back());
+    m_redoStack.pop_back();
+
+    const bool success = command->redo();
+
+    m_undoStack.push_back(std::move(command));
+    return success;
 }
 
 void CommandManager::clearHistory() {
-    m_pImpl->clearHistory();
+    m_undoStack.clear();
+    m_redoStack.clear();
 }
 
 int CommandManager::undoStackSize() const {
-    return m_pImpl->undoStackSize();
+    return static_cast<int>(m_undoStack.size());
 }
 
 int CommandManager::redoStackSize() const {
-    return m_pImpl->redoStackSize();
+    return static_cast<int>(m_redoStack.size());
 }
 
 //===== END FILE: Core\CommandManager.cpp =====//
@@ -795,36 +647,54 @@ int CommandManager::redoStackSize() const {
 
 class CommandManager {
 public:
-    CommandManager();
-    ~CommandManager();
+    CommandManager() = default;
+    ~CommandManager() = default;
 
-    // Prevent copying
     CommandManager(const CommandManager&) = delete;
     CommandManager& operator=(const CommandManager&) = delete;
 
-    // Command execution
     bool executeCommand(std::unique_ptr<AbstractCommand> command);
 
-    // Undo/Redo operations
     bool canUndo() const;
     bool canRedo() const;
     bool undo();
     bool redo();
 
-    // Stack management
     void clearHistory();
     int undoStackSize() const;
     int redoStackSize() const;
 
 private:
-    // PIMPL implementation
-    class CommandManagerImpl;
-    std::unique_ptr<CommandManagerImpl> m_pImpl;
+    std::vector<std::unique_ptr<AbstractCommand>> m_undoStack;
+    std::vector<std::unique_ptr<AbstractCommand>> m_redoStack;
 };
 
-#endif // COMMANDMANAGER_H
+#endif
 
 //===== END FILE: Core\CommandManager.h =====//
+
+//===== START FILE: Core\CurveCommand.h =====//
+
+#pragma once
+
+#include "AbstractCommand.h"
+#include "../Geometry/InterpolatedCurve.h"
+#include <memory>
+
+class CurveCommand : public AbstractCommand {
+protected:
+    std::shared_ptr<InterpolatedCurve> m_curve;
+
+public:
+    explicit CurveCommand(std::shared_ptr<InterpolatedCurve> curve) : m_curve(curve) {}
+    virtual ~CurveCommand() = default;
+
+    bool redo() override {
+        return execute();
+    }
+};
+
+//===== END FILE: Core\CurveCommand.h =====//
 
 //===== START FILE: Geometry\Curve.h =====//
 
@@ -1494,36 +1364,6 @@ private:
 #include <cmath>
 #include <Eigen/Dense>
 
-Point::Point() : m_coordinates{0.0, 0.0, 0.0} {
-}
-
-Point::Point(double x, double y, double z) : m_coordinates{x, y, z} {
-}
-
-double Point::x() const {
-    return m_coordinates[0];
-}
-
-double Point::y() const {
-    return m_coordinates[1];
-}
-
-double Point::z() const {
-    return m_coordinates[2];
-}
-
-void Point::setX(double x) {
-    m_coordinates[0] = x;
-}
-
-void Point::setY(double y) {
-    m_coordinates[1] = y;
-}
-
-void Point::setZ(double z) {
-    m_coordinates[2] = z;
-}
-
 double Point::distanceTo(const Point& other) const {
     const double dx = other.x() - x();
     const double dy = other.y() - y();
@@ -1552,20 +1392,11 @@ void Point::transform(const TransformMatrix& matrix) {
     }
 }
 
-Eigen::Vector3d Point::getPosition() const {
-    return Eigen::Vector3d(x(), y(), z());
-}
-
-void Point::setPosition(const Eigen::Vector3d& position) {
-    setX(position.x());
-    setY(position.y());
-    setZ(position.z());
-}
-
 //===== END FILE: Geometry\Point.cpp =====//
 
 //===== START FILE: Geometry\Point.h =====//
 
+// Plik: Geometry\Point.h
 #pragma once
 
 #include "GeometricObject.h"
@@ -1575,17 +1406,17 @@ class TransformMatrix;
 
 class Point : public GeometricObject {
 public:
-    Point();
-    Point(double x, double y, double z = 0.0);
+    Point() : m_coordinates{0.0, 0.0, 0.0} {}
+    Point(double x, double y, double z = 0.0) : m_coordinates{x, y, z} {}
     virtual ~Point() override = default;
 
-    // Coordinate access
-    double x() const;
-    double y() const;
-    double z() const;
-    void setX(double x);
-    void setY(double y);
-    void setZ(double z);
+    // Coordinate access - inline implementations
+    double x() const { return m_coordinates[0]; }
+    double y() const { return m_coordinates[1]; }
+    double z() const { return m_coordinates[2]; }
+    void setX(double x) { m_coordinates[0] = x; }
+    void setY(double y) { m_coordinates[1] = y; }
+    void setZ(double z) { m_coordinates[2] = z; }
 
     // Vector operations
     double distanceTo(const Point& other) const;
@@ -1593,8 +1424,14 @@ public:
 
     // Override from GeometricObject
     void transform(const TransformMatrix& matrix) override;
-    Eigen::Vector3d getPosition() const override;
-    void setPosition(const Eigen::Vector3d& position) override;
+
+    // Również inline jako proste metody dostępowe
+    Eigen::Vector3d getPosition() const override { return Eigen::Vector3d(x(), y(), z()); }
+    void setPosition(const Eigen::Vector3d& position) override {
+        setX(position.x());
+        setY(position.y());
+        setZ(position.z());
+    }
 
 private:
     std::array<double, 3> m_coordinates;
@@ -1668,29 +1505,7 @@ private:
 #include <utility>
 #include <QMessageBox>
 
-class Canvas::CanvasPrivate {
-public:
-    CanvasPrivate() : viewportManager(new ViewportManager()) {}
-
-    std::vector<std::shared_ptr<GeometricObject>> objects;
-    std::shared_ptr<GeometricObject> selectedObject;
-    std::unique_ptr<ViewportManager> viewportManager;
-    std::shared_ptr<IRenderer> renderer;
-
-    bool isPanning = false;
-    QPointF lastMousePos;
-    QPointF selectionPoint;
-    bool isSelecting = false;
-
-    EditMode editMode = EditMode::None;
-    int selectedControlPointIndex = -1;
-    int activeControlPointIndex = -1;
-    bool isEditingPoints = false;
-    bool isDraggingPoint = false;
-};
-
-Canvas::Canvas(QWidget* parent)
-    : QWidget(parent), m_dPtr(new CanvasPrivate())
+Canvas::Canvas(QWidget* parent): QWidget(parent)
 {
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
@@ -1699,9 +1514,10 @@ Canvas::Canvas(QWidget* parent)
     setAutoFillBackground(false);
     setAttribute(Qt::WA_StaticContents, false);
 
-    if (m_dPtr->viewportManager) {
-        m_dPtr->viewportManager->setWindowSize(width(), height());
-        m_dPtr->viewportManager->resetView();
+    m_viewportManager = std::make_unique<ViewportManager>();
+    if (m_viewportManager) {
+        m_viewportManager->setWindowSize(width(), height());
+        m_viewportManager->resetView();
     }
 }
 
@@ -1711,7 +1527,7 @@ void Canvas::addObject(std::shared_ptr<GeometricObject> object)
 {
     if (!object) return;
 
-    m_dPtr->objects.push_back(object);
+    m_objects.push_back(object);
     emit objectAdded(object);
     update();
 }
@@ -1720,13 +1536,12 @@ void Canvas::removeObject(std::shared_ptr<GeometricObject> object)
 {
     if (!object) return;
 
-    if (m_dPtr->selectedObject == object) {
+    if (m_selectedObject == object)
         clearSelection();
-    }
 
-    auto it = std::find(m_dPtr->objects.begin(), m_dPtr->objects.end(), object);
-    if (it != m_dPtr->objects.end()) {
-        m_dPtr->objects.erase(it);
+    auto it = std::find(m_objects.begin(), m_objects.end(), object);
+    if (it != m_objects.end()) {
+        m_objects.erase(it);
         emit objectRemoved(object);
         update();
     }
@@ -1734,25 +1549,25 @@ void Canvas::removeObject(std::shared_ptr<GeometricObject> object)
 
 void Canvas::clearObjects()
 {
-    m_dPtr->objects.clear();
+    m_objects.clear();
     clearSelection();
     update();
 }
 
 std::vector<std::shared_ptr<GeometricObject>> Canvas::objects() const
 {
-    return m_dPtr->objects;
+    return m_objects;
 }
 
 void Canvas::selectObject(std::shared_ptr<GeometricObject> object)
 {
-    if (m_dPtr->selectedObject != object) {
-        m_dPtr->selectedObject = object;
+    if (m_selectedObject != object) {
+        m_selectedObject = object;
 
-        m_dPtr->selectedControlPointIndex = -1;
-        m_dPtr->activeControlPointIndex = -1;
+        m_selectedControlPointIndex = -1;
+        m_activeControlPointIndex = -1;
 
-        if (m_dPtr->isEditingPoints && !std::dynamic_pointer_cast<InterpolatedCurve>(object))
+        if (m_isEditingPoints && !std::dynamic_pointer_cast<InterpolatedCurve>(object))
             finishEditing();
 
         emit objectSelected(object);
@@ -1762,13 +1577,13 @@ void Canvas::selectObject(std::shared_ptr<GeometricObject> object)
 
 void Canvas::clearSelection()
 {
-    if (m_dPtr->selectedObject) {
-        m_dPtr->selectedObject = nullptr;
+    if (m_selectedObject) {
+        m_selectedObject = nullptr;
 
-        m_dPtr->selectedControlPointIndex = -1;
-        m_dPtr->activeControlPointIndex = -1;
+        m_selectedControlPointIndex = -1;
+        m_activeControlPointIndex = -1;
 
-        if (m_dPtr->isEditingPoints)
+        if (m_isEditingPoints)
             finishEditing();
 
         emit selectionCleared();
@@ -1778,14 +1593,14 @@ void Canvas::clearSelection()
 
 std::shared_ptr<GeometricObject> Canvas::selectedObject() const
 {
-    return m_dPtr->selectedObject;
+    return m_selectedObject;
 }
 
 void Canvas::zoomIn()
 {
-    if (m_dPtr->viewportManager) {
+    if (m_viewportManager) {
         QPointF center(width() / 2.0, height() / 2.0);
-        m_dPtr->viewportManager->zoomIn(center);
+        m_viewportManager->zoomIn(center);
         emit viewportChanged();
         update();
     }
@@ -1793,9 +1608,9 @@ void Canvas::zoomIn()
 
 void Canvas::zoomOut()
 {
-    if (m_dPtr->viewportManager) {
+    if (m_viewportManager) {
         QPointF center(width() / 2.0, height() / 2.0);
-        m_dPtr->viewportManager->zoomOut(center);
+        m_viewportManager->zoomOut(center);
         emit viewportChanged();
         update();
     }
@@ -1803,8 +1618,8 @@ void Canvas::zoomOut()
 
 void Canvas::resetView()
 {
-    if (m_dPtr->viewportManager) {
-        m_dPtr->viewportManager->resetView();
+    if (m_viewportManager) {
+        m_viewportManager->resetView();
         emit viewportChanged();
         update();
     }
@@ -1812,15 +1627,15 @@ void Canvas::resetView()
 
 void Canvas::fitToContents()
 {
-    if (m_dPtr->objects.empty()) {
+    if (m_objects.empty()) {
         resetView();
         return;
     }
 
     QRectF bounds(-10, -10, 20, 20);
 
-    if (m_dPtr->viewportManager) {
-        m_dPtr->viewportManager->fitView(bounds);
+    if (m_viewportManager) {
+        m_viewportManager->fitView(bounds);
         emit viewportChanged();
         update();
     }
@@ -1828,18 +1643,18 @@ void Canvas::fitToContents()
 
 ViewportManager* Canvas::viewportManager() const
 {
-    return m_dPtr->viewportManager.get();
+    return m_viewportManager.get();
 }
 
 void Canvas::setRenderer(std::shared_ptr<IRenderer> renderer)
 {
-    m_dPtr->renderer = std::move(renderer);
+    m_renderer = std::move(renderer);
     update();
 }
 
 IRenderer* Canvas::renderer() const
 {
-    return m_dPtr->renderer.get();
+    return m_renderer.get();
 }
 
 void Canvas::refresh()
@@ -1850,38 +1665,38 @@ void Canvas::refresh()
 }
 
 void Canvas::setEditMode(EditMode mode) {
-    m_dPtr->editMode = mode;
+    m_editMode = mode;
 
     if (mode == EditMode::None) {
         finishEditing();
     } else {
         if ((mode == EditMode::AddPoint || mode == EditMode::MovePoint) && !getSelectedCurve()) {
-            m_dPtr->editMode = EditMode::None;
+            m_editMode = EditMode::None;
             QMessageBox::warning(this, "Edycja punktów",
                 "Najpierw wybierz krzywą do edycji punktów kontrolnych.");
             return;
         }
 
-        m_dPtr->isEditingPoints = true;
+        m_isEditingPoints = true;
         emit editingStarted();
         update();
     }
 }
 
 Canvas::EditMode Canvas::getEditMode() const {
-    return m_dPtr->editMode;
+    return m_editMode;
 }
 
 bool Canvas::isEditingCurve() const {
-    return m_dPtr->isEditingPoints;
+    return m_isEditingPoints;
 }
 
 void Canvas::finishEditing() {
-    m_dPtr->editMode = EditMode::None;
-    m_dPtr->isEditingPoints = false;
-    m_dPtr->isDraggingPoint = false;
-    m_dPtr->selectedControlPointIndex = -1;
-    m_dPtr->activeControlPointIndex = -1;
+    m_editMode = EditMode::None;
+    m_isEditingPoints = false;
+    m_isDraggingPoint = false;
+    m_selectedControlPointIndex = -1;
+    m_activeControlPointIndex = -1;
 
     emit editingFinished();
     update();
@@ -1896,11 +1711,11 @@ std::shared_ptr<InterpolatedCurve> Canvas::getSelectedCurve() const {
 
 int Canvas::hitTestControlPoint(const QPointF& pos, double tolerance) {
     auto curve = getSelectedCurve();
-    if (!curve || !m_dPtr->viewportManager) return -1;
+    if (!curve || !m_viewportManager) return -1;
 
     const auto& points = curve->getPoints();
     for (size_t i = 0; i < points.size(); ++i) {
-        QPointF screenPos = m_dPtr->viewportManager->worldToScreen(
+        QPointF screenPos = m_viewportManager->worldToScreen(
             QPointF(points[i].x(), points[i].y()));
 
         if (QLineF(pos, screenPos).length() <= tolerance) {
@@ -1912,14 +1727,14 @@ int Canvas::hitTestControlPoint(const QPointF& pos, double tolerance) {
 }
 
 bool Canvas::addControlPoint(const QPointF& screenPos) {
-    auto curve = getSelectedCurve();
-    if (!curve || !m_dPtr->viewportManager) return false;
+    const auto curve = getSelectedCurve();
+    if (!curve || !m_viewportManager) return false;
 
-    QPointF worldPos = m_dPtr->viewportManager->screenToWorld(screenPos);
+    const QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
 
     curve->addPoint(Point(worldPos.x(), worldPos.y()));
 
-    int newPointIndex = static_cast<int>(curve->getPointCount()) - 1;
+    const int newPointIndex = static_cast<int>(curve->getPointCount()) - 1;
 
     selectControlPoint(newPointIndex);
 
@@ -1931,12 +1746,12 @@ bool Canvas::addControlPoint(const QPointF& screenPos) {
 
 bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
     auto curve = getSelectedCurve();
-    if (!curve || !m_dPtr->viewportManager ||
+    if (!curve || !m_viewportManager ||
         pointIndex < 0 || pointIndex >= static_cast<int>(curve->getPointCount())) {
         return false;
     }
 
-    QPointF worldPos = m_dPtr->viewportManager->screenToWorld(screenPos);
+    QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
 
     const auto& points = curve->getPoints();
     auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
@@ -1953,10 +1768,10 @@ void Canvas::selectControlPoint(int pointIndex) {
     if (!curve) return;
 
     if (pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
-        m_dPtr->selectedControlPointIndex = pointIndex;
+        m_selectedControlPointIndex = pointIndex;
         emit controlPointSelected(pointIndex);
     } else {
-        m_dPtr->selectedControlPointIndex = -1;
+        m_selectedControlPointIndex = -1;
     }
 
     update();
@@ -1984,48 +1799,48 @@ void Canvas::paintEvent(QPaintEvent* event)
 
     painter.fillRect(rect(), Qt::white);
 
-    if (!m_dPtr->renderer) return;
+    if (!m_renderer) return;
 
-    m_dPtr->renderer->beginRender(&painter, m_dPtr->viewportManager.get());
+    m_renderer->beginRender(&painter, m_viewportManager.get());
 
-    m_dPtr->renderer->renderGrid(1.0);
-    m_dPtr->renderer->renderAxes();
+    m_renderer->renderGrid(1.0);
+    m_renderer->renderAxes();
 
-    for (const auto& object : m_dPtr->objects) {
-        m_dPtr->renderer->renderObject(*object);
+    for (const auto& object : m_objects) {
+        m_renderer->renderObject(*object);
     }
 
-    if (m_dPtr->selectedObject) {
-        const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_dPtr->selectedObject.get());
+    if (m_selectedObject) {
+        const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_selectedObject.get());
         if (geometricObj) {
             auto position = geometricObj->getPosition();
-            QPointF selectionPos = m_dPtr->viewportManager->worldToScreen(QPointF(position.x(), position.y()));
-            m_dPtr->renderer->renderSelectionMarker(selectionPos);
+            QPointF selectionPos = m_viewportManager->worldToScreen(QPointF(position.x(), position.y()));
+            m_renderer->renderSelectionMarker(selectionPos);
         }
     }
 
-    if (m_dPtr->isEditingPoints && m_dPtr->selectedObject) {
+    if (m_isEditingPoints && m_selectedObject) {
         drawControlPoints();
     }
 
-    m_dPtr->renderer->endRender();
+    m_renderer->endRender();
 }
 
 void Canvas::drawControlPoints() {
     auto curve = getSelectedCurve();
-    if (!curve || !m_dPtr->renderer) return;
+    if (!curve || !m_renderer) return;
 
     const auto& points = curve->getPoints();
 
-    m_dPtr->renderer->renderControlPolygon(points);
+    m_renderer->renderControlPolygon(points);
 
-    m_dPtr->renderer->renderControlPoints(points, m_dPtr->selectedControlPointIndex, m_dPtr->activeControlPointIndex);
+    m_renderer->renderControlPoints(points, m_selectedControlPointIndex, m_activeControlPointIndex);
 }
 
 void Canvas::resizeEvent(QResizeEvent* event)
 {
-    if (m_dPtr->viewportManager) {
-        m_dPtr->viewportManager->setWindowSize(event->size().width(), event->size().height());
+    if (m_viewportManager) {
+        m_viewportManager->setWindowSize(event->size().width(), event->size().height());
         emit viewportChanged();
     }
 
@@ -2034,30 +1849,30 @@ void Canvas::resizeEvent(QResizeEvent* event)
 
 void Canvas::mousePressEvent(QMouseEvent* event)
 {
-    m_dPtr->lastMousePos = event->pos();
+    m_lastMousePos = event->pos();
 
     if (event->button() == Qt::LeftButton) {
-        if (m_dPtr->editMode == EditMode::AddPoint) {
+        if (m_editMode == EditMode::AddPoint) {
             addControlPoint(event->pos());
             return;
         }
-        else if (m_dPtr->editMode == EditMode::MovePoint) {
+        else if (m_editMode == EditMode::MovePoint) {
             int pointIndex = hitTestControlPoint(event->pos());
             if (pointIndex >= 0) {
                 selectControlPoint(pointIndex);
-                m_dPtr->isDraggingPoint = true;
-                m_dPtr->activeControlPointIndex = pointIndex;
+                m_isDraggingPoint = true;
+                m_activeControlPointIndex = pointIndex;
                 setCursor(Qt::ClosedHandCursor);
                 return;
             }
         }
         else {
-            m_dPtr->isSelecting = true;
-            m_dPtr->selectionPoint = event->pos();
+            m_isSelecting = true;
+            m_selectionPoint = event->pos();
         }
     }
     else if (event->button() == Qt::MiddleButton) {
-        m_dPtr->isPanning = true;
+        m_isPanning = true;
         setCursor(Qt::ClosedHandCursor);
     }
 
@@ -2067,19 +1882,19 @@ void Canvas::mousePressEvent(QMouseEvent* event)
 void Canvas::mouseMoveEvent(QMouseEvent* event)
 {
     QPointF currentPos = event->pos();
-    QPointF delta = currentPos - m_dPtr->lastMousePos;
+    QPointF delta = currentPos - m_lastMousePos;
 
-    if (m_dPtr->isDraggingPoint && m_dPtr->activeControlPointIndex >= 0) {
-        moveControlPoint(m_dPtr->activeControlPointIndex, currentPos);
+    if (m_isDraggingPoint && m_activeControlPointIndex >= 0) {
+        moveControlPoint(m_activeControlPointIndex, currentPos);
     }
-    else if (m_dPtr->isPanning) {
-        if (m_dPtr->viewportManager) {
-            m_dPtr->viewportManager->pan(delta);
+    else if (m_isPanning) {
+        if (m_viewportManager) {
+            m_viewportManager->pan(delta);
             emit viewportChanged();
             update();
         }
     }
-    else if (m_dPtr->editMode == EditMode::MovePoint) {
+    else if (m_editMode == EditMode::MovePoint) {
         int pointIndex = hitTestControlPoint(currentPos);
         if (pointIndex >= 0) {
             setCursor(Qt::OpenHandCursor);
@@ -2088,29 +1903,29 @@ void Canvas::mouseMoveEvent(QMouseEvent* event)
         }
     }
 
-    m_dPtr->lastMousePos = currentPos;
+    m_lastMousePos = currentPos;
     QWidget::mouseMoveEvent(event);
 }
 
 void Canvas::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton) {
-        if (m_dPtr->isDraggingPoint) {
-            m_dPtr->isDraggingPoint = false;
-            m_dPtr->activeControlPointIndex = -1;
+        if (m_isDraggingPoint) {
+            m_isDraggingPoint = false;
+            m_activeControlPointIndex = -1;
 
-            if (m_dPtr->editMode == EditMode::MovePoint) {
+            if (m_editMode == EditMode::MovePoint) {
                 setCursor(Qt::OpenHandCursor);
             } else {
                 setCursor(Qt::ArrowCursor);
             }
         }
-        else if (m_dPtr->isSelecting) {
-            m_dPtr->isSelecting = false;
+        else if (m_isSelecting) {
+            m_isSelecting = false;
         }
     }
     else if (event->button() == Qt::MiddleButton) {
-        m_dPtr->isPanning = false;
+        m_isPanning = false;
         setCursor(Qt::ArrowCursor);
     }
 
@@ -2119,12 +1934,12 @@ void Canvas::mouseReleaseEvent(QMouseEvent* event)
 
 void Canvas::wheelEvent(QWheelEvent* event)
 {
-    if (m_dPtr->viewportManager) {
+    if (m_viewportManager) {
         QPointF center = event->position();
 
         double factor = event->angleDelta().y() > 0 ? 1.1 : 0.9;
 
-        m_dPtr->viewportManager->zoom(factor, center);
+        m_viewportManager->zoom(factor, center);
         emit viewportChanged();
         update();
     }
@@ -2137,14 +1952,14 @@ void Canvas::keyPressEvent(QKeyEvent* event)
     if (event->key() == Qt::Key_Escape) {
         finishEditing();
     }
-    else if (event->key() == Qt::Key_Delete && m_dPtr->selectedControlPointIndex >= 0) {
+    else if (event->key() == Qt::Key_Delete && m_selectedControlPointIndex >= 0) {
         auto curve = getSelectedCurve();
-        if (curve && m_dPtr->selectedControlPointIndex >= 0 &&
-            m_dPtr->selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
+        if (curve && m_selectedControlPointIndex >= 0 &&
+            m_selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
 
             if (curve->getPointCount() > 2) {
-                curve->removePoint(m_dPtr->selectedControlPointIndex);
-                m_dPtr->selectedControlPointIndex = -1;
+                curve->removePoint(m_selectedControlPointIndex);
+                m_selectedControlPointIndex = -1;
                 update();
             } else {
                 QMessageBox::warning(this, "Usuwanie punktu",
@@ -2178,20 +1993,13 @@ void Canvas::keyPressEvent(QKeyEvent* event)
 #include <QResizeEvent>
 #include <algorithm>
 
-// Forward declarations
-class GeometricObject;
-class QPaintEvent;
-class QMouseEvent;
-class QWheelEvent;
-class QResizeEvent;
-class ViewportManager;
-class IRenderer;
+#include "../Core/ApplicationCore.h"
+#include "../Core/Command.h"
 
 class Canvas : public QWidget {
     Q_OBJECT
 
 public:
-    // Tryby edycji
     enum class EditMode {
         None,           // Brak trybu edycji
         SelectObject,   // Wybieranie obiektów
@@ -2208,25 +2016,20 @@ public:
     void clearObjects();
     std::vector<std::shared_ptr<GeometricObject>> objects() const;
 
-    // Zarządzanie zaznaczeniem
     void selectObject(std::shared_ptr<GeometricObject> object);
     void clearSelection();
     std::shared_ptr<GeometricObject> selectedObject() const;
 
-    // Zarządzanie widokiem
     void zoomIn();
     void zoomOut();
     void resetView();
     void fitToContents();
 
-    // Dostęp do ViewportManager
     ViewportManager* viewportManager() const;
 
-    // Ustawienie renderera
     void setRenderer(std::shared_ptr<IRenderer> renderer);
     IRenderer* renderer() const;
 
-    // Tryb edycji
     void setEditMode(EditMode mode);
     EditMode getEditMode() const;
     bool isEditingCurve() const;
@@ -2253,7 +2056,6 @@ signals:
     void editingFinished();
 
 protected:
-    // Przeciążone metody QWidget
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
@@ -2263,15 +2065,27 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
 
 private:
-    // Metody pomocnicze do obsługi interakcji
     int hitTestControlPoint(const QPointF& pos, double tolerance = 10.0);
     bool addControlPoint(const QPointF& screenPos);
     bool moveControlPoint(int pointIndex, const QPointF& screenPos);
     void drawControlPoints();
 
+    // Stan obiektu bezpośrednio w klasie
+    std::vector<std::shared_ptr<GeometricObject>> m_objects;
+    std::shared_ptr<GeometricObject> m_selectedObject;
+    std::unique_ptr<ViewportManager> m_viewportManager;
+    std::shared_ptr<IRenderer> m_renderer;
 
-    class CanvasPrivate;
-    std::unique_ptr<CanvasPrivate> m_dPtr;
+    bool m_isPanning{false};
+    QPointF m_lastMousePos;
+    QPointF m_selectionPoint;
+    bool m_isSelecting{false};
+
+    EditMode m_editMode{EditMode::None};
+    int m_selectedControlPointIndex{-1};
+    int m_activeControlPointIndex{-1};
+    bool m_isEditingPoints{false};
+    bool m_isDraggingPoint{false};
 };
 
 #endif // CANVAS_H
@@ -2337,66 +2151,7 @@ public:
 
 #include "QtRenderer.h"
 
-class QtRenderer::QtRendererPrivate {
-public:
-    QtRendererPrivate()
-        : pointColor(Qt::black)
-        , pointSize(4.0f)
-        , curveColor(Qt::blue)
-        , curveWidth(1.0f)
-        , curveStyle(Qt::SolidLine)
-        , selectionColor(Qt::red)
-        , selectionSize(6.0f)
-        , gridColor(Qt::lightGray)
-        , gridWidth(0.5f)
-        , gridStyle(Qt::DotLine)
-        , axesColor(Qt::black)
-        , axesWidth(1.0f)
-        , controlPointNormalColor(Qt::blue)
-        , controlPointSelectedColor(Qt::red)
-        , controlPointActiveColor(Qt::green)
-        , controlPointSize(5.0f)
-        , controlPolygonColor(Qt::darkGray)
-        , controlPolygonWidth(1.0f)
-        , controlPolygonStyle(Qt::DashLine)
-        , drawGrid(true)
-        , drawAxes(true)
-        , drawControlPolygon(true)
-        , painter(nullptr)
-        , viewportManager(nullptr)
-    {}
-
-    QColor pointColor;
-    float pointSize;
-    QColor curveColor;
-    float curveWidth;
-    Qt::PenStyle curveStyle;
-    QColor selectionColor;
-    float selectionSize;
-    QColor gridColor;
-    float gridWidth;
-    Qt::PenStyle gridStyle;
-    QColor axesColor;
-    float axesWidth;
-    QColor controlPointNormalColor;
-    QColor controlPointSelectedColor;
-    QColor controlPointActiveColor;
-    float controlPointSize;
-    QColor controlPolygonColor;
-    float controlPolygonWidth;
-    Qt::PenStyle controlPolygonStyle;
-
-    bool drawGrid;
-    bool drawAxes;
-    bool drawControlPolygon;
-
-    QPainter* painter;
-    ViewportManager* viewportManager;
-};
-
-QtRenderer::QtRenderer()
-    : m_dPtr(new QtRendererPrivate())
-{}
+QtRenderer::QtRenderer() = default;
 
 QtRenderer::~QtRenderer() = default;
 
@@ -2406,55 +2161,51 @@ void QtRenderer::beginRender(QPainter* painter, ViewportManager* viewportManager
         qDebug() << "Nieprawidłowy painter lub viewportManager";
         return;
     }
-
     if (!painter->isActive()) {
         qWarning() << "QPainter nie jest aktywny w beginRender()";
         return;
     }
+    m_painter = painter;
+    m_viewportManager = viewportManager;
 
-    m_dPtr->painter = painter;
-    m_dPtr->viewportManager = viewportManager;
-
-    m_dPtr->painter->save();
-    m_dPtr->painter->setTransform(viewportManager->viewTransform());
-    m_dPtr->painter->setRenderHint(QPainter::Antialiasing, true);
+    m_painter->save();
+    m_painter->setTransform(viewportManager->viewTransform());
+    m_painter->setRenderHint(QPainter::Antialiasing, true);
 }
 
 void QtRenderer::endRender()
 {
-    if (m_dPtr->painter) {
-        m_dPtr->painter->restore();
+    if (m_painter) {
+        m_painter->restore();
 
-        m_dPtr->painter = nullptr;
-        m_dPtr->viewportManager = nullptr;
+        m_painter = nullptr;
+        m_viewportManager = nullptr;
     }
 }
 
 void QtRenderer::renderPoint(const Point& point)
 {
-    if (!m_dPtr->painter || !m_dPtr->viewportManager || !m_dPtr->painter->isActive()) {
+    if (!m_painter || !m_viewportManager || !m_painter->isActive())
         return;
-    }
 
     QPen pen(Qt::NoPen);
-    QBrush brush(m_dPtr->pointColor);
-    m_dPtr->painter->setPen(pen);
-    m_dPtr->painter->setBrush(brush);
+    QBrush brush(m_pointColor);
+    m_painter->setPen(pen);
+    m_painter->setBrush(brush);
 
     const double x = point.x(), y = point.y();
 
-    m_dPtr->painter->drawEllipse(QPointF(x, y), m_dPtr->pointSize, m_dPtr->pointSize);
+    m_painter->drawEllipse(QPointF(x, y), m_pointSize, m_pointSize);
 }
 
 void QtRenderer::renderCurve(const Curve& curve)
 {
-    if (!m_dPtr->painter || !m_dPtr->viewportManager) {
+    if (!m_painter || !m_viewportManager)
         return;
-    }
 
-    QPen pen(m_dPtr->curveColor, m_dPtr->curveWidth, m_dPtr->curveStyle);
-    m_dPtr->painter->setPen(pen);
-    m_dPtr->painter->setBrush(Qt::NoBrush);
+    QPen pen(m_curveColor, m_curveWidth, m_curveStyle);
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
 
     constexpr int numSegments = 5000;
     QPolygonF points;
@@ -2465,7 +2216,7 @@ void QtRenderer::renderCurve(const Curve& curve)
         points.append(QPointF(p.x(), p.y()));
     }
 
-    m_dPtr->painter->drawPolyline(points);
+    m_painter->drawPolyline(points);
 }
 
 void QtRenderer::renderObject(const GeometricObject& object)
@@ -2482,67 +2233,67 @@ void QtRenderer::renderObject(const GeometricObject& object)
 }
 
 void QtRenderer::renderGrid(double gridSize) {
-    if (!m_dPtr->drawGrid || !m_dPtr->painter) return;
+    if (!m_drawGrid || !m_painter) return;
 
-    QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
+    QRectF visibleRect = m_viewportManager->visibleWorldRect();
 
     QPen smallPen(QColor(230, 230, 230), 0.5, Qt::DotLine);
-    m_dPtr->painter->setPen(smallPen);
+    m_painter->setPen(smallPen);
 
     for (double x = std::floor(visibleRect.left()); x <= visibleRect.right(); x += 1.0) {
-        m_dPtr->painter->drawLine(QPointF(x, visibleRect.top()), QPointF(x, visibleRect.bottom()));
+        m_painter->drawLine(QPointF(x, visibleRect.top()), QPointF(x, visibleRect.bottom()));
     }
     for (double y = std::floor(visibleRect.top()); y <= visibleRect.bottom(); y += 1.0) {
-        m_dPtr->painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
+        m_painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
     }
 
     QPen mainPen(QColor(200, 200, 200), 1.0, Qt::SolidLine);
-    m_dPtr->painter->setPen(mainPen);
+    m_painter->setPen(mainPen);
 
     for (double x = std::floor(visibleRect.left() / 5) * 5; x <= visibleRect.right(); x += 5.0) {
-        m_dPtr->painter->drawLine(QPointF(x, visibleRect.top()), QPointF(x, visibleRect.bottom()));
+        m_painter->drawLine(QPointF(x, visibleRect.top()), QPointF(x, visibleRect.bottom()));
     }
     for (double y = std::floor(visibleRect.top() / 5) * 5; y <= visibleRect.bottom(); y += 5.0) {
-        m_dPtr->painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
+        m_painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
     }
 }
 
 void QtRenderer::renderText(const QPointF& position, const QString& text) {
-    if (!m_dPtr->painter) return;
-    m_dPtr->painter->save();
-    QTransform current = m_dPtr->painter->transform();
-    m_dPtr->painter->resetTransform();
+    if (!m_painter) return;
+    m_painter->save();
+    QTransform current = m_painter->transform();
+    m_painter->resetTransform();
     QPointF screenPos = current.map(position);
-    m_dPtr->painter->drawText(screenPos, text);
-    m_dPtr->painter->restore();
+    m_painter->drawText(screenPos, text);
+    m_painter->restore();
 }
 
 void QtRenderer::renderAxes()
 {
-    if (!m_dPtr->drawAxes || !m_dPtr->painter || !m_dPtr->viewportManager) return;
+    if (!m_drawAxes || !m_painter || !m_viewportManager) return;
 
-    QPen pen(m_dPtr->axesColor, m_dPtr->axesWidth, Qt::SolidLine);
-    m_dPtr->painter->setPen(pen);
+    QPen pen(m_axesColor, m_axesWidth, Qt::SolidLine);
+    m_painter->setPen(pen);
 
-    QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
+    QRectF visibleRect = m_viewportManager->visibleWorldRect();
 
-    m_dPtr->painter->drawLine(QPointF(visibleRect.left(), 0), QPointF(visibleRect.right(), 0));
-    m_dPtr->painter->drawLine(QPointF(0, visibleRect.top()), QPointF(0, visibleRect.bottom()));
+    m_painter->drawLine(QPointF(visibleRect.left(), 0), QPointF(visibleRect.right(), 0));
+    m_painter->drawLine(QPointF(0, visibleRect.top()), QPointF(0, visibleRect.bottom()));
 
-    double arrowSize = 7.0 / m_dPtr->viewportManager->zoomFactor();
+    double arrowSize = 7.0 / m_viewportManager->zoomFactor();
 
     QPolygonF arrowX;
     arrowX << QPointF(visibleRect.right(), 0)
           << QPointF(visibleRect.right() - arrowSize, arrowSize / 2)
           << QPointF(visibleRect.right() - arrowSize, -arrowSize / 2);
-    m_dPtr->painter->setBrush(m_dPtr->axesColor);
-    m_dPtr->painter->drawPolygon(arrowX);
+    m_painter->setBrush(m_axesColor);
+    m_painter->drawPolygon(arrowX);
 
     QPolygonF arrowY;
     arrowY << QPointF(0, visibleRect.bottom())
           << QPointF(arrowSize / 2, visibleRect.bottom() - arrowSize)
           << QPointF(-arrowSize / 2, visibleRect.bottom() - arrowSize);
-    m_dPtr->painter->drawPolygon(arrowY);
+    m_painter->drawPolygon(arrowY);
 
     renderText(QPointF(visibleRect.right() - 2 * arrowSize, -arrowSize), "x");
     renderText(QPointF(arrowSize, visibleRect.bottom() - 2 * arrowSize), "y");
@@ -2551,10 +2302,10 @@ void QtRenderer::renderAxes()
 }
 
 void QtRenderer::renderAxisTicks() {
-    if (!m_dPtr->painter || !m_dPtr->viewportManager || !m_dPtr->painter->isActive()) return;
+    if (!m_painter || !m_viewportManager || !m_painter->isActive()) return;
 
-    QRectF visibleRect = m_dPtr->viewportManager->visibleWorldRect();
-    double zoomFactor = m_dPtr->viewportManager->zoomFactor();
+    QRectF visibleRect = m_viewportManager->visibleWorldRect();
+    double zoomFactor = m_viewportManager->zoomFactor();
 
     double viewportWidth = visibleRect.width();
     double viewportHeight = visibleRect.height();
@@ -2594,7 +2345,7 @@ void QtRenderer::renderAxisTicks() {
     for (double x = xMin; x <= xMax; x += tickSpacingX) {
         if (std::abs(x) < 1e-6) continue;
 
-        m_dPtr->painter->drawLine(QPointF(x, -tickLength/2), QPointF(x, tickLength/2));
+        m_painter->drawLine(QPointF(x, -tickLength/2), QPointF(x, tickLength/2));
         QString label = QString::number(x, 'f', xPrecision);
         while (label.contains('.') && label.endsWith('0'))
             label.chop(1);
@@ -2608,7 +2359,7 @@ void QtRenderer::renderAxisTicks() {
     for (double y = yMin; y <= yMax; y += tickSpacingY) {
         if (std::abs(y) < 1e-6) continue;
 
-        m_dPtr->painter->drawLine(QPointF(-tickLength/2, y), QPointF(tickLength/2, y));
+        m_painter->drawLine(QPointF(-tickLength/2, y), QPointF(tickLength/2, y));
         QString label = QString::number(y, 'f', yPrecision);
         while (label.contains('.') && label.endsWith('0'))
             label.chop(1);
@@ -2622,81 +2373,81 @@ void QtRenderer::renderAxisTicks() {
 
 void QtRenderer::renderSelectionMarker(const QPointF& position)
 {
-    if (!m_dPtr->painter || !m_dPtr->painter->isActive())
+    if (!m_painter || !m_painter->isActive())
         return;
 
-    m_dPtr->painter->save();
-    m_dPtr->painter->resetTransform();
+    m_painter->save();
+    m_painter->resetTransform();
 
-    QPen pen(m_dPtr->selectionColor, 1.0, Qt::SolidLine);
-    m_dPtr->painter->setPen(pen);
-    m_dPtr->painter->setBrush(Qt::NoBrush);
+    QPen pen(m_selectionColor, 1.0, Qt::SolidLine);
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
 
-    double size = m_dPtr->selectionSize;
-    m_dPtr->painter->drawEllipse(position, size, size);
+    double size = m_selectionSize;
+    m_painter->drawEllipse(position, size, size);
 
-    m_dPtr->painter->drawLine(position - QPointF(size / 2, 0),
-                             position + QPointF(size / 2, 0));
-    m_dPtr->painter->drawLine(position - QPointF(0, size / 2),
-                             position + QPointF(0, size / 2));
+    m_painter->drawLine(position - QPointF(size / 2, 0),
+                       position + QPointF(size / 2, 0));
+    m_painter->drawLine(position - QPointF(0, size / 2),
+                       position + QPointF(0, size / 2));
 
-    m_dPtr->painter->restore();
+    m_painter->restore();
 }
 
 void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bool isActive)
 {
-    if (!m_dPtr->painter || !m_dPtr->painter->isActive()) {
+    if (!m_painter || !m_painter->isActive()) {
         return;
     }
 
-    m_dPtr->painter->save();
-    m_dPtr->painter->resetTransform();
+    m_painter->save();
+    m_painter->resetTransform();
 
     QColor fillColor;
     if (isActive) {
-        fillColor = m_dPtr->controlPointActiveColor;
+        fillColor = m_controlPointActiveColor;
     } else if (isSelected) {
-        fillColor = m_dPtr->controlPointSelectedColor;
+        fillColor = m_controlPointSelectedColor;
     } else {
-        fillColor = m_dPtr->controlPointNormalColor;
+        fillColor = m_controlPointNormalColor;
     }
 
     QPen shadowPen(Qt::black, 1.0);
     QBrush shadowBrush(QColor(0, 0, 0, 50));
-    m_dPtr->painter->setPen(shadowPen);
-    m_dPtr->painter->setBrush(shadowBrush);
-    m_dPtr->painter->drawEllipse(position + QPointF(1, 1), m_dPtr->controlPointSize + 1, m_dPtr->controlPointSize + 1);
+    m_painter->setPen(shadowPen);
+    m_painter->setBrush(shadowBrush);
+    m_painter->drawEllipse(position + QPointF(1, 1), m_controlPointSize + 1, m_controlPointSize + 1);
 
     QPen pen(Qt::black, 1.0);
     QBrush brush(fillColor);
-    m_dPtr->painter->setPen(pen);
-    m_dPtr->painter->setBrush(brush);
-    m_dPtr->painter->drawEllipse(position, m_dPtr->controlPointSize, m_dPtr->controlPointSize);
+    m_painter->setPen(pen);
+    m_painter->setBrush(brush);
+    m_painter->drawEllipse(position, m_controlPointSize, m_controlPointSize);
 
     if (isSelected) {
-        m_dPtr->painter->setPen(Qt::white);
-        QFont font = m_dPtr->painter->font();
+        m_painter->setPen(Qt::white);
+        QFont font = m_painter->font();
         font.setPointSize(9);
-        m_dPtr->painter->setFont(font);
+        m_painter->setFont(font);
 
         QFontMetrics fm(font);
         QString text = QString::number(isActive ? 1 : 0);
         QRect textRect = fm.boundingRect(text);
         QPointF textPos = position - QPointF(textRect.width() / 2.0, -textRect.height() / 4.0);
 
-        m_dPtr->painter->drawText(textPos, text);
+        m_painter->drawText(textPos, text);
     }
 
-    m_dPtr->painter->restore();
+    m_painter->restore();
 }
 
 void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selectedIndex, int activeIndex)
 {
-    if (!m_dPtr->painter || !m_dPtr->viewportManager || points.empty()) {
+    if (!m_painter || !m_viewportManager || points.empty()) {
         return;
     }
 
-    if (m_dPtr->drawControlPolygon && points.size() >= 2) {
+    if (m_drawControlPolygon && points.size() >= 2) {
         renderControlPolygon(points);
     }
 
@@ -2705,7 +2456,7 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
 
     for (const auto& point : points) {
         screenPositions.push_back(
-            m_dPtr->viewportManager->worldToScreen(QPointF(point.x(), point.y()))
+            m_viewportManager->worldToScreen(QPointF(point.x(), point.y()))
         );
     }
 
@@ -2723,118 +2474,117 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         renderControlPoint(screenPositions[activeIndex], false, true);
     }
 
-    m_dPtr->painter->save();
-    m_dPtr->painter->resetTransform();
+    m_painter->save();
+    m_painter->resetTransform();
     QPen textPen(Qt::black);
-    m_dPtr->painter->setPen(textPen);
+    m_painter->setPen(textPen);
 
-    QFont font = m_dPtr->painter->font();
+    QFont font = m_painter->font();
     font.setPointSize(8);
-    m_dPtr->painter->setFont(font);
+    m_painter->setFont(font);
 
     for (size_t i = 0; i < points.size(); ++i) {
         QString label = QString::number(i);
         QFontMetrics fm(font);
         QRect textRect = fm.boundingRect(label);
-
-        QPointF textPos = screenPositions[i] + QPointF(m_dPtr->controlPointSize + 2,
-                                                      m_dPtr->controlPointSize / 2.0);
+        QPointF textPos = screenPositions[i] + QPointF(m_controlPointSize + 2,
+                                                  m_controlPointSize / 2.0);
 
         QRectF bgRect = QRectF(textPos.x() - 1, textPos.y() - textRect.height(),
                               textRect.width() + 2, textRect.height() + 2);
-        m_dPtr->painter->fillRect(bgRect, QColor(255, 255, 255, 180));
+        m_painter->fillRect(bgRect, QColor(255, 255, 255, 180));
 
-        m_dPtr->painter->drawText(textPos, label);
+        m_painter->drawText(textPos, label);
     }
 
-    m_dPtr->painter->restore();
+    m_painter->restore();
 }
 
 void QtRenderer::renderControlPolygon(const std::vector<Point>& points)
 {
-    if (!m_dPtr->painter || !m_dPtr->viewportManager || points.size() < 2) {
+    if (!m_painter || !m_viewportManager || points.size() < 2) {
         return;
     }
 
-    m_dPtr->painter->save();
-    m_dPtr->painter->resetTransform();
+    m_painter->save();
+    m_painter->resetTransform();
 
-    QPen pen(m_dPtr->controlPolygonColor, m_dPtr->controlPolygonWidth, m_dPtr->controlPolygonStyle);
-    m_dPtr->painter->setPen(pen);
-    m_dPtr->painter->setBrush(Qt::NoBrush);
+    QPen pen(m_controlPolygonColor, m_controlPolygonWidth, m_controlPolygonStyle);
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
 
     QPolygonF polygon;
     for (const auto& point : points) {
-        QPointF screenPos = m_dPtr->viewportManager->worldToScreen(QPointF(point.x(), point.y()));
+        QPointF screenPos = m_viewportManager->worldToScreen(QPointF(point.x(), point.y()));
         polygon << screenPos;
     }
 
-    m_dPtr->painter->drawPolyline(polygon);
+    m_painter->drawPolyline(polygon);
 
-    m_dPtr->painter->restore();
+    m_painter->restore();
 }
 
 void QtRenderer::setPointStyle(const QColor& color, float size)
 {
-    m_dPtr->pointColor = color;
-    m_dPtr->pointSize = size;
+    m_pointColor = color;
+    m_pointSize = size;
 }
 
 void QtRenderer::setCurveStyle(const QColor& color, float width, Qt::PenStyle style)
 {
-    m_dPtr->curveColor = color;
-    m_dPtr->curveWidth = width;
-    m_dPtr->curveStyle = style;
+    m_curveColor = color;
+    m_curveWidth = width;
+    m_curveStyle = style;
 }
 
 void QtRenderer::setSelectionStyle(const QColor& color, float size)
 {
-    m_dPtr->selectionColor = color;
-    m_dPtr->selectionSize = size;
+    m_selectionColor = color;
+    m_selectionSize = size;
 }
 
 void QtRenderer::setGridStyle(const QColor& color, float width, Qt::PenStyle style)
 {
-    m_dPtr->gridColor = color;
-    m_dPtr->gridWidth = width;
-    m_dPtr->gridStyle = style;
+    m_gridColor = color;
+    m_gridWidth = width;
+    m_gridStyle = style;
 }
 
 void QtRenderer::setAxesStyle(const QColor& color, float width)
 {
-    m_dPtr->axesColor = color;
-    m_dPtr->axesWidth = width;
+    m_axesColor = color;
+    m_axesWidth = width;
 }
 
 void QtRenderer::setControlPointStyle(const QColor& normalColor, const QColor& selectedColor,
-                                    const QColor& activeColor, float size)
+                                const QColor& activeColor, float size)
 {
-    m_dPtr->controlPointNormalColor = normalColor;
-    m_dPtr->controlPointSelectedColor = selectedColor;
-    m_dPtr->controlPointActiveColor = activeColor;
-    m_dPtr->controlPointSize = size;
+    m_controlPointNormalColor = normalColor;
+    m_controlPointSelectedColor = selectedColor;
+    m_controlPointActiveColor = activeColor;
+    m_controlPointSize = size;
 }
 
 void QtRenderer::setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style)
 {
-    m_dPtr->controlPolygonColor = color;
-    m_dPtr->controlPolygonWidth = width;
-    m_dPtr->controlPolygonStyle = style;
+    m_controlPolygonColor = color;
+    m_controlPolygonWidth = width;
+    m_controlPolygonStyle = style;
 }
 
 void QtRenderer::setDrawGrid(bool draw)
 {
-    m_dPtr->drawGrid = draw;
+    m_drawGrid = draw;
 }
 
 void QtRenderer::setDrawAxes(bool draw)
 {
-    m_dPtr->drawAxes = draw;
+    m_drawAxes = draw;
 }
 
 void QtRenderer::setDrawControlPolygon(bool draw)
 {
-    m_dPtr->drawControlPolygon = draw;
+    m_drawControlPolygon = draw;
 }
 
 //===== END FILE: Graphics\QtRenderer.cpp =====//
@@ -2866,30 +2616,19 @@ public:
     QtRenderer();
     ~QtRenderer() override;
 
-    // Inicjalizacja i konfiguracja
     void beginRender(QPainter* painter, ViewportManager* viewportManager) override;
     void endRender() override;
-
-    // Metody renderowania konkretnych typów obiektów
     void renderPoint(const Point& point) override;
     void renderCurve(const Curve& curve) override;
-
-    // Ogólna metoda do renderowania obiektów geometrycznych
     void renderObject(const GeometricObject& object) override;
-
-    // Renderowanie pomocniczych elementów
     void renderGrid(double gridSize) override;
     void renderText(const QPointF &position, const QString &text);
     void renderAxes() override;
     void renderAxisTicks();
     void renderSelectionMarker(const QPointF& position) override;
-
-    // Renderowanie punktów kontrolnych
     void renderControlPoint(const QPointF& position, bool isSelected = false, bool isActive = false) override;
     void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int activeIndex = -1) override;
     void renderControlPolygon(const std::vector<Point>& points) override;
-
-    // Metody do ustawiania stylów rysowania
     void setPointStyle(const QColor& color, float size) override;
     void setCurveStyle(const QColor& color, float width, Qt::PenStyle style = Qt::SolidLine) override;
     void setSelectionStyle(const QColor& color, float size) override;
@@ -2897,18 +2636,40 @@ public:
     void setAxesStyle(const QColor& color, float width) override;
     void setControlPointStyle(const QColor& normalColor, const QColor& selectedColor, const QColor& activeColor, float size) override;
     void setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) override;
-
-    // Włączanie/wyłączanie elementów
     void setDrawGrid(bool draw) override;
     void setDrawAxes(bool draw) override;
     void setDrawControlPolygon(bool draw) override;
 
 private:
-    class QtRendererPrivate;
-    std::unique_ptr<QtRendererPrivate> m_dPtr;
+    QColor m_pointColor{Qt::black};
+    float m_pointSize{4.0f};
+    QColor m_curveColor{Qt::blue};
+    float m_curveWidth{1.0f};
+    Qt::PenStyle m_curveStyle{Qt::SolidLine};
+    QColor m_selectionColor{Qt::red};
+    float m_selectionSize{6.0f};
+    QColor m_gridColor{Qt::lightGray};
+    float m_gridWidth{0.5f};
+    Qt::PenStyle m_gridStyle{Qt::DotLine};
+    QColor m_axesColor{Qt::black};
+    float m_axesWidth{1.0f};
+    QColor m_controlPointNormalColor{Qt::blue};
+    QColor m_controlPointSelectedColor{Qt::red};
+    QColor m_controlPointActiveColor{Qt::green};
+    float m_controlPointSize{5.0f};
+    QColor m_controlPolygonColor{Qt::darkGray};
+    float m_controlPolygonWidth{1.0f};
+    Qt::PenStyle m_controlPolygonStyle{Qt::DashLine};
+
+    bool m_drawGrid{true};
+    bool m_drawAxes{true};
+    bool m_drawControlPolygon{true};
+
+    QPainter* m_painter{nullptr};
+    ViewportManager* m_viewportManager{nullptr};
 };
 
-#endif
+#endif // QTRENDERER_H
 
 //===== END FILE: Graphics\QtRenderer.h =====//
 
@@ -2941,13 +2702,7 @@ ViewportManager::~ViewportManager() = default;
 
 void ViewportManager::pan(const QPointF& delta)
 {
-    // Obliczenie przesunięcia w koordynatach świata
-    QPointF worldDelta = screenToWorld(delta) - screenToWorld(QPointF(0, 0));
-
-    // // Ponieważ oś Y nie jest odwrócona, odwracamy składową Y
-    // worldDelta.setY(-worldDelta.y());
-
-    // Aktualizacja przesunięcia
+    const QPointF worldDelta = screenToWorld(delta) - screenToWorld(QPointF(0, 0));
     m_panOffset -= worldDelta;
 
     updateTransformations();
@@ -2955,7 +2710,6 @@ void ViewportManager::pan(const QPointF& delta)
 
 void ViewportManager::zoom(double factor, const QPointF& center)
 {
-    // Sprawdzenie ograniczeń zoomowania
     double newZoom = m_zoomFactor * factor;
     if (newZoom < m_minZoom) {
         factor = m_minZoom / m_zoomFactor;
@@ -2966,18 +2720,12 @@ void ViewportManager::zoom(double factor, const QPointF& center)
         newZoom = m_maxZoom;
     }
 
-    // Jeśli nie ma zmiany, zakończ
-    if (std::abs(factor - 1.0) < 1e-6) {
+    if (std::abs(factor - 1.0) < 1e-6)
         return;
-    }
 
-    // Pobierz punkt środkowy w koordynatach świata
     QPointF worldCenter = screenToWorld(center);
-
-    // Aktualizacja współczynnika zoomowania
     m_zoomFactor = newZoom;
 
-    // Korekta przesunięcia, aby punkt centralny pozostał w miejscu
     QPointF newWorldCenter = screenToWorld(center);
     m_panOffset += worldCenter - newWorldCenter;
 
@@ -2986,7 +2734,6 @@ void ViewportManager::zoom(double factor, const QPointF& center)
 
 void ViewportManager::resetView()
 {
-    // Przywrócenie domyślnych wartości
     m_zoomFactor = DEFAULT_ZOOM_FACTOR;
     m_panOffset = DEFAULT_PAN_OFFSET;
     m_viewport = DEFAULT_VIEWPORT;
@@ -2996,18 +2743,14 @@ void ViewportManager::resetView()
 
 void ViewportManager::fitView(const QRectF& rect)
 {
-    if (rect.isEmpty()) {
+    if (rect.isEmpty())
         return;
-    }
 
-    // Obliczenie współczynnika skalowania
     double scaleX = m_windowWidth / rect.width();
     double scaleY = m_windowHeight / rect.height();
 
-    // Użycie mniejszego współczynnika z marginesem 15%
     double newZoom = std::min(scaleX, scaleY) * 0.85;
 
-    // Ograniczenie zoomu do dozwolonych wartości
     newZoom = std::max(m_minZoom, std::min(m_maxZoom, newZoom));
 
     m_zoomFactor = newZoom;
@@ -3016,15 +2759,9 @@ void ViewportManager::fitView(const QRectF& rect)
     updateTransformations();
 }
 
-void ViewportManager::zoomIn(const QPointF& center)
-{
-    zoom(1.2, center); // Zbliżenie o 20%
-}
+void ViewportManager::zoomIn(const QPointF& center) { zoom(1.2, center); }
 
-void ViewportManager::zoomOut(const QPointF& center)
-{
-    zoom(0.8, center); // Oddalenie o 20%
-}
+void ViewportManager::zoomOut(const QPointF& center) { zoom(0.8, center); }
 
 void ViewportManager::panBy(double dx, double dy)
 {
@@ -3101,7 +2838,7 @@ void ViewportManager::setPanOffset(const QPointF& offset)
     updateTransformations();
 }
 
-void ViewportManager::setMinZoom(double minZoom)
+void ViewportManager::setMinZoom(const double minZoom)
 {
     m_minZoom = minZoom > 0 ? minZoom : DEFAULT_MIN_ZOOM;
     if (m_zoomFactor < m_minZoom) {
@@ -3110,7 +2847,7 @@ void ViewportManager::setMinZoom(double minZoom)
     }
 }
 
-void ViewportManager::setMaxZoom(double maxZoom)
+void ViewportManager::setMaxZoom(const double maxZoom)
 {
     m_maxZoom = maxZoom > m_minZoom ? maxZoom : DEFAULT_MAX_ZOOM;
     if (m_zoomFactor > m_maxZoom) {
@@ -3119,12 +2856,11 @@ void ViewportManager::setMaxZoom(double maxZoom)
     }
 }
 
-void ViewportManager::setZoomConstraints(double minZoom, double maxZoom)
+void ViewportManager::setZoomConstraints(const double minZoom, const double maxZoom)
 {
     m_minZoom = minZoom > 0 ? minZoom : DEFAULT_MIN_ZOOM;
     m_maxZoom = maxZoom > m_minZoom ? maxZoom : DEFAULT_MAX_ZOOM;
 
-    // Dostosowanie aktualnego zoomu do nowych ograniczeń
     if (m_zoomFactor < m_minZoom) m_zoomFactor = m_minZoom;
     else if (m_zoomFactor > m_maxZoom) m_zoomFactor = m_maxZoom;
     updateTransformations();
@@ -3133,15 +2869,12 @@ void ViewportManager::setZoomConstraints(double minZoom, double maxZoom)
 void ViewportManager::updateTransformations()
 {
     m_viewTransform.reset();
-    // Przesunięcie początku układu współrzędnych do środka okna
     m_viewTransform.translate(m_windowWidth / 2.0, m_windowHeight / 2.0);
 
     m_viewTransform.scale(m_zoomFactor, -m_zoomFactor);
 
-    // 3. Zastosowanie przesunięcia widoku
     m_viewTransform.translate(-m_panOffset.x(), -m_panOffset.y());
 
-    // Obliczenie transformacji odwrotnej
     m_inverseViewTransform = m_viewTransform.inverted();
 }
 
@@ -3310,35 +3043,6 @@ private:
 
 //===== END FILE: Math\EigenMathAdapter.h =====//
 
-//===== START FILE: Math\IMathProvider.cpp =====//
-
-#include "IMathProvider.h"
-#include <stdexcept>
-
-class BasicMathProvider : public IMathProvider {
-public:
-    double add(double a, double b) const override {
-        return a + b;
-    }
-
-    double subtract(double a, double b) const override {
-        return a - b;
-    }
-
-    double multiply(double a, double b) const override {
-        return a * b;
-    }
-
-    double divide(double a, double b) const override {
-        if (b == 0) {
-            throw std::invalid_argument("Division by zero");
-        }
-        return a / b;
-    }
-};
-
-//===== END FILE: Math\IMathProvider.cpp =====//
-
 //===== START FILE: Math\IMathProvider.h =====//
 
 // File: IMathProvider.h
@@ -3354,21 +3058,10 @@ class IMathProvider {
 public:
     virtual ~IMathProvider() = default;
 
-    // Podstawowe operacje arytmetyczne (inline)
-    virtual double add(double a, double b) const { return a + b; }
-    virtual double subtract(double a, double b) const { return a - b; }
-    virtual double multiply(double a, double b) const { return a * b; }
-    virtual double divide(double a, double b) const {
-        if (b == 0) throw std::invalid_argument("Division by zero");
-        return a / b;
-    }
-
-    // Operacje macierzowe
     virtual std::shared_ptr<TransformMatrix> createRotationMatrix(double angle, const std::array<double, 3>& axis) = 0;
     virtual std::shared_ptr<TransformMatrix> createTranslationMatrix(const std::array<double, 3>& translation) = 0;
     virtual std::shared_ptr<TransformMatrix> createScalingMatrix(const std::array<double, 3>& factors) = 0;
 
-    // Operacje algebry liniowej
     virtual std::vector<double> solveLinearSystem(
         const std::vector<std::vector<double>>& coefficients,
         const std::vector<double>& constants) = 0;

@@ -25,13 +25,7 @@ ViewportManager::~ViewportManager() = default;
 
 void ViewportManager::pan(const QPointF& delta)
 {
-    // Obliczenie przesunięcia w koordynatach świata
-    QPointF worldDelta = screenToWorld(delta) - screenToWorld(QPointF(0, 0));
-
-    // // Ponieważ oś Y nie jest odwrócona, odwracamy składową Y
-    // worldDelta.setY(-worldDelta.y());
-
-    // Aktualizacja przesunięcia
+    const QPointF worldDelta = screenToWorld(delta) - screenToWorld(QPointF(0, 0));
     m_panOffset -= worldDelta;
 
     updateTransformations();
@@ -39,7 +33,6 @@ void ViewportManager::pan(const QPointF& delta)
 
 void ViewportManager::zoom(double factor, const QPointF& center)
 {
-    // Sprawdzenie ograniczeń zoomowania
     double newZoom = m_zoomFactor * factor;
     if (newZoom < m_minZoom) {
         factor = m_minZoom / m_zoomFactor;
@@ -50,18 +43,12 @@ void ViewportManager::zoom(double factor, const QPointF& center)
         newZoom = m_maxZoom;
     }
 
-    // Jeśli nie ma zmiany, zakończ
-    if (std::abs(factor - 1.0) < 1e-6) {
+    if (std::abs(factor - 1.0) < 1e-6)
         return;
-    }
 
-    // Pobierz punkt środkowy w koordynatach świata
     QPointF worldCenter = screenToWorld(center);
-
-    // Aktualizacja współczynnika zoomowania
     m_zoomFactor = newZoom;
 
-    // Korekta przesunięcia, aby punkt centralny pozostał w miejscu
     QPointF newWorldCenter = screenToWorld(center);
     m_panOffset += worldCenter - newWorldCenter;
 
@@ -70,7 +57,6 @@ void ViewportManager::zoom(double factor, const QPointF& center)
 
 void ViewportManager::resetView()
 {
-    // Przywrócenie domyślnych wartości
     m_zoomFactor = DEFAULT_ZOOM_FACTOR;
     m_panOffset = DEFAULT_PAN_OFFSET;
     m_viewport = DEFAULT_VIEWPORT;
@@ -80,18 +66,14 @@ void ViewportManager::resetView()
 
 void ViewportManager::fitView(const QRectF& rect)
 {
-    if (rect.isEmpty()) {
+    if (rect.isEmpty())
         return;
-    }
 
-    // Obliczenie współczynnika skalowania
     double scaleX = m_windowWidth / rect.width();
     double scaleY = m_windowHeight / rect.height();
 
-    // Użycie mniejszego współczynnika z marginesem 15%
     double newZoom = std::min(scaleX, scaleY) * 0.85;
 
-    // Ograniczenie zoomu do dozwolonych wartości
     newZoom = std::max(m_minZoom, std::min(m_maxZoom, newZoom));
 
     m_zoomFactor = newZoom;
@@ -100,15 +82,9 @@ void ViewportManager::fitView(const QRectF& rect)
     updateTransformations();
 }
 
-void ViewportManager::zoomIn(const QPointF& center)
-{
-    zoom(1.2, center); // Zbliżenie o 20%
-}
+void ViewportManager::zoomIn(const QPointF& center) { zoom(1.2, center); }
 
-void ViewportManager::zoomOut(const QPointF& center)
-{
-    zoom(0.8, center); // Oddalenie o 20%
-}
+void ViewportManager::zoomOut(const QPointF& center) { zoom(0.8, center); }
 
 void ViewportManager::panBy(double dx, double dy)
 {
@@ -185,7 +161,7 @@ void ViewportManager::setPanOffset(const QPointF& offset)
     updateTransformations();
 }
 
-void ViewportManager::setMinZoom(double minZoom)
+void ViewportManager::setMinZoom(const double minZoom)
 {
     m_minZoom = minZoom > 0 ? minZoom : DEFAULT_MIN_ZOOM;
     if (m_zoomFactor < m_minZoom) {
@@ -194,7 +170,7 @@ void ViewportManager::setMinZoom(double minZoom)
     }
 }
 
-void ViewportManager::setMaxZoom(double maxZoom)
+void ViewportManager::setMaxZoom(const double maxZoom)
 {
     m_maxZoom = maxZoom > m_minZoom ? maxZoom : DEFAULT_MAX_ZOOM;
     if (m_zoomFactor > m_maxZoom) {
@@ -203,12 +179,11 @@ void ViewportManager::setMaxZoom(double maxZoom)
     }
 }
 
-void ViewportManager::setZoomConstraints(double minZoom, double maxZoom)
+void ViewportManager::setZoomConstraints(const double minZoom, const double maxZoom)
 {
     m_minZoom = minZoom > 0 ? minZoom : DEFAULT_MIN_ZOOM;
     m_maxZoom = maxZoom > m_minZoom ? maxZoom : DEFAULT_MAX_ZOOM;
 
-    // Dostosowanie aktualnego zoomu do nowych ograniczeń
     if (m_zoomFactor < m_minZoom) m_zoomFactor = m_minZoom;
     else if (m_zoomFactor > m_maxZoom) m_zoomFactor = m_maxZoom;
     updateTransformations();
@@ -217,14 +192,11 @@ void ViewportManager::setZoomConstraints(double minZoom, double maxZoom)
 void ViewportManager::updateTransformations()
 {
     m_viewTransform.reset();
-    // Przesunięcie początku układu współrzędnych do środka okna
     m_viewTransform.translate(m_windowWidth / 2.0, m_windowHeight / 2.0);
 
     m_viewTransform.scale(m_zoomFactor, -m_zoomFactor);
 
-    // 3. Zastosowanie przesunięcia widoku
     m_viewTransform.translate(-m_panOffset.x(), -m_panOffset.y());
 
-    // Obliczenie transformacji odwrotnej
     m_inverseViewTransform = m_viewTransform.inverted();
 }

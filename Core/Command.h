@@ -9,6 +9,7 @@
 #include "../Geometry/GeometricObject.h"
 #include "../Geometry/Point.h"
 #include "../Geometry/InterpolatedCurve.h"
+#include "CurveCommand.h"
 
 // Command to add a geometric object to the scene
 class AddObjectCommand : public AbstractCommand {
@@ -95,65 +96,56 @@ private:
     std::string m_name;
 };
 
-// Commands for manipulating control points of curves
-class AddControlPointCommand : public AbstractCommand {
+class AddControlPointCommand : public CurveCommand {
 public:
     AddControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, const Point& point, int index = -1);
     ~AddControlPointCommand() override = default;
 
     bool execute() override;
     bool undo() override;
-    bool redo() override;
 
 private:
-    std::shared_ptr<InterpolatedCurve> m_curve;
     Point m_point;
     int m_index;       // Pozycja do wstawienia lub -1 dla dodania na końcu
     int m_addedIndex;  // Rzeczywisty indeks po dodaniu
 };
 
-class MoveControlPointCommand : public AbstractCommand {
+class MoveControlPointCommand : public CurveCommand {
 public:
     MoveControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, int pointIndex, const Point& newPosition);
     ~MoveControlPointCommand() override = default;
 
     bool execute() override;
     bool undo() override;
-    bool redo() override;
 
 private:
-    std::shared_ptr<InterpolatedCurve> m_curve;
     int m_pointIndex;
     Point m_oldPosition;
     Point m_newPosition;
 };
 
-class DeleteControlPointCommand : public AbstractCommand {
+class DeleteControlPointCommand : public CurveCommand {
 public:
     DeleteControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, int pointIndex);
     ~DeleteControlPointCommand() override = default;
 
     bool execute() override;
     bool undo() override;
-    bool redo() override;
 
 private:
-    std::shared_ptr<InterpolatedCurve> m_curve;
     int m_pointIndex;
     Point m_deletedPoint;
 };
 
-class BatchControlPointsCommand : public AbstractCommand {
+class BatchControlPointsCommand : public CurveCommand {
 public:
     BatchControlPointsCommand(std::shared_ptr<InterpolatedCurve> curve, const std::vector<Point>& newPoints);
     ~BatchControlPointsCommand() override = default;
 
     bool execute() override;
     bool undo() override;
-    bool redo() override;
 
 private:
-    std::shared_ptr<InterpolatedCurve> m_curve;
     std::vector<Point> m_oldPoints;
     std::vector<Point> m_newPoints;
 };

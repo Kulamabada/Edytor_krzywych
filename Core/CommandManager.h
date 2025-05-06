@@ -7,31 +7,26 @@
 
 class CommandManager {
 public:
-    CommandManager();
-    ~CommandManager();
+    CommandManager() = default;
+    ~CommandManager() = default;
 
-    // Prevent copying
     CommandManager(const CommandManager&) = delete;
     CommandManager& operator=(const CommandManager&) = delete;
 
-    // Command execution
     bool executeCommand(std::unique_ptr<AbstractCommand> command);
 
-    // Undo/Redo operations
     bool canUndo() const;
     bool canRedo() const;
     bool undo();
     bool redo();
 
-    // Stack management
     void clearHistory();
     int undoStackSize() const;
     int redoStackSize() const;
 
 private:
-    // PIMPL implementation
-    class CommandManagerImpl;
-    std::unique_ptr<CommandManagerImpl> m_pImpl;
+    std::vector<std::unique_ptr<AbstractCommand>> m_undoStack;
+    std::vector<std::unique_ptr<AbstractCommand>> m_redoStack;
 };
 
-#endif // COMMANDMANAGER_H
+#endif

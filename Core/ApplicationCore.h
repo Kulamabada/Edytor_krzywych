@@ -6,28 +6,22 @@
 
 class ApplicationCore {
 public:
-    // Singleton pattern
     static ApplicationCore& getInstance();
 
-    // Prevent copying and assignment
     ApplicationCore(const ApplicationCore&) = delete;
     ApplicationCore& operator=(const ApplicationCore&) = delete;
 
-    // Core application functionality
     bool initialize();
     void shutdown();
 
-    // Access to managers
     CommandManager& getCommandManager();
 
 private:
-    // Private constructor & destructor (Singleton)
     ApplicationCore();
     ~ApplicationCore();
 
-    // PIMPL implementation
-    class ApplicationCoreImpl;
-    std::unique_ptr<ApplicationCoreImpl> m_pImpl;
+    bool m_initialized{false};
+    std::unique_ptr<CommandManager> m_commandManager;
 };
 
 #endif // APPLICATIONCORE_H

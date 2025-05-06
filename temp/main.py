@@ -16,7 +16,7 @@ def collect_files(project_dir="C:\\Users\\julek\\CLionProjects\\edytor krzywych"
     # Pełna ścieżka do pliku wyjściowego
     output_path = os.path.join(output_dir, output_file)
 
-    excluded_dirs = ['cmake-build-debug', 'cmake-build-release', '.idea', 'CMakeFiles', 'eigen-3.4.0']
+    excluded_dirs = ['cmake-build-debug', 'cmake-build-release', 'cmake-build-debug-mingw', '.idea', 'CMakeFiles', 'eigen-3.4.0']
     collected_files = []
 
     print(f"Przeszukuję katalog: {project_dir}")
@@ -94,4 +94,4 @@ if __name__ == "__main__":
     extensions = [ext.strip() for ext in (args.exts or ".cpp,.h,.hpp").split(",")]
 
     collect_files(project_dir, output_dir, output_file, extensions)
-    os.system("pause")
+    os.system("timeout 3")

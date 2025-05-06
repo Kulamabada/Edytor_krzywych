@@ -3,36 +3,6 @@
 #include <cmath>
 #include <Eigen/Dense>
 
-Point::Point() : m_coordinates{0.0, 0.0, 0.0} {
-}
-
-Point::Point(double x, double y, double z) : m_coordinates{x, y, z} {
-}
-
-double Point::x() const {
-    return m_coordinates[0];
-}
-
-double Point::y() const {
-    return m_coordinates[1];
-}
-
-double Point::z() const {
-    return m_coordinates[2];
-}
-
-void Point::setX(double x) {
-    m_coordinates[0] = x;
-}
-
-void Point::setY(double y) {
-    m_coordinates[1] = y;
-}
-
-void Point::setZ(double z) {
-    m_coordinates[2] = z;
-}
-
 double Point::distanceTo(const Point& other) const {
     const double dx = other.x() - x();
     const double dy = other.y() - y();
@@ -59,14 +29,4 @@ void Point::transform(const TransformMatrix& matrix) {
         setY(transformedPoint(1) / transformedPoint(3));
         setZ(transformedPoint(2) / transformedPoint(3));
     }
-}
-
-Eigen::Vector3d Point::getPosition() const {
-    return Eigen::Vector3d(x(), y(), z());
-}
-
-void Point::setPosition(const Eigen::Vector3d& position) {
-    setX(position.x());
-    setY(position.y());
-    setZ(position.z());
 }

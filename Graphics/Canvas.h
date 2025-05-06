@@ -1,6 +1,3 @@
-#ifndef CANVAS_H
-#define CANVAS_H
-
 #include <QWidget>
 #include <memory>
 #include <vector>
@@ -16,20 +13,13 @@
 #include <QResizeEvent>
 #include <algorithm>
 
-// Forward declarations
-class GeometricObject;
-class QPaintEvent;
-class QMouseEvent;
-class QWheelEvent;
-class QResizeEvent;
-class ViewportManager;
-class IRenderer;
+#include "../Core/ApplicationCore.h"
+#include "../Core/Command.h"
 
 class Canvas : public QWidget {
     Q_OBJECT
 
 public:
-    // Tryby edycji
     enum class EditMode {
         None,           // Brak trybu edycji
         SelectObject,   // Wybieranie obiektów
@@ -46,25 +36,20 @@ public:
     void clearObjects();
     std::vector<std::shared_ptr<GeometricObject>> objects() const;
 
-    // Zarządzanie zaznaczeniem
     void selectObject(std::shared_ptr<GeometricObject> object);
     void clearSelection();
     std::shared_ptr<GeometricObject> selectedObject() const;
 
-    // Zarządzanie widokiem
     void zoomIn();
     void zoomOut();
     void resetView();
     void fitToContents();
 
-    // Dostęp do ViewportManager
     ViewportManager* viewportManager() const;
 
-    // Ustawienie renderera
     void setRenderer(std::shared_ptr<IRenderer> renderer);
     IRenderer* renderer() const;
 
-    // Tryb edycji
     void setEditMode(EditMode mode);
     EditMode getEditMode() const;
     bool isEditingCurve() const;
@@ -91,7 +76,6 @@ signals:
     void editingFinished();
 
 protected:
-    // Przeciążone metody QWidget
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
@@ -101,15 +85,25 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
 
 private:
-    // Metody pomocnicze do obsługi interakcji
     int hitTestControlPoint(const QPointF& pos, double tolerance = 10.0);
     bool addControlPoint(const QPointF& screenPos);
     bool moveControlPoint(int pointIndex, const QPointF& screenPos);
     void drawControlPoints();
 
+    // Stan obiektu bezpośrednio w klasie
+    std::vector<std::shared_ptr<GeometricObject>> m_objects;
+    std::shared_ptr<GeometricObject> m_selectedObject;
+    std::unique_ptr<ViewportManager> m_viewportManager;
+    std::shared_ptr<IRenderer> m_renderer;
 
-    class CanvasPrivate;
-    std::unique_ptr<CanvasPrivate> m_dPtr;
+    bool m_isPanning{false};
+    QPointF m_lastMousePos;
+    QPointF m_selectionPoint;
+    bool m_isSelecting{false};
+
+    EditMode m_editMode{EditMode::None};
+    int m_selectedControlPointIndex{-1};
+    int m_activeControlPointIndex{-1};
+    bool m_isEditingPoints{false};
+    bool m_isDraggingPoint{false};
 };
-
-#endif // CANVAS_H

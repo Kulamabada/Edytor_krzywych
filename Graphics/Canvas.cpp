@@ -3,29 +3,7 @@
 #include <utility>
 #include <QMessageBox>
 
-class Canvas::CanvasPrivate {
-public:
-    CanvasPrivate() : viewportManager(new ViewportManager()) {}
-
-    std::vector<std::shared_ptr<GeometricObject>> objects;
-    std::shared_ptr<GeometricObject> selectedObject;
-    std::unique_ptr<ViewportManager> viewportManager;
-    std::shared_ptr<IRenderer> renderer;
-
-    bool isPanning = false;
-    QPointF lastMousePos;
-    QPointF selectionPoint;
-    bool isSelecting = false;
-
-    EditMode editMode = EditMode::None;
-    int selectedControlPointIndex = -1;
-    int activeControlPointIndex = -1;
-    bool isEditingPoints = false;
-    bool isDraggingPoint = false;
-};
-
-Canvas::Canvas(QWidget* parent)
-    : QWidget(parent), m_dPtr(new CanvasPrivate())
+Canvas::Canvas(QWidget* parent): QWidget(parent)
 {
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
@@ -34,9 +12,10 @@ Canvas::Canvas(QWidget* parent)
     setAutoFillBackground(false);
     setAttribute(Qt::WA_StaticContents, false);
 
-    if (m_dPtr->viewportManager) {
-        m_dPtr->viewportManager->setWindowSize(width(), height());
-        m_dPtr->viewportManager->resetView();
+    m_viewportManager = std::make_unique<ViewportManager>();
+    if (m_viewportManager) {
+        m_viewportManager->setWindowSize(width(), height());
+        m_viewportManager->resetView();
     }
 }
 
@@ -46,7 +25,7 @@ void Canvas::addObject(std::shared_ptr<GeometricObject> object)
 {
     if (!object) return;
 
-    m_dPtr->objects.push_back(object);
+    m_objects.push_back(object);
     emit objectAdded(object);
     update();
 }
@@ -55,13 +34,12 @@ void Canvas::removeObject(std::shared_ptr<GeometricObject> object)
 {
     if (!object) return;
 
-    if (m_dPtr->selectedObject == object) {
+    if (m_selectedObject == object)
         clearSelection();
-    }
 
-    auto it = std::find(m_dPtr->objects.begin(), m_dPtr->objects.end(), object);
-    if (it != m_dPtr->objects.end()) {
-        m_dPtr->objects.erase(it);
+    auto it = std::find(m_objects.begin(), m_objects.end(), object);
+    if (it != m_objects.end()) {
+        m_objects.erase(it);
         emit objectRemoved(object);
         update();
     }
@@ -69,25 +47,25 @@ void Canvas::removeObject(std::shared_ptr<GeometricObject> object)
 
 void Canvas::clearObjects()
 {
-    m_dPtr->objects.clear();
+    m_objects.clear();
     clearSelection();
     update();
 }
 
 std::vector<std::shared_ptr<GeometricObject>> Canvas::objects() const
 {
-    return m_dPtr->objects;
+    return m_objects;
 }
 
 void Canvas::selectObject(std::shared_ptr<GeometricObject> object)
 {
-    if (m_dPtr->selectedObject != object) {
-        m_dPtr->selectedObject = object;
+    if (m_selectedObject != object) {
+        m_selectedObject = object;
 
-        m_dPtr->selectedControlPointIndex = -1;
-        m_dPtr->activeControlPointIndex = -1;
+        m_selectedControlPointIndex = -1;
+        m_activeControlPointIndex = -1;
 
-        if (m_dPtr->isEditingPoints && !std::dynamic_pointer_cast<InterpolatedCurve>(object))
+        if (m_isEditingPoints && !std::dynamic_pointer_cast<InterpolatedCurve>(object))
             finishEditing();
 
         emit objectSelected(object);
@@ -97,13 +75,13 @@ void Canvas::selectObject(std::shared_ptr<GeometricObject> object)
 
 void Canvas::clearSelection()
 {
-    if (m_dPtr->selectedObject) {
-        m_dPtr->selectedObject = nullptr;
+    if (m_selectedObject) {
+        m_selectedObject = nullptr;
 
-        m_dPtr->selectedControlPointIndex = -1;
-        m_dPtr->activeControlPointIndex = -1;
+        m_selectedControlPointIndex = -1;
+        m_activeControlPointIndex = -1;
 
-        if (m_dPtr->isEditingPoints)
+        if (m_isEditingPoints)
             finishEditing();
 
         emit selectionCleared();
@@ -113,14 +91,14 @@ void Canvas::clearSelection()
 
 std::shared_ptr<GeometricObject> Canvas::selectedObject() const
 {
-    return m_dPtr->selectedObject;
+    return m_selectedObject;
 }
 
 void Canvas::zoomIn()
 {
-    if (m_dPtr->viewportManager) {
+    if (m_viewportManager) {
         QPointF center(width() / 2.0, height() / 2.0);
-        m_dPtr->viewportManager->zoomIn(center);
+        m_viewportManager->zoomIn(center);
         emit viewportChanged();
         update();
     }
@@ -128,9 +106,9 @@ void Canvas::zoomIn()
 
 void Canvas::zoomOut()
 {
-    if (m_dPtr->viewportManager) {
+    if (m_viewportManager) {
         QPointF center(width() / 2.0, height() / 2.0);
-        m_dPtr->viewportManager->zoomOut(center);
+        m_viewportManager->zoomOut(center);
         emit viewportChanged();
         update();
     }
@@ -138,8 +116,8 @@ void Canvas::zoomOut()
 
 void Canvas::resetView()
 {
-    if (m_dPtr->viewportManager) {
-        m_dPtr->viewportManager->resetView();
+    if (m_viewportManager) {
+        m_viewportManager->resetView();
         emit viewportChanged();
         update();
     }
@@ -147,15 +125,15 @@ void Canvas::resetView()
 
 void Canvas::fitToContents()
 {
-    if (m_dPtr->objects.empty()) {
+    if (m_objects.empty()) {
         resetView();
         return;
     }
 
     QRectF bounds(-10, -10, 20, 20);
 
-    if (m_dPtr->viewportManager) {
-        m_dPtr->viewportManager->fitView(bounds);
+    if (m_viewportManager) {
+        m_viewportManager->fitView(bounds);
         emit viewportChanged();
         update();
     }
@@ -163,18 +141,18 @@ void Canvas::fitToContents()
 
 ViewportManager* Canvas::viewportManager() const
 {
-    return m_dPtr->viewportManager.get();
+    return m_viewportManager.get();
 }
 
 void Canvas::setRenderer(std::shared_ptr<IRenderer> renderer)
 {
-    m_dPtr->renderer = std::move(renderer);
+    m_renderer = std::move(renderer);
     update();
 }
 
 IRenderer* Canvas::renderer() const
 {
-    return m_dPtr->renderer.get();
+    return m_renderer.get();
 }
 
 void Canvas::refresh()
@@ -185,38 +163,38 @@ void Canvas::refresh()
 }
 
 void Canvas::setEditMode(EditMode mode) {
-    m_dPtr->editMode = mode;
+    m_editMode = mode;
 
     if (mode == EditMode::None) {
         finishEditing();
     } else {
         if ((mode == EditMode::AddPoint || mode == EditMode::MovePoint) && !getSelectedCurve()) {
-            m_dPtr->editMode = EditMode::None;
+            m_editMode = EditMode::None;
             QMessageBox::warning(this, "Edycja punktów",
                 "Najpierw wybierz krzywą do edycji punktów kontrolnych.");
             return;
         }
 
-        m_dPtr->isEditingPoints = true;
+        m_isEditingPoints = true;
         emit editingStarted();
         update();
     }
 }
 
 Canvas::EditMode Canvas::getEditMode() const {
-    return m_dPtr->editMode;
+    return m_editMode;
 }
 
 bool Canvas::isEditingCurve() const {
-    return m_dPtr->isEditingPoints;
+    return m_isEditingPoints;
 }
 
 void Canvas::finishEditing() {
-    m_dPtr->editMode = EditMode::None;
-    m_dPtr->isEditingPoints = false;
-    m_dPtr->isDraggingPoint = false;
-    m_dPtr->selectedControlPointIndex = -1;
-    m_dPtr->activeControlPointIndex = -1;
+    m_editMode = EditMode::None;
+    m_isEditingPoints = false;
+    m_isDraggingPoint = false;
+    m_selectedControlPointIndex = -1;
+    m_activeControlPointIndex = -1;
 
     emit editingFinished();
     update();
@@ -231,11 +209,11 @@ std::shared_ptr<InterpolatedCurve> Canvas::getSelectedCurve() const {
 
 int Canvas::hitTestControlPoint(const QPointF& pos, double tolerance) {
     auto curve = getSelectedCurve();
-    if (!curve || !m_dPtr->viewportManager) return -1;
+    if (!curve || !m_viewportManager) return -1;
 
     const auto& points = curve->getPoints();
     for (size_t i = 0; i < points.size(); ++i) {
-        QPointF screenPos = m_dPtr->viewportManager->worldToScreen(
+        QPointF screenPos = m_viewportManager->worldToScreen(
             QPointF(points[i].x(), points[i].y()));
 
         if (QLineF(pos, screenPos).length() <= tolerance) {
@@ -247,14 +225,14 @@ int Canvas::hitTestControlPoint(const QPointF& pos, double tolerance) {
 }
 
 bool Canvas::addControlPoint(const QPointF& screenPos) {
-    auto curve = getSelectedCurve();
-    if (!curve || !m_dPtr->viewportManager) return false;
+    const auto curve = getSelectedCurve();
+    if (!curve || !m_viewportManager) return false;
 
-    QPointF worldPos = m_dPtr->viewportManager->screenToWorld(screenPos);
+    const QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
 
     curve->addPoint(Point(worldPos.x(), worldPos.y()));
 
-    int newPointIndex = static_cast<int>(curve->getPointCount()) - 1;
+    const int newPointIndex = static_cast<int>(curve->getPointCount()) - 1;
 
     selectControlPoint(newPointIndex);
 
@@ -266,12 +244,12 @@ bool Canvas::addControlPoint(const QPointF& screenPos) {
 
 bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
     auto curve = getSelectedCurve();
-    if (!curve || !m_dPtr->viewportManager ||
+    if (!curve || !m_viewportManager ||
         pointIndex < 0 || pointIndex >= static_cast<int>(curve->getPointCount())) {
         return false;
     }
 
-    QPointF worldPos = m_dPtr->viewportManager->screenToWorld(screenPos);
+    QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
 
     const auto& points = curve->getPoints();
     auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
@@ -288,10 +266,10 @@ void Canvas::selectControlPoint(int pointIndex) {
     if (!curve) return;
 
     if (pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
-        m_dPtr->selectedControlPointIndex = pointIndex;
+        m_selectedControlPointIndex = pointIndex;
         emit controlPointSelected(pointIndex);
     } else {
-        m_dPtr->selectedControlPointIndex = -1;
+        m_selectedControlPointIndex = -1;
     }
 
     update();
@@ -319,48 +297,48 @@ void Canvas::paintEvent(QPaintEvent* event)
 
     painter.fillRect(rect(), Qt::white);
 
-    if (!m_dPtr->renderer) return;
+    if (!m_renderer) return;
 
-    m_dPtr->renderer->beginRender(&painter, m_dPtr->viewportManager.get());
+    m_renderer->beginRender(&painter, m_viewportManager.get());
 
-    m_dPtr->renderer->renderGrid(1.0);
-    m_dPtr->renderer->renderAxes();
+    m_renderer->renderGrid(1.0);
+    m_renderer->renderAxes();
 
-    for (const auto& object : m_dPtr->objects) {
-        m_dPtr->renderer->renderObject(*object);
+    for (const auto& object : m_objects) {
+        m_renderer->renderObject(*object);
     }
 
-    if (m_dPtr->selectedObject) {
-        const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_dPtr->selectedObject.get());
+    if (m_selectedObject) {
+        const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_selectedObject.get());
         if (geometricObj) {
             auto position = geometricObj->getPosition();
-            QPointF selectionPos = m_dPtr->viewportManager->worldToScreen(QPointF(position.x(), position.y()));
-            m_dPtr->renderer->renderSelectionMarker(selectionPos);
+            QPointF selectionPos = m_viewportManager->worldToScreen(QPointF(position.x(), position.y()));
+            m_renderer->renderSelectionMarker(selectionPos);
         }
     }
 
-    if (m_dPtr->isEditingPoints && m_dPtr->selectedObject) {
+    if (m_isEditingPoints && m_selectedObject) {
         drawControlPoints();
     }
 
-    m_dPtr->renderer->endRender();
+    m_renderer->endRender();
 }
 
 void Canvas::drawControlPoints() {
     auto curve = getSelectedCurve();
-    if (!curve || !m_dPtr->renderer) return;
+    if (!curve || !m_renderer) return;
 
     const auto& points = curve->getPoints();
 
-    m_dPtr->renderer->renderControlPolygon(points);
+    m_renderer->renderControlPolygon(points);
 
-    m_dPtr->renderer->renderControlPoints(points, m_dPtr->selectedControlPointIndex, m_dPtr->activeControlPointIndex);
+    m_renderer->renderControlPoints(points, m_selectedControlPointIndex, m_activeControlPointIndex);
 }
 
 void Canvas::resizeEvent(QResizeEvent* event)
 {
-    if (m_dPtr->viewportManager) {
-        m_dPtr->viewportManager->setWindowSize(event->size().width(), event->size().height());
+    if (m_viewportManager) {
+        m_viewportManager->setWindowSize(event->size().width(), event->size().height());
         emit viewportChanged();
     }
 
@@ -369,30 +347,30 @@ void Canvas::resizeEvent(QResizeEvent* event)
 
 void Canvas::mousePressEvent(QMouseEvent* event)
 {
-    m_dPtr->lastMousePos = event->pos();
+    m_lastMousePos = event->pos();
 
     if (event->button() == Qt::LeftButton) {
-        if (m_dPtr->editMode == EditMode::AddPoint) {
+        if (m_editMode == EditMode::AddPoint) {
             addControlPoint(event->pos());
             return;
         }
-        else if (m_dPtr->editMode == EditMode::MovePoint) {
+        else if (m_editMode == EditMode::MovePoint) {
             int pointIndex = hitTestControlPoint(event->pos());
             if (pointIndex >= 0) {
                 selectControlPoint(pointIndex);
-                m_dPtr->isDraggingPoint = true;
-                m_dPtr->activeControlPointIndex = pointIndex;
+                m_isDraggingPoint = true;
+                m_activeControlPointIndex = pointIndex;
                 setCursor(Qt::ClosedHandCursor);
                 return;
             }
         }
         else {
-            m_dPtr->isSelecting = true;
-            m_dPtr->selectionPoint = event->pos();
+            m_isSelecting = true;
+            m_selectionPoint = event->pos();
         }
     }
     else if (event->button() == Qt::MiddleButton) {
-        m_dPtr->isPanning = true;
+        m_isPanning = true;
         setCursor(Qt::ClosedHandCursor);
     }
 
@@ -402,19 +380,19 @@ void Canvas::mousePressEvent(QMouseEvent* event)
 void Canvas::mouseMoveEvent(QMouseEvent* event)
 {
     QPointF currentPos = event->pos();
-    QPointF delta = currentPos - m_dPtr->lastMousePos;
+    QPointF delta = currentPos - m_lastMousePos;
 
-    if (m_dPtr->isDraggingPoint && m_dPtr->activeControlPointIndex >= 0) {
-        moveControlPoint(m_dPtr->activeControlPointIndex, currentPos);
+    if (m_isDraggingPoint && m_activeControlPointIndex >= 0) {
+        moveControlPoint(m_activeControlPointIndex, currentPos);
     }
-    else if (m_dPtr->isPanning) {
-        if (m_dPtr->viewportManager) {
-            m_dPtr->viewportManager->pan(delta);
+    else if (m_isPanning) {
+        if (m_viewportManager) {
+            m_viewportManager->pan(delta);
             emit viewportChanged();
             update();
         }
     }
-    else if (m_dPtr->editMode == EditMode::MovePoint) {
+    else if (m_editMode == EditMode::MovePoint) {
         int pointIndex = hitTestControlPoint(currentPos);
         if (pointIndex >= 0) {
             setCursor(Qt::OpenHandCursor);
@@ -423,29 +401,29 @@ void Canvas::mouseMoveEvent(QMouseEvent* event)
         }
     }
 
-    m_dPtr->lastMousePos = currentPos;
+    m_lastMousePos = currentPos;
     QWidget::mouseMoveEvent(event);
 }
 
 void Canvas::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton) {
-        if (m_dPtr->isDraggingPoint) {
-            m_dPtr->isDraggingPoint = false;
-            m_dPtr->activeControlPointIndex = -1;
+        if (m_isDraggingPoint) {
+            m_isDraggingPoint = false;
+            m_activeControlPointIndex = -1;
 
-            if (m_dPtr->editMode == EditMode::MovePoint) {
+            if (m_editMode == EditMode::MovePoint) {
                 setCursor(Qt::OpenHandCursor);
             } else {
                 setCursor(Qt::ArrowCursor);
             }
         }
-        else if (m_dPtr->isSelecting) {
-            m_dPtr->isSelecting = false;
+        else if (m_isSelecting) {
+            m_isSelecting = false;
         }
     }
     else if (event->button() == Qt::MiddleButton) {
-        m_dPtr->isPanning = false;
+        m_isPanning = false;
         setCursor(Qt::ArrowCursor);
     }
 
@@ -454,12 +432,12 @@ void Canvas::mouseReleaseEvent(QMouseEvent* event)
 
 void Canvas::wheelEvent(QWheelEvent* event)
 {
-    if (m_dPtr->viewportManager) {
+    if (m_viewportManager) {
         QPointF center = event->position();
 
         double factor = event->angleDelta().y() > 0 ? 1.1 : 0.9;
 
-        m_dPtr->viewportManager->zoom(factor, center);
+        m_viewportManager->zoom(factor, center);
         emit viewportChanged();
         update();
     }
@@ -472,14 +450,14 @@ void Canvas::keyPressEvent(QKeyEvent* event)
     if (event->key() == Qt::Key_Escape) {
         finishEditing();
     }
-    else if (event->key() == Qt::Key_Delete && m_dPtr->selectedControlPointIndex >= 0) {
+    else if (event->key() == Qt::Key_Delete && m_selectedControlPointIndex >= 0) {
         auto curve = getSelectedCurve();
-        if (curve && m_dPtr->selectedControlPointIndex >= 0 &&
-            m_dPtr->selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
+        if (curve && m_selectedControlPointIndex >= 0 &&
+            m_selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
 
             if (curve->getPointCount() > 2) {
-                curve->removePoint(m_dPtr->selectedControlPointIndex);
-                m_dPtr->selectedControlPointIndex = -1;
+                curve->removePoint(m_selectedControlPointIndex);
+                m_selectedControlPointIndex = -1;
                 update();
             } else {
                 QMessageBox::warning(this, "Usuwanie punktu",

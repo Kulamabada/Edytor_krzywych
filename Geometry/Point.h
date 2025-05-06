@@ -1,3 +1,4 @@
+// Plik: Geometry\Point.h
 #pragma once
 
 #include "GeometricObject.h"
@@ -7,17 +8,17 @@ class TransformMatrix;
 
 class Point : public GeometricObject {
 public:
-    Point();
-    Point(double x, double y, double z = 0.0);
+    Point() : m_coordinates{0.0, 0.0, 0.0} {}
+    Point(double x, double y, double z = 0.0) : m_coordinates{x, y, z} {}
     virtual ~Point() override = default;
 
-    // Coordinate access
-    double x() const;
-    double y() const;
-    double z() const;
-    void setX(double x);
-    void setY(double y);
-    void setZ(double z);
+    // Coordinate access - inline implementations
+    double x() const { return m_coordinates[0]; }
+    double y() const { return m_coordinates[1]; }
+    double z() const { return m_coordinates[2]; }
+    void setX(double x) { m_coordinates[0] = x; }
+    void setY(double y) { m_coordinates[1] = y; }
+    void setZ(double z) { m_coordinates[2] = z; }
 
     // Vector operations
     double distanceTo(const Point& other) const;
@@ -25,8 +26,14 @@ public:
 
     // Override from GeometricObject
     void transform(const TransformMatrix& matrix) override;
-    Eigen::Vector3d getPosition() const override;
-    void setPosition(const Eigen::Vector3d& position) override;
+
+    // Również inline jako proste metody dostępowe
+    Eigen::Vector3d getPosition() const override { return Eigen::Vector3d(x(), y(), z()); }
+    void setPosition(const Eigen::Vector3d& position) override {
+        setX(position.x());
+        setY(position.y());
+        setZ(position.z());
+    }
 
 private:
     std::array<double, 3> m_coordinates;
