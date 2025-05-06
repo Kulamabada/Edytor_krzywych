@@ -1,3 +1,5 @@
+#pragma once
+
 #include "IRenderer.h"
 #include <QColor>
 #include <Qt>

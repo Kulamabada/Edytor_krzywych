@@ -1,4 +1,4 @@
-// Plik wygenerowany automatycznie 2025-05-06 18:04:43
+// Plik wygenerowany automatycznie 2025-05-06 18:35:38
 // Zawiera 29 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
@@ -1467,7 +1467,6 @@ Eigen::Matrix4d StandardTransformMatrix::multiply(const Eigen::Matrix4d& other) 
 
 //===== START FILE: Geometry\TransformMatrix.h =====//
 
-// File: TransformMatrix.h
 #pragma once
 #include <Eigen/Dense>
 #include <memory>
@@ -1975,9 +1974,6 @@ void Canvas::keyPressEvent(QKeyEvent* event)
 
 //===== START FILE: Graphics\Canvas.h =====//
 
-#ifndef CANVAS_H
-#define CANVAS_H
-
 #include <QWidget>
 #include <memory>
 #include <vector>
@@ -2087,8 +2083,6 @@ private:
     bool m_isEditingPoints{false};
     bool m_isDraggingPoint{false};
 };
-
-#endif // CANVAS_H
 
 //===== END FILE: Graphics\Canvas.h =====//
 
@@ -2591,9 +2585,6 @@ void QtRenderer::setDrawControlPolygon(bool draw)
 
 //===== START FILE: Graphics\QtRenderer.h =====//
 
-#ifndef QTRENDERER_H
-#define QTRENDERER_H
-
 #include "IRenderer.h"
 #include <QColor>
 #include <Qt>
@@ -2668,8 +2659,6 @@ private:
     QPainter* m_painter{nullptr};
     ViewportManager* m_viewportManager{nullptr};
 };
-
-#endif // QTRENDERER_H
 
 //===== END FILE: Graphics\QtRenderer.h =====//
 
@@ -2882,9 +2871,6 @@ void ViewportManager::updateTransformations()
 
 //===== START FILE: Graphics\ViewportManager.h =====//
 
-#ifndef VIEWPORTMANAGER_H
-#define VIEWPORTMANAGER_H
-
 #include <QPointF>
 #include <QRectF>
 #include <QTransform>
@@ -2942,8 +2928,6 @@ private:
     double m_minZoom;
     double m_maxZoom;
 };
-
-#endif // VIEWPORTMANAGER_H
 
 //===== END FILE: Graphics\ViewportManager.h =====//
 
@@ -3011,7 +2995,6 @@ Eigen::MatrixXd EigenMathAdapter::toEigenMatrix(const std::vector<std::vector<do
 
 //===== START FILE: Math\EigenMathAdapter.h =====//
 
-// File: EigenMathAdapter.h
 #pragma once
 
 #include "IMathProvider.h"
@@ -3045,7 +3028,6 @@ private:
 
 //===== START FILE: Math\IMathProvider.h =====//
 
-// File: IMathProvider.h
 #pragma once
 
 #include <memory>
