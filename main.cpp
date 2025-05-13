@@ -3,6 +3,7 @@
 #include <QMenuBar>
 #include <QToolBar>
 #include <QAction>
+#include <QTimer>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QVBoxLayout>
@@ -18,6 +19,8 @@
 #include <QToolButton>
 #include <QComboBox>
 #include <QPushButton>
+#include <QColorDialog>
+#include <QDoubleSpinBox>
 
 #include "Graphics/Canvas.h"
 #include "Core/CommandManager.h"
@@ -82,7 +85,7 @@ int main(int argc, char *argv[]) {
     editModeGroup->addAction(selectModeAction);
     editModeGroup->addAction(addPointModeAction);
     editModeGroup->addAction(movePointModeAction);
-    selectModeAction->setChecked(true); // Domyślnie tryb zaznaczania
+    selectModeAction->setChecked(true);
 
     auto *viewMenu = menuBar->addMenu("Widok");
     QAction *zoomInAction = viewMenu->addAction(QIcon::fromTheme("zoom-in"), "Przybliż");
@@ -100,6 +103,7 @@ int main(int argc, char *argv[]) {
     QAction *oifsAction = interpolatedCurvesMenu->addAction("OIFS3 (Closed Cubic Spline)");
     QAction *lagrangeAction = interpolatedCurvesMenu->addAction("Lagrange");
     QAction *barycentricAction = interpolatedCurvesMenu->addAction("Barycentric");
+    QAction *parametricAction = curvesMenu->addAction("Krzywa parametryczna");
 
     auto interpolatedButton = new QToolButton();
     interpolatedButton->setText("Krzywa interpolacyjna");
@@ -121,6 +125,7 @@ int main(int argc, char *argv[]) {
     toolBar->addSeparator();
     // toolBar->addAction(bezierAction);
     toolBar->addWidget(interpolatedButton);
+    toolBar->addAction(parametricAction);
     toolBar->addSeparator();
     toolBar->addAction(zoomInAction);
     toolBar->addAction(zoomOutAction);
@@ -212,8 +217,8 @@ int main(int argc, char *argv[]) {
         objectsTree->expandAll();
     };
 
-    auto updatePropertiesPanel = [&]() {
-        QLayoutItem* child;
+    std::function<void()> updatePropertiesPanel = [&]() {
+    QLayoutItem* child;
         while ((child = propertiesLayout->takeAt(0)) != nullptr) {
             delete child->widget();
             delete child;
@@ -229,9 +234,6 @@ int main(int argc, char *argv[]) {
         if (curve) {
             propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej interpolowanej</b>"));
 
-            // propertiesLayout->addWidget(new QLabel(QString("Liczba punktów kontrolnych: %1")
-            //     .arg(curve->getPointCount())));
-
             propertiesLayout->addWidget(new QLabel("Typ interpolacji:"));
 
             QComboBox* typeCombo = new QComboBox();
@@ -241,14 +243,16 @@ int main(int argc, char *argv[]) {
             typeCombo->addItem("Barycentric", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Barycentric)));
 
             typeCombo->setCurrentIndex(static_cast<int>(curve->getInterpolationType()));
-
             propertiesLayout->addWidget(typeCombo);
 
             QObject::connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                [curve, statusBar, canvas](int index) {
-                    auto type = static_cast<InterpolatedCurve::InterpolationType>(index);
+                [curve, statusBar, canvas, &updatePropertiesPanel](int index) {
+                    const auto type = static_cast<InterpolatedCurve::InterpolationType>(index);
                     curve->setInterpolationType(type);
                     canvas->refresh();
+                    QTimer::singleShot(0, [&updatePropertiesPanel]() {
+                            updatePropertiesPanel();
+                        });
 
                     QString typeName;
                     switch (type) {
@@ -261,30 +265,97 @@ int main(int argc, char *argv[]) {
                     statusBar->showMessage(QString("Zmieniono typ interpolacji na %1").arg(typeName));
                 });
 
-            propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: -"))); //%1")
-                //.arg(QString::number(curve->getLength(), 'f', 2))));
+            // Kolor linii - nowa sekcja
+            propertiesLayout->addWidget(new QLabel("Kolor linii:"));
+
+            QPushButton* colorButton = new QPushButton();
+            colorButton->setFixedSize(80, 25);
+            QColor currentColor = curve->getColor();
+            QString styleSheet = QString("background-color: %1;").arg(currentColor.name());
+            colorButton->setStyleSheet(styleSheet);
+
+            propertiesLayout->addWidget(colorButton);
+
+            QObject::connect(colorButton, &QPushButton::clicked, [curve, colorButton, canvas, statusBar]() {
+                QColor color = QColorDialog::getColor(curve->getColor(), nullptr, "Wybierz kolor linii");
+                if (color.isValid()) {
+                    curve->setColor(color);
+                    QString styleSheet = QString("background-color: %1;").arg(color.name());
+                    colorButton->setStyleSheet(styleSheet);
+                    canvas->refresh();
+                    statusBar->showMessage("Zmieniono kolor linii");
+                }
+            });
+
+            propertiesLayout->addWidget(new QLabel("Grubość linii:"));
+
+            QDoubleSpinBox* widthSpinBox = new QDoubleSpinBox();
+            widthSpinBox->setRange(0.1, 10.0);
+            widthSpinBox->setSingleStep(0.1);
+            widthSpinBox->setValue(curve->getLineWidth());
+
+            propertiesLayout->addWidget(widthSpinBox);
+
+            QObject::connect(widthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [curve, canvas, statusBar](double value) {
+                curve->setLineWidth(value);
+                canvas->refresh();
+                statusBar->showMessage(QString("Zmieniono grubość linii na %1").arg(std::to_string(value)));
+            });
+
+            propertiesLayout->addWidget(new QLabel("Styl linii:"));
+
+            QComboBox* lineStyleCombo = new QComboBox();
+            lineStyleCombo->addItem("Ciągła", static_cast<int>(Qt::SolidLine));
+            lineStyleCombo->addItem("Przerywana", static_cast<int>(Qt::DashLine));
+            lineStyleCombo->addItem("Kropkowana", static_cast<int>(Qt::DotLine));
+            lineStyleCombo->addItem("Kreska-kropka", static_cast<int>(Qt::DashDotLine));
+            lineStyleCombo->addItem("Kreska-kropka-kropka", static_cast<int>(Qt::DashDotDotLine));
+
+            int styleIndex = 0;
+            switch (curve->getLineStyle()) {
+                case Qt::SolidLine: styleIndex = 0; break;
+                case Qt::DashLine: styleIndex = 1; break;
+                case Qt::DotLine: styleIndex = 2; break;
+                case Qt::DashDotLine: styleIndex = 3; break;
+                case Qt::DashDotDotLine: styleIndex = 4; break;
+                default: styleIndex = 0; break;
+            }
+
+            lineStyleCombo->setCurrentIndex(styleIndex);
+
+            propertiesLayout->addWidget(lineStyleCombo);
+
+            QObject::connect(lineStyleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), [curve, lineStyleCombo, canvas, statusBar](int index) {
+                Qt::PenStyle style = static_cast<Qt::PenStyle>(lineStyleCombo->itemData(index).toInt());
+                curve->setLineStyle(style);
+                canvas->refresh();
+                statusBar->showMessage("Zmieniono styl linii");
+            });
+
+            propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: %1")
+                .arg(QString::number(curve->getLength(), 'f', 2))));
         } else {
             propertiesLayout->addWidget(new QLabel("Wybierz krzywą interpolowaną, aby edytować jej właściwości"));
         }
         propertiesLayout->addStretch();
-    };
+        };
 
-    auto updateModeLabel = [modeLabel, canvas]() {
-        switch (canvas->getEditMode()) {
-            case Canvas::EditMode::None:
-                modeLabel->setText("Tryb: Normalny");
-                break;
-            case Canvas::EditMode::SelectObject:
-                modeLabel->setText("Tryb: Zaznaczanie obiektu");
-                break;
-            case Canvas::EditMode::AddPoint:
-                modeLabel->setText("Tryb: Dodawanie punktu");
-                break;
-            case Canvas::EditMode::MovePoint:
-                modeLabel->setText("Tryb: Przesuwanie punktu");
-                break;
-        }
-    };
+        auto updateModeLabel = [modeLabel, canvas]() {
+            switch (canvas->getEditMode()) {
+                case Canvas::EditMode::None:
+                    modeLabel->setText("Tryb: Normalny");
+                    break;
+                case Canvas::EditMode::SelectObject:
+                    modeLabel->setText("Tryb: Zaznaczanie obiektu");
+                    break;
+                case Canvas::EditMode::AddPoint:
+                    modeLabel->setText("Tryb: Dodawanie punktu");
+                    break;
+                case Canvas::EditMode::MovePoint:
+                    modeLabel->setText("Tryb: Przesuwanie punktu");
+                    break;
+            }
+        };
 
     QObject::connect(exitAction, &QAction::triggered, &app, &QApplication::quit);
 
@@ -366,6 +437,12 @@ int main(int argc, char *argv[]) {
 
     auto createInterpolatedCurve = [&](InterpolatedCurve::InterpolationType type, const QString &typeName) {
         auto curve = std::make_shared<InterpolatedCurve>(mathProvider, type);
+
+        // Ustawiamy domyślne wartości stylu
+        curve->setColor(Qt::blue);
+        curve->setLineWidth(1.0);
+        curve->setLineStyle(Qt::SolidLine);
+
         curve->addPoint(Point(0, 0));
         curve->addPoint(Point(50, 100));
         curve->addPoint(Point(100, 0));
@@ -439,12 +516,12 @@ int main(int argc, char *argv[]) {
     });
 
     QObject::connect(deletePointAction, &QAction::triggered, [&]() {
-        auto curve = canvas->getSelectedCurve();
-        if (curve) {
+        if (auto curve = canvas->getSelectedCurve()) {
             QKeyEvent keyEvent(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
             QApplication::sendEvent(canvas, &keyEvent);
 
             updateObjectsTree();
+            updatePropertiesPanel();
             statusBar->showMessage("Usunięto punkt kontrolny");
         } else {
             statusBar->showMessage("Nie wybrano krzywej lub punktu kontrolnego");
@@ -496,11 +573,13 @@ int main(int argc, char *argv[]) {
 
     QObject::connect(canvas, &Canvas::controlPointAdded, [&](int pointIndex) {
         updateObjectsTree();
+        updatePropertiesPanel();
         statusBar->showMessage(QString("Dodano punkt kontrolny %1").arg(std::to_string(pointIndex)));
     });
 
     QObject::connect(canvas, &Canvas::controlPointMoved, [&](int pointIndex) {
         updateObjectsTree();
+        updatePropertiesPanel();
         statusBar->showMessage(QString("Przesunięto punkt kontrolny %1").arg(std::to_string(pointIndex)));
     });
 

@@ -278,12 +278,12 @@ Point InterpolatedCurve::getPointAt(double t) const {
 
 
 double InterpolatedCurve::getLength() const {
-    const int steps = 20;
+    constexpr int steps = 200;
     double length = 0.0;
     Point prev = getPointAt(0.0);
 
     for (int i = 1; i <= steps; ++i) {
-        double t = static_cast<double>(i) / steps;
+        const double t = static_cast<double>(i) / steps;
         Point curr = getPointAt(t);
         length += prev.distanceTo(curr);
         prev = curr;

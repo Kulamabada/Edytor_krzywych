@@ -1,4 +1,5 @@
 #include "QtRenderer.h"
+#include "../Geometry/InterpolatedCurve.h"
 
 QtRenderer::QtRenderer() = default;
 
@@ -52,7 +53,19 @@ void QtRenderer::renderCurve(const Curve& curve)
     if (!m_painter || !m_viewportManager)
         return;
 
-    QPen pen(m_curveColor, m_curveWidth, m_curveStyle);
+    const InterpolatedCurve* interpolatedCurve = dynamic_cast<const InterpolatedCurve*>(&curve);
+
+    QColor color = m_curveColor;
+    double width = m_curveWidth;
+    Qt::PenStyle style = m_curveStyle;
+
+    if (interpolatedCurve) {
+        color = interpolatedCurve->getColor();
+        width = interpolatedCurve->getLineWidth();
+        style = interpolatedCurve->getLineStyle();
+    }
+
+    const QPen pen(color, width, style);
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 

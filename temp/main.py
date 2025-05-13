@@ -5,7 +5,7 @@ import datetime
 
 def collect_files(project_dir="C:\\Users\\julek\\CLionProjects\\edytor krzywych",
                   output_dir="C:\\Users\\julek\\CLionProjects\\edytor krzywych\\temp",
-                  output_file="temp.txt",
+                  output_file="edytor_krzywych_code.txt",
                   extensions=[".cpp", ".h", ".hpp"]):
     """
     Zbiera wszystkie pliki projektu C++ z podanych rozszerzeń do jednego pliku tekstowego.
@@ -16,7 +16,7 @@ def collect_files(project_dir="C:\\Users\\julek\\CLionProjects\\edytor krzywych"
     # Pełna ścieżka do pliku wyjściowego
     output_path = os.path.join(output_dir, output_file)
 
-    excluded_dirs = ['cmake-build-debug', 'cmake-build-release', 'cmake-build-debug-mingw', '.idea', 'CMakeFiles', 'eigen-3.4.0']
+    excluded_dirs = ['cmake-build-debug', 'cmake-build-release', 'cmake-build-debug-mingw', '.idea', 'CMakeFiles', 'eigen-3.4.0', 'muparser']
     collected_files = []
 
     print(f"Przeszukuję katalog: {project_dir}")

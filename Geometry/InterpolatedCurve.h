@@ -5,6 +5,7 @@
 #include <memory>
 #include <Eigen/Dense>
 #include "NaturalSpline.h"
+#include <QColor>
 
 class IMathProvider;
 class Point;
@@ -43,6 +44,15 @@ enum class InterpolationType {
     Vector getPosition() const override;
     void setPosition(const Eigen::Vector3d& position) override;
 
+    void setColor(const QColor& color) { m_color = color; }
+    QColor getColor() const { return m_color; }
+
+    void setLineWidth(double width) { m_lineWidth = width; }
+    double getLineWidth() const { return m_lineWidth; }
+
+    void setLineStyle(Qt::PenStyle style) { m_lineStyle = style; }
+    Qt::PenStyle getLineStyle() const { return m_lineStyle; }
+
 private:
     std::vector<Point> points;
     InterpolationType type;
@@ -50,6 +60,10 @@ private:
 
     mutable std::vector<Eigen::Matrix<double, 4, 2>> coefficients;
     mutable bool needsRebuild{true};
+
+    QColor m_color{Qt::blue};
+    double m_lineWidth{1.0};
+    Qt::PenStyle m_lineStyle{Qt::SolidLine};
 
     void buildNIFS3() const;
     void buildOIFS3() const;
