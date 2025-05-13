@@ -58,25 +58,20 @@ int main(int argc, char *argv[]) {
     redoAction->setShortcut(QKeySequence::Redo);
     editMenu->addSeparator();
     QAction *deleteAction = editMenu->addAction(QIcon::fromTheme("edit-delete"), "Usuń");
-    deleteAction->setShortcut(QKeySequence::Delete);
 
     editMenu->addSeparator();
     QMenu *controlPointsMenu = editMenu->addMenu("Edycja punktów kontrolnych");
 
     QAction *selectModeAction = controlPointsMenu->addAction(QIcon::fromTheme("edit-select"), "Zaznacz punkt");
     selectModeAction->setCheckable(true);
-    selectModeAction->setShortcut(QKeySequence("Ctrl+1"));
 
     QAction *addPointModeAction = controlPointsMenu->addAction(QIcon::fromTheme("list-add"), "Dodaj punkt");
     addPointModeAction->setCheckable(true);
-    addPointModeAction->setShortcut(QKeySequence("Ctrl+2"));
 
     QAction *movePointModeAction = controlPointsMenu->addAction(QIcon::fromTheme("transform-move"), "Przesuń punkt");
     movePointModeAction->setCheckable(true);
-    movePointModeAction->setShortcut(QKeySequence("Ctrl+3"));
 
     QAction *deletePointAction = controlPointsMenu->addAction(QIcon::fromTheme("edit-delete"), "Usuń punkt");
-    deletePointAction->setShortcut(QKeySequence("Ctrl+D"));
 
     QAction *finishEditingAction = controlPointsMenu->addAction(QIcon::fromTheme("dialog-cancel"), "Zakończ edycję");
     finishEditingAction->setShortcut(QKeySequence("Esc"));
