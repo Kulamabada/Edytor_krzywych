@@ -1,5 +1,6 @@
 #include "QtRenderer.h"
 #include "../Geometry/InterpolatedCurve.h"
+#include "../Geometry/ImageObject.h"
 
 QtRenderer::QtRenderer() = default;
 
@@ -53,7 +54,7 @@ void QtRenderer::renderCurve(const Curve& curve)
     if (!m_painter || !m_viewportManager)
         return;
 
-    const InterpolatedCurve* interpolatedCurve = dynamic_cast<const InterpolatedCurve*>(&curve);
+    const auto interpolatedCurve = dynamic_cast<const InterpolatedCurve*>(&curve);
 
     QColor color = m_curveColor;
     double width = m_curveWidth;
@@ -83,14 +84,12 @@ void QtRenderer::renderCurve(const Curve& curve)
 
 void QtRenderer::renderObject(const GeometricObject& object)
 {
-    const Point* point = dynamic_cast<const Point*>(&object);
-    if (point) {
+    if (const auto* point = dynamic_cast<const Point*>(&object)) {
         renderPoint(*point);
         return;
     }
 
-    const Curve* curve = dynamic_cast<const Curve*>(&object);
-    if (curve)
+    if (const auto* curve = dynamic_cast<const Curve*>(&object))
         renderCurve(*curve);
 }
 

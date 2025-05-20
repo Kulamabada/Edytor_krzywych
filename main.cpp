@@ -18,12 +18,14 @@
 #include <cmath>
 #include <QToolButton>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QPushButton>
 #include <QColorDialog>
 #include <QDoubleSpinBox>
 
 #include "Graphics/Canvas.h"
 #include "Core/CommandManager.h"
+#include "Geometry/ImageObject.h"
 #include "Geometry/InterpolatedCurve.h"
 #include "Geometry/Point.h"
 #include "Graphics/QtRenderer.h"
@@ -105,6 +107,18 @@ int main(int argc, char *argv[]) {
     interpolatedButton->setPopupMode(QToolButton::InstantPopup);
     interpolatedButton->setMenu(interpolatedCurvesMenu);
 
+    QMenu *imageMenu = menuBar->addMenu("Obrazy");
+    QAction *addImageAction = imageMenu->addAction("Dodaj obraz...");
+    QAction *editImageAction = imageMenu->addAction("Edytuj narożniki obrazu");
+    QAction *lockImageAction = imageMenu->addAction("Zablokuj/Odblokuj obraz");
+
+    auto *imageToolBar = new QToolBar("Obrazy", &mainWindow);
+    mainWindow.addToolBar(imageToolBar);
+
+    imageToolBar->addAction(addImageAction);
+    imageToolBar->addAction(editImageAction);
+    imageToolBar->addAction(lockImageAction);
+
     QMenu *helpMenu = menuBar->addMenu("Pomoc");
     QAction *aboutAction = helpMenu->addAction(QIcon::fromTheme("help-about"), "O programie");
 
@@ -139,18 +153,18 @@ int main(int argc, char *argv[]) {
     auto *centralWidget = new QWidget(&mainWindow);
     auto *layout = new QVBoxLayout(centralWidget);
 
-    Canvas *canvas = new Canvas(centralWidget);
+    auto *canvas = new Canvas(centralWidget);
     layout->addWidget(canvas);
 
-    auto renderer = std::make_shared<QtRenderer>();
+    const auto renderer = std::make_shared<QtRenderer>();
     canvas->setRenderer(renderer);
 
     mainWindow.setCentralWidget(centralWidget);
 
-    QDockWidget *objectsDock = new QDockWidget("Obiekty i punkty kontrolne", &mainWindow);
+    auto *objectsDock = new QDockWidget("Obiekty i punkty kontrolne", &mainWindow);
     objectsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    QTreeWidget *objectsTree = new QTreeWidget(objectsDock);
+    auto *objectsTree = new QTreeWidget(objectsDock);
     objectsTree->setHeaderLabels(QStringList() << "Nazwa" << "Współrzędne");
     objectsTree->setColumnCount(2);
     objectsTree->setRootIsDecorated(true);
@@ -162,15 +176,15 @@ int main(int argc, char *argv[]) {
     QDockWidget *propertiesDock = new QDockWidget("Właściwości", &mainWindow);
     propertiesDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    QWidget *propertiesWidget = new QWidget(propertiesDock);
-    QVBoxLayout *propertiesLayout = new QVBoxLayout(propertiesWidget);
+    auto *propertiesWidget = new QWidget(propertiesDock);
+    auto *propertiesLayout = new QVBoxLayout(propertiesWidget);
     propertiesLayout->addWidget(new QLabel("Wybierz obiekt, aby edytować jego właściwości"));
     propertiesDock->setWidget(propertiesWidget);
 
     mainWindow.addDockWidget(Qt::RightDockWidgetArea, propertiesDock);
 
     QStatusBar *statusBar = mainWindow.statusBar();
-    QLabel *modeLabel = new QLabel("Tryb: Normalny");
+    auto *modeLabel = new QLabel("Tryb: Normalny");
     statusBar->addPermanentWidget(modeLabel);
     statusBar->showMessage("Gotowy");
 
@@ -183,16 +197,15 @@ int main(int argc, char *argv[]) {
 
         int index = 0;
         for (const auto& obj : canvas->objects()) {
-            QTreeWidgetItem* item = new QTreeWidgetItem(objectsTree);
+            auto* item = new QTreeWidgetItem(objectsTree);
             item->setText(0, QString("Obiekt %1").arg(std::to_string(index + 1)));
 
-            auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(obj);
-            if (curve) {
+            if (const auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(obj)) {
                 item->setText(1, "Krzywa");
 
                 const auto& points = curve->getPoints();
                 for (size_t i = 0; i < points.size(); ++i) {
-                    QTreeWidgetItem* pointItem = new QTreeWidgetItem(item);
+                    auto* pointItem = new QTreeWidgetItem(item);
                     const Point& p = points[i];
                     pointItem->setText(0, QString("Punkt %1").arg(std::to_string(i)));
                     pointItem->setText(1, QString("(%1, %2)")
@@ -200,6 +213,20 @@ int main(int argc, char *argv[]) {
 
                     pointItem->setData(0, Qt::UserRole, QVariant::fromValue(static_cast<int>(i)));
                     pointItem->setData(0, Qt::UserRole + 1, QVariant::fromValue(index));
+                }
+            }
+            else if (const auto image = std::dynamic_pointer_cast<ImageObject>(obj)) {
+                item->setText(1, "Obraz");
+
+                // Dodaj informacje o narożnikach obrazu
+                const auto& corners = image->getCornerPoints();
+                for (size_t i = 0; i < corners.size(); ++i) {
+                    auto* cornerItem = new QTreeWidgetItem(item);
+                    const Point& p = corners[i];
+                    cornerItem->setText(0, QString("Narożnik %1").arg(std::to_string(i)));
+                    cornerItem->setText(1, QString("(%1, %2)")
+                        .arg(QString::number(p.x(), 'f', 2),
+                             QString::number(p.y(), 'f', 2)));
                 }
             } else {
                 item->setText(1, "Inny");
@@ -260,7 +287,6 @@ int main(int argc, char *argv[]) {
                     statusBar->showMessage(QString("Zmieniono typ interpolacji na %1").arg(typeName));
                 });
 
-            // Kolor linii - nowa sekcja
             propertiesLayout->addWidget(new QLabel("Kolor linii:"));
 
             QPushButton* colorButton = new QPushButton();
@@ -284,7 +310,7 @@ int main(int argc, char *argv[]) {
 
             propertiesLayout->addWidget(new QLabel("Grubość linii:"));
 
-            QDoubleSpinBox* widthSpinBox = new QDoubleSpinBox();
+            auto* widthSpinBox = new QDoubleSpinBox();
             widthSpinBox->setRange(0.1, 10.0);
             widthSpinBox->setSingleStep(0.1);
             widthSpinBox->setValue(curve->getLineWidth());
@@ -299,7 +325,7 @@ int main(int argc, char *argv[]) {
 
             propertiesLayout->addWidget(new QLabel("Styl linii:"));
 
-            QComboBox* lineStyleCombo = new QComboBox();
+            auto* lineStyleCombo = new QComboBox();
             lineStyleCombo->addItem("Ciągła", static_cast<int>(Qt::SolidLine));
             lineStyleCombo->addItem("Przerywana", static_cast<int>(Qt::DashLine));
             lineStyleCombo->addItem("Kropkowana", static_cast<int>(Qt::DotLine));
@@ -329,8 +355,9 @@ int main(int argc, char *argv[]) {
 
             propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: %1")
                 .arg(QString::number(curve->getLength(), 'f', 2))));
-        } else {
-            propertiesLayout->addWidget(new QLabel("Wybierz krzywą interpolowaną, aby edytować jej właściwości"));
+        }
+        else {
+            propertiesLayout->addWidget(new QLabel("Wybierz obiekt"));
         }
         propertiesLayout->addStretch();
         };

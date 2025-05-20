@@ -1,5 +1,5 @@
-// Plik wygenerowany automatycznie 2025-05-13 19:28:10
-// Zawiera 29 plików z projektu edytora krzywych
+// Plik wygenerowany automatycznie 2025-05-20 19:26:46
+// Zawiera 31 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
 
@@ -745,6 +745,109 @@ public:
 };
 
 //===== END FILE: Geometry\GeometricObject.h =====//
+
+//===== START FILE: Geometry\ImageObject.cpp =====//
+
+#include "ImageObject.h"
+#include "TransformMatrix.h"
+
+ImageObject::ImageObject(const QString& filePath) : m_image(QImage(filePath)) {
+    const double width = m_image.width() / 20.0;  // Skalowanie do współrzędnych świata
+    const double height = m_image.height() / 20.0;
+
+    // Domyślnie tworzymy prostokąt o środku w (0,0)
+    m_cornerPoints = {
+        Point(-width/2, -height/2, 0),  // Lewy górny
+        Point(width/2, -height/2, 0),   // Prawy górny
+        Point(width/2, height/2, 0),    // Prawy dolny
+        Point(-width/2, height/2, 0)    // Lewy dolny
+    };
+}
+
+void ImageObject::setCornerPoints(const std::array<Point, 4>& points) {
+    if (m_locked) return;
+    m_cornerPoints = points;
+}
+
+void ImageObject::setOpacity(double opacity) {
+    m_opacity = std::max(0.0, std::min(1.0, opacity));
+}
+
+void ImageObject::setLocked(bool locked) {
+    m_locked = locked;
+}
+
+Vector ImageObject::getPosition() const {
+    // Zwracamy środek prostokąta
+    Vector sum = Vector::Zero();
+    for (const auto& p : m_cornerPoints) {
+        sum += Vector(p.x(), p.y(), p.z());
+    }
+    return sum / 4.0;
+}
+
+void ImageObject::setPosition(const Eigen::Vector3d& position) {
+    if (m_locked) return;
+
+    Vector currentPos = getPosition();
+    Vector delta = position - currentPos;
+
+    for (auto& p : m_cornerPoints) {
+        p.setX(p.x() + delta.x());
+        p.setY(p.y() + delta.y());
+        p.setZ(p.z() + delta.z());
+    }
+}
+
+void ImageObject::transform(const TransformMatrix& matrix) {
+    if (m_locked) return;
+
+    for (auto& p : m_cornerPoints) {
+        p.transform(matrix);
+    }
+}
+
+//===== END FILE: Geometry\ImageObject.cpp =====//
+
+//===== START FILE: Geometry\ImageObject.h =====//
+
+#pragma once
+
+#include "GeometricObject.h"
+#include "Point.h"
+#include <QImage>
+#include <array>
+
+class ImageObject final : public GeometricObject {
+public:
+    ImageObject(const QString& filePath);
+    ~ImageObject() override = default;
+
+    // Gettery i settery
+    QImage getImage() const { return m_image; }
+
+    std::array<Point, 4> getCornerPoints() const { return m_cornerPoints; }
+    void setCornerPoints(const std::array<Point, 4>& points);
+
+    double getOpacity() const { return m_opacity; }
+    void setOpacity(double opacity);
+
+    bool isLocked() const { return m_locked; }
+    void setLocked(bool locked);
+
+    // Implementacja GeometricObject
+    Vector getPosition() const override;
+    void setPosition(const Eigen::Vector3d& position) override;
+    void transform(const TransformMatrix& matrix) override;
+
+private:
+    QImage m_image;
+    std::array<Point, 4> m_cornerPoints;
+    double m_opacity{1.0};
+    bool m_locked{false};
+};
+
+//===== END FILE: Geometry\ImageObject.h =====//
 
 //===== START FILE: Geometry\InterpolatedCurve.cpp =====//
 
@@ -1514,9 +1617,9 @@ private:
 //===== START FILE: Graphics\Canvas.cpp =====//
 
 #include "Canvas.h"
-
 #include <utility>
 #include <QMessageBox>
+#include "../Geometry/ImageObject.h"
 
 Canvas::Canvas(QWidget* parent): QWidget(parent)
 {
@@ -1776,8 +1879,8 @@ bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
     return true;
 }
 
-void Canvas::selectControlPoint(int pointIndex) {
-    auto curve = getSelectedCurve();
+void Canvas::selectControlPoint(const int pointIndex) {
+    const auto curve = getSelectedCurve();
     if (!curve) return;
 
     if (pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
@@ -1870,13 +1973,34 @@ void Canvas::mousePressEvent(QMouseEvent* event)
             return;
         }
         else if (m_editMode == EditMode::MovePoint) {
-            int pointIndex = hitTestControlPoint(event->pos());
-            if (pointIndex >= 0) {
+            if (const int pointIndex = hitTestControlPoint(event->pos()); pointIndex >= 0) {
                 selectControlPoint(pointIndex);
                 m_isDraggingPoint = true;
                 m_activeControlPointIndex = pointIndex;
                 setCursor(Qt::ClosedHandCursor);
                 return;
+            }
+        }
+        else if (m_editMode == EditMode::SelectObject) {
+            if (const int pointIndex = hitTestControlPoint(event->pos()); pointIndex >= 0) {
+                selectControlPoint(pointIndex);
+                return;
+            }
+        }
+        else if (m_editMode == EditMode::EditImage) {
+            if (const auto image = getSelectedImage()) {
+                const auto& corners = image->getCornerPoints();
+                for (size_t i = 0; i < corners.size(); ++i) {
+                    QPointF screenPos = m_viewportManager->worldToScreen(
+                        QPointF(corners[i].x(), corners[i].y()));
+
+                    if (QLineF(event->pos(), screenPos).length() <= 10.0) {
+                        m_selectedImageCornerIndex = static_cast<int>(i);
+                        m_isDraggingPoint = true;
+                        setCursor(Qt::ClosedHandCursor);
+                        return;
+                    }
+                }
             }
         }
         else {
@@ -1894,10 +2018,22 @@ void Canvas::mousePressEvent(QMouseEvent* event)
 
 void Canvas::mouseMoveEvent(QMouseEvent* event)
 {
-    QPointF currentPos = event->pos();
-    QPointF delta = currentPos - m_lastMousePos;
+    const QPointF currentPos = event->pos();
+    const QPointF delta = currentPos - m_lastMousePos;
 
-    if (m_isDraggingPoint && m_activeControlPointIndex >= 0) {
+    if (m_isDraggingPoint && m_editMode == EditMode::EditImage && m_selectedImageCornerIndex >= 0) {
+        auto image = getSelectedImage();
+        if (image && !image->isLocked()) {
+            auto corners = image->getCornerPoints();
+            QPointF worldPos = m_viewportManager->screenToWorld(currentPos);
+            corners[m_selectedImageCornerIndex].setX(worldPos.x());
+            corners[m_selectedImageCornerIndex].setY(worldPos.y());
+            image->setCornerPoints(corners);
+            emit imageEdited();
+            update();
+        }
+    }
+    else if (m_isDraggingPoint && m_activeControlPointIndex >= 0) {
         moveControlPoint(m_activeControlPointIndex, currentPos);
     }
     else if (m_isPanning) {
@@ -1908,8 +2044,7 @@ void Canvas::mouseMoveEvent(QMouseEvent* event)
         }
     }
     else if (m_editMode == EditMode::MovePoint) {
-        int pointIndex = hitTestControlPoint(currentPos);
-        if (pointIndex >= 0) {
+        if (const int pointIndex = hitTestControlPoint(currentPos); pointIndex >= 0) {
             setCursor(Qt::OpenHandCursor);
         } else {
             setCursor(Qt::ArrowCursor);
@@ -1984,6 +2119,33 @@ void Canvas::keyPressEvent(QKeyEvent* event)
     QWidget::keyPressEvent(event);
 }
 
+void Canvas::addImage(const QString& filePath) {
+    auto image = std::make_shared<ImageObject>(filePath);
+    if (!image || image->getImage().isNull()) {
+        QMessageBox::warning(this, "Błąd", "Nie można załadować obrazu.");
+        return;
+    }
+
+    addObject(image);
+    selectObject(image);
+    emit imageAdded(image);
+    update();
+}
+
+void Canvas::editSelectedImage() {
+    auto image = getSelectedImage();
+    if (!image) return;
+
+    m_editMode = EditMode::EditImage;
+    m_isEditingPoints = true;
+    emit editingStarted();
+    update();
+}
+
+std::shared_ptr<ImageObject> Canvas::getSelectedImage() const {
+    return std::dynamic_pointer_cast<ImageObject>(m_selectedObject);
+}
+
 //===== END FILE: Graphics\Canvas.cpp =====//
 
 //===== START FILE: Graphics\Canvas.h =====//
@@ -2011,16 +2173,16 @@ class Canvas : public QWidget {
 
 public:
     enum class EditMode {
-        None,           // Brak trybu edycji
-        SelectObject,   // Wybieranie obiektów
-        AddPoint,       // Dodawanie nowych punktów kontrolnych
-        MovePoint       // Przesuwanie punktów kontrolnych
+        None,
+        SelectObject,
+        AddPoint,
+        MovePoint,
+        EditImage
     };
 
     explicit Canvas(QWidget* parent = nullptr);
     ~Canvas() override;
 
-    // Zarządzanie obiektami geometrycznymi
     void addObject(std::shared_ptr<GeometricObject> object);
     void removeObject(std::shared_ptr<GeometricObject> object);
     void clearObjects();
@@ -2048,6 +2210,10 @@ public:
     std::shared_ptr<InterpolatedCurve> getSelectedCurve() const;
     void selectControlPoint(int pointIndex);
 
+    void addImage(const QString& filePath);
+    void editSelectedImage();
+    std::shared_ptr<ImageObject> getSelectedImage() const;
+
 public slots:
     void refresh();
     void startAddingControlPoints();
@@ -2064,7 +2230,8 @@ signals:
     void controlPointSelected(int pointIndex);
     void editingStarted();
     void editingFinished();
-
+    void imageAdded(std::shared_ptr<ImageObject> image);
+    void imageEdited();
 protected:
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
@@ -2080,7 +2247,6 @@ private:
     bool moveControlPoint(int pointIndex, const QPointF& screenPos);
     void drawControlPoints();
 
-    // Stan obiektu bezpośrednio w klasie
     std::vector<std::shared_ptr<GeometricObject>> m_objects;
     std::shared_ptr<GeometricObject> m_selectedObject;
     std::unique_ptr<ViewportManager> m_viewportManager;
@@ -2096,6 +2262,7 @@ private:
     int m_activeControlPointIndex{-1};
     bool m_isEditingPoints{false};
     bool m_isDraggingPoint{false};
+    int m_selectedImageCornerIndex{-1};
 };
 
 //===== END FILE: Graphics\Canvas.h =====//
@@ -2117,6 +2284,7 @@ class GeometricObject;
 class Point;
 class Curve;
 class ViewportManager;
+class ImageObject;
 
 class IRenderer {
 public:
@@ -2149,6 +2317,8 @@ public:
     virtual void setDrawGrid(bool draw) = 0;
     virtual void setDrawAxes(bool draw) = 0;
     virtual void setDrawControlPolygon(bool draw) = 0;
+
+    virtual void renderImage(const ImageObject& image) = 0;
 };
 
 #endif
@@ -2159,6 +2329,7 @@ public:
 
 #include "QtRenderer.h"
 #include "../Geometry/InterpolatedCurve.h"
+#include "../Geometry/ImageObject.h"
 
 QtRenderer::QtRenderer() = default;
 
@@ -2608,6 +2779,51 @@ void QtRenderer::setDrawControlPolygon(bool draw)
     m_drawControlPolygon = draw;
 }
 
+void QtRenderer::renderImage(const ImageObject& imageObject) {
+    if (!m_painter || !m_viewportManager)
+        return;
+
+    const QImage& image = imageObject.getImage();
+    if (image.isNull())
+        return;
+
+    std::array<Point, 4> corners = imageObject.getCornerPoints();
+
+    // Konwertujemy punkty na współrzędne ekranu
+    QPolygonF screenPolygon;
+    for (const auto& corner : corners) {
+        screenPolygon << m_viewportManager->worldToScreen(QPointF(corner.x(), corner.y()));
+    }
+
+    // Ustawiamy przezroczystość obrazu
+    m_painter->save();
+    m_painter->setOpacity(imageObject.getOpacity());
+    m_painter->resetTransform();
+
+    // Używamy transformacji perspektywicznej do renderowania obrazu
+    QPolygonF sourcePolygon;
+    sourcePolygon << QPointF(0, 0) << QPointF(image.width(), 0)
+                  << QPointF(image.width(), image.height()) << QPointF(0, image.height());
+
+    QTransform quadTransform;
+    if (QTransform::quadToQuad(sourcePolygon, screenPolygon, quadTransform)) {
+        m_painter->setTransform(quadTransform);
+        m_painter->drawImage(QPointF(0, 0), image);
+    }
+
+    m_painter->restore();
+
+    // Rysujemy ramkę wokół obrazu
+    if (imageObject.isLocked()) {
+        m_painter->save();
+        m_painter->resetTransform();
+        QPen pen(Qt::blue, 2, Qt::DashLine);
+        m_painter->setPen(pen);
+        m_painter->drawPolygon(screenPolygon);
+        m_painter->restore();
+    }
+}
+
 //===== END FILE: Graphics\QtRenderer.cpp =====//
 
 //===== START FILE: Graphics\QtRenderer.h =====//
@@ -2659,6 +2875,8 @@ public:
     void setDrawGrid(bool draw) override;
     void setDrawAxes(bool draw) override;
     void setDrawControlPolygon(bool draw) override;
+
+    void renderImage(const ImageObject &imageObject) override;
 
 private:
     QColor m_pointColor{Qt::black};
@@ -3110,6 +3328,7 @@ public:
 
 #include "Graphics/Canvas.h"
 #include "Core/CommandManager.h"
+#include "Geometry/ImageObject.h"
 #include "Geometry/InterpolatedCurve.h"
 #include "Geometry/Point.h"
 #include "Graphics/QtRenderer.h"
@@ -3144,25 +3363,20 @@ int main(int argc, char *argv[]) {
     redoAction->setShortcut(QKeySequence::Redo);
     editMenu->addSeparator();
     QAction *deleteAction = editMenu->addAction(QIcon::fromTheme("edit-delete"), "Usuń");
-    deleteAction->setShortcut(QKeySequence::Delete);
 
     editMenu->addSeparator();
     QMenu *controlPointsMenu = editMenu->addMenu("Edycja punktów kontrolnych");
 
     QAction *selectModeAction = controlPointsMenu->addAction(QIcon::fromTheme("edit-select"), "Zaznacz punkt");
     selectModeAction->setCheckable(true);
-    selectModeAction->setShortcut(QKeySequence("Ctrl+1"));
 
     QAction *addPointModeAction = controlPointsMenu->addAction(QIcon::fromTheme("list-add"), "Dodaj punkt");
     addPointModeAction->setCheckable(true);
-    addPointModeAction->setShortcut(QKeySequence("Ctrl+2"));
 
     QAction *movePointModeAction = controlPointsMenu->addAction(QIcon::fromTheme("transform-move"), "Przesuń punkt");
     movePointModeAction->setCheckable(true);
-    movePointModeAction->setShortcut(QKeySequence("Ctrl+3"));
 
     QAction *deletePointAction = controlPointsMenu->addAction(QIcon::fromTheme("edit-delete"), "Usuń punkt");
-    deletePointAction->setShortcut(QKeySequence("Ctrl+D"));
 
     QAction *finishEditingAction = controlPointsMenu->addAction(QIcon::fromTheme("dialog-cancel"), "Zakończ edycję");
     finishEditingAction->setShortcut(QKeySequence("Esc"));
@@ -3195,6 +3409,18 @@ int main(int argc, char *argv[]) {
     interpolatedButton->setText("Krzywa interpolacyjna");
     interpolatedButton->setPopupMode(QToolButton::InstantPopup);
     interpolatedButton->setMenu(interpolatedCurvesMenu);
+
+    QMenu *imageMenu = menuBar->addMenu("Obrazy");
+    QAction *addImageAction = imageMenu->addAction("Dodaj obraz...");
+    QAction *editImageAction = imageMenu->addAction("Edytuj narożniki obrazu");
+    QAction *lockImageAction = imageMenu->addAction("Zablokuj/Odblokuj obraz");
+
+    auto *imageToolBar = new QToolBar("Obrazy", &mainWindow);
+    mainWindow.addToolBar(imageToolBar);
+
+    imageToolBar->addAction(addImageAction);
+    imageToolBar->addAction(editImageAction);
+    imageToolBar->addAction(lockImageAction);
 
     QMenu *helpMenu = menuBar->addMenu("Pomoc");
     QAction *aboutAction = helpMenu->addAction(QIcon::fromTheme("help-about"), "O programie");
@@ -3277,8 +3503,7 @@ int main(int argc, char *argv[]) {
             QTreeWidgetItem* item = new QTreeWidgetItem(objectsTree);
             item->setText(0, QString("Obiekt %1").arg(std::to_string(index + 1)));
 
-            auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(obj);
-            if (curve) {
+            if (const auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(obj)) {
                 item->setText(1, "Krzywa");
 
                 const auto& points = curve->getPoints();
@@ -3291,6 +3516,20 @@ int main(int argc, char *argv[]) {
 
                     pointItem->setData(0, Qt::UserRole, QVariant::fromValue(static_cast<int>(i)));
                     pointItem->setData(0, Qt::UserRole + 1, QVariant::fromValue(index));
+                }
+            }
+            else if (const auto image = std::dynamic_pointer_cast<ImageObject>(obj)) {
+                item->setText(1, "Obraz");
+
+                // Dodaj informacje o narożnikach obrazu
+                const auto& corners = image->getCornerPoints();
+                for (size_t i = 0; i < corners.size(); ++i) {
+                    QTreeWidgetItem* cornerItem = new QTreeWidgetItem(item);
+                    const Point& p = corners[i];
+                    cornerItem->setText(0, QString("Narożnik %1").arg(std::to_string(i)));
+                    cornerItem->setText(1, QString("(%1, %2)")
+                        .arg(QString::number(p.x(), 'f', 2),
+                             QString::number(p.y(), 'f', 2)));
                 }
             } else {
                 item->setText(1, "Inny");
@@ -3754,6 +3993,51 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
+    });
+
+    QObject::connect(addImageAction, &QAction::triggered, [&]() {
+        QString filePath = QFileDialog::getOpenFileName(&mainWindow, "Wybierz obraz",
+            QString(), "Obrazy (*.png *.jpg *.jpeg *.bmp);;Wszystkie pliki (*.*)");
+        if (!filePath.isEmpty()) {
+            canvas->addImage(filePath);
+            updateObjectsTree();
+            updatePropertiesPanel();
+            statusBar->showMessage("Dodano obraz");
+        }
+    });
+
+    QObject::connect(editImageAction, &QAction::triggered, [&]() {
+        auto image = canvas->getSelectedImage();
+        if (image) {
+            canvas->editSelectedImage();
+            statusBar->showMessage("Edycja narożników obrazu - przeciągnij narożniki, aby zmienić kształt");
+        } else {
+            QMessageBox::warning(&mainWindow, "Edycja obrazu", "Najpierw wybierz obraz do edycji");
+        }
+    });
+
+    QObject::connect(lockImageAction, &QAction::triggered, [&]() {
+        auto image = canvas->getSelectedImage();
+        if (image) {
+            bool isLocked = image->isLocked();
+            image->setLocked(!isLocked);
+            statusBar->showMessage(isLocked ? "Obraz odblokowany" : "Obraz zablokowany");
+            canvas->refresh();
+        } else {
+            QMessageBox::warning(&mainWindow, "Blokowanie obrazu", "Najpierw wybierz obraz do edycji");
+        }
+    });
+
+    QObject::connect(canvas, &Canvas::imageAdded, [&](std::shared_ptr<ImageObject> image) {
+        updateObjectsTree();
+        updatePropertiesPanel();
+        statusBar->showMessage("Dodano nowy obraz");
+    });
+
+    QObject::connect(canvas, &Canvas::imageEdited, [&]() {
+        updateObjectsTree();
+        updatePropertiesPanel();
+        statusBar->showMessage("Edytowano narożniki obrazu");
     });
 
     updateObjectsTree();

@@ -21,16 +21,15 @@ class Canvas : public QWidget {
 
 public:
     enum class EditMode {
-        None,           // Brak trybu edycji
-        SelectObject,   // Wybieranie obiektów
-        AddPoint,       // Dodawanie nowych punktów kontrolnych
-        MovePoint       // Przesuwanie punktów kontrolnych
+        None,
+        SelectObject,
+        AddPoint,
+        MovePoint,
     };
 
     explicit Canvas(QWidget* parent = nullptr);
     ~Canvas() override;
 
-    // Zarządzanie obiektami geometrycznymi
     void addObject(std::shared_ptr<GeometricObject> object);
     void removeObject(std::shared_ptr<GeometricObject> object);
     void clearObjects();
@@ -90,7 +89,6 @@ private:
     bool moveControlPoint(int pointIndex, const QPointF& screenPos);
     void drawControlPoints();
 
-    // Stan obiektu bezpośrednio w klasie
     std::vector<std::shared_ptr<GeometricObject>> m_objects;
     std::shared_ptr<GeometricObject> m_selectedObject;
     std::unique_ptr<ViewportManager> m_viewportManager;
@@ -106,4 +104,5 @@ private:
     int m_activeControlPointIndex{-1};
     bool m_isEditingPoints{false};
     bool m_isDraggingPoint{false};
+    int m_selectedImageCornerIndex{-1};
 };

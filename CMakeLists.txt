@@ -47,6 +47,8 @@ add_executable(edytor_krzywych
         Graphics/ViewportManager.h
         Graphics/QtRenderer.cpp
         Graphics/QtRenderer.h
+        Geometry/ImageObject.cpp
+        Geometry/ImageObject.h
 )
 
 find_package(Qt6 COMPONENTS Core Gui Widgets REQUIRED)

@@ -1,7 +1,7 @@
 #include "Canvas.h"
-
 #include <utility>
 #include <QMessageBox>
+#include "../Geometry/ImageObject.h"
 
 Canvas::Canvas(QWidget* parent): QWidget(parent)
 {
@@ -261,8 +261,8 @@ bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
     return true;
 }
 
-void Canvas::selectControlPoint(int pointIndex) {
-    auto curve = getSelectedCurve();
+void Canvas::selectControlPoint(const int pointIndex) {
+    const auto curve = getSelectedCurve();
     if (!curve) return;
 
     if (pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
@@ -355,8 +355,7 @@ void Canvas::mousePressEvent(QMouseEvent* event)
             return;
         }
         else if (m_editMode == EditMode::MovePoint) {
-            int pointIndex = hitTestControlPoint(event->pos());
-            if (pointIndex >= 0) {
+            if (const int pointIndex = hitTestControlPoint(event->pos()); pointIndex >= 0) {
                 selectControlPoint(pointIndex);
                 m_isDraggingPoint = true;
                 m_activeControlPointIndex = pointIndex;
@@ -379,9 +378,8 @@ void Canvas::mousePressEvent(QMouseEvent* event)
 
 void Canvas::mouseMoveEvent(QMouseEvent* event)
 {
-    QPointF currentPos = event->pos();
-    QPointF delta = currentPos - m_lastMousePos;
-
+    const QPointF currentPos = event->pos();
+    const QPointF delta = currentPos - m_lastMousePos;
     if (m_isDraggingPoint && m_activeControlPointIndex >= 0) {
         moveControlPoint(m_activeControlPointIndex, currentPos);
     }
@@ -393,8 +391,7 @@ void Canvas::mouseMoveEvent(QMouseEvent* event)
         }
     }
     else if (m_editMode == EditMode::MovePoint) {
-        int pointIndex = hitTestControlPoint(currentPos);
-        if (pointIndex >= 0) {
+        if (const int pointIndex = hitTestControlPoint(currentPos); pointIndex >= 0) {
             setCursor(Qt::OpenHandCursor);
         } else {
             setCursor(Qt::ArrowCursor);
