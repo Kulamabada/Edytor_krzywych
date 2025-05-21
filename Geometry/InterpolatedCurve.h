@@ -4,7 +4,6 @@
 #include <vector>
 #include <memory>
 #include <Eigen/Dense>
-#include "NaturalSpline.h"
 #include <QColor>
 
 class IMathProvider;

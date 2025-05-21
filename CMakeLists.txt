@@ -29,8 +29,6 @@ add_executable(edytor_krzywych
         Geometry/TransformMatrix.h
         Geometry/InterpolatedCurve.cpp
         Geometry/InterpolatedCurve.h
-        Geometry/NaturalSpline.cpp
-        Geometry/NaturalSpline.h
 
         Core/AbstractCommand.h
         Core/ApplicationCore.cpp
