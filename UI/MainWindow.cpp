@@ -1,0 +1,533 @@
+#include "MainWindow.h"
+#include "ActionHandler.h"
+#include "../Math/EigenMathAdapter.h"
+#include "../Graphics/QtRenderer.h"
+#include "../Geometry/ImageObject.h"
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QKeySequence>
+#include <QToolButton>
+#include <QComboBox>
+#include <QPushButton>
+#include <QColorDialog>
+#include <QDoubleSpinBox>
+#include <QCheckBox>
+#include <QApplication>
+#include <QStatusBar>
+#include <QTimer>
+
+
+MainWindow::MainWindow(QWidget* parent)
+    : QMainWindow(parent)
+    , m_canvas(nullptr)
+    , m_commandManager(std::make_unique<CommandManager>())
+    , m_mathProvider(std::make_shared<EigenMathAdapter>())
+    , m_renderer(std::make_shared<QtRenderer>())
+    , m_objectsTree(nullptr)
+    , m_modeLabel(nullptr)
+{
+    setWindowTitle("Edytor Krzywych");
+    resize(1024, 768);
+
+    createMenus();
+    createToolbars();
+    setupCentralWidget();
+    createDockWidgets();
+    connectSignals();
+
+    m_actionHandler = std::make_unique<ActionHandler>(*this);
+
+    statusBar()->showMessage("Aplikacja gotowa do użycia");
+}
+
+MainWindow::~MainWindow() = default;
+
+void MainWindow::createMenus() {
+    m_fileMenu = menuBar()->addMenu("Plik");
+    m_editMenu = menuBar()->addMenu("Edycja");
+    m_viewMenu = menuBar()->addMenu("Widok");
+    m_curvesMenu = menuBar()->addMenu("Krzywe");
+    m_imageMenu = menuBar()->addMenu("Obrazy");
+    m_helpMenu = menuBar()->addMenu("Pomoc");
+
+    // Menu Plik
+    m_newAction = m_fileMenu->addAction(QIcon::fromTheme("document-new"), "Nowy");
+    m_newAction->setShortcut(QKeySequence::New);
+    m_openAction = m_fileMenu->addAction(QIcon::fromTheme("document-open"), "Otwórz...");
+    m_openAction->setShortcut(QKeySequence::Open);
+    m_saveAction = m_fileMenu->addAction(QIcon::fromTheme("document-save"), "Zapisz");
+    m_saveAction->setShortcut(QKeySequence::Save);
+    m_saveAsAction = m_fileMenu->addAction(QIcon::fromTheme("document-save-as"), "Zapisz jako...");
+    m_saveAsAction->setShortcut(QKeySequence::SaveAs);
+    m_fileMenu->addSeparator();
+    m_exitAction = m_fileMenu->addAction(QIcon::fromTheme("application-exit"), "Wyjście");
+    m_exitAction->setShortcut(QKeySequence::Quit);
+
+    // Menu Edycja
+    m_undoAction = m_editMenu->addAction(QIcon::fromTheme("edit-undo"), "Cofnij");
+    m_undoAction->setShortcut(QKeySequence::Undo);
+    m_redoAction = m_editMenu->addAction(QIcon::fromTheme("edit-redo"), "Ponów");
+    m_redoAction->setShortcut(QKeySequence::Redo);
+    m_editMenu->addSeparator();
+    m_deleteAction = m_editMenu->addAction(QIcon::fromTheme("edit-delete"), "Usuń");
+
+    m_editMenu->addSeparator();
+    m_controlPointsMenu = m_editMenu->addMenu("Edycja punktów kontrolnych");
+
+    m_selectModeAction = m_controlPointsMenu->addAction(QIcon::fromTheme("edit-select"), "Zaznacz punkt");
+    m_selectModeAction->setCheckable(true);
+
+    m_addPointModeAction = m_controlPointsMenu->addAction(QIcon::fromTheme("list-add"), "Dodaj punkt");
+    m_addPointModeAction->setCheckable(true);
+
+    m_movePointModeAction = m_controlPointsMenu->addAction(QIcon::fromTheme("transform-move"), "Przesuń punkt");
+    m_movePointModeAction->setCheckable(true);
+
+    m_deletePointAction = m_controlPointsMenu->addAction(QIcon::fromTheme("edit-delete"), "Usuń punkt");
+
+    m_finishEditingAction = m_controlPointsMenu->addAction(QIcon::fromTheme("dialog-cancel"), "Zakończ edycję");
+    m_finishEditingAction->setShortcut(QKeySequence("Esc"));
+
+    m_editModeGroup = new QActionGroup(this);
+    m_editModeGroup->addAction(m_selectModeAction);
+    m_editModeGroup->addAction(m_addPointModeAction);
+    m_editModeGroup->addAction(m_movePointModeAction);
+    m_selectModeAction->setChecked(true);
+
+    // Menu Widok
+    m_zoomInAction = m_viewMenu->addAction(QIcon::fromTheme("zoom-in"), "Przybliż");
+    m_zoomInAction->setShortcut(QKeySequence::ZoomIn);
+    m_zoomOutAction = m_viewMenu->addAction(QIcon::fromTheme("zoom-out"), "Oddal");
+    m_zoomOutAction->setShortcut(QKeySequence::ZoomOut);
+    m_resetViewAction = m_viewMenu->addAction(QIcon::fromTheme("zoom-original"), "Resetuj widok");
+    m_resetViewAction->setShortcut(QKeySequence("Ctrl+0"));
+    m_fitContentAction = m_viewMenu->addAction(QIcon::fromTheme("zoom-fit-best"), "Dopasuj do zawartości");
+
+    // Menu Krzywe
+    m_interpolatedCurvesMenu = m_curvesMenu->addMenu("Krzywa interpolacyjna");
+    m_nifsAction = m_interpolatedCurvesMenu->addAction("NIFS3 (Natural Cubic Spline)");
+    m_oifsAction = m_interpolatedCurvesMenu->addAction("OIFS3 (Closed Cubic Spline)");
+    m_lagrangeAction = m_interpolatedCurvesMenu->addAction("Lagrange");
+    m_barycentricAction = m_interpolatedCurvesMenu->addAction("Barycentric");
+    m_parametricAction = m_curvesMenu->addAction("Krzywa parametryczna");
+
+    // Menu Obrazy
+    m_addImageAction = m_imageMenu->addAction("Dodaj obraz...");
+    m_editImageAction = m_imageMenu->addAction("Edytuj narożniki obrazu");
+    m_lockImageAction = m_imageMenu->addAction("Zablokuj/Odblokuj obraz");
+
+    // Menu Pomoc
+    m_aboutAction = m_helpMenu->addAction(QIcon::fromTheme("help-about"), "O programie");
+}
+
+void MainWindow::createToolbars() {
+    m_mainToolBar = new QToolBar("Narzędzia główne", this);
+    addToolBar(m_mainToolBar);
+
+    m_mainToolBar->addAction(m_newAction);
+    m_mainToolBar->addAction(m_openAction);
+    m_mainToolBar->addAction(m_saveAction);
+    m_mainToolBar->addSeparator();
+    m_mainToolBar->addAction(m_undoAction);
+    m_mainToolBar->addAction(m_redoAction);
+    m_mainToolBar->addSeparator();
+
+    m_interpolatedButton = new QToolButton();
+    m_interpolatedButton->setText("Krzywa interpolacyjna");
+    m_interpolatedButton->setPopupMode(QToolButton::InstantPopup);
+    m_interpolatedButton->setMenu(m_interpolatedCurvesMenu);
+    m_mainToolBar->addWidget(m_interpolatedButton);
+
+    m_mainToolBar->addAction(m_parametricAction);
+    m_mainToolBar->addSeparator();
+    m_mainToolBar->addAction(m_zoomInAction);
+    m_mainToolBar->addAction(m_zoomOutAction);
+    m_mainToolBar->addAction(m_resetViewAction);
+
+    m_editToolBar = new QToolBar("Narzędzia edycji punktów", this);
+    addToolBar(Qt::TopToolBarArea, m_editToolBar);
+
+    m_editToolBar->addAction(m_selectModeAction);
+    m_editToolBar->addAction(m_addPointModeAction);
+    m_editToolBar->addAction(m_movePointModeAction);
+    m_editToolBar->addSeparator();
+    m_editToolBar->addAction(m_deletePointAction);
+    m_editToolBar->addAction(m_finishEditingAction);
+
+    m_imageToolBar = new QToolBar("Obrazy", this);
+    addToolBar(m_imageToolBar);
+
+    m_imageToolBar->addAction(m_addImageAction);
+    m_imageToolBar->addAction(m_editImageAction);
+    m_imageToolBar->addAction(m_lockImageAction);
+}
+
+void MainWindow::setupCentralWidget() {
+    auto* centralWidget = new QWidget(this);
+    auto* layout = new QVBoxLayout(centralWidget);
+
+    m_canvas = new Canvas(centralWidget);
+    layout->addWidget(m_canvas);
+
+    m_canvas->setRenderer(m_renderer);
+
+    setCentralWidget(centralWidget);
+}
+
+void MainWindow::createDockWidgets() {
+    m_objectsDock = new QDockWidget("Obiekty i punkty kontrolne", this);
+    m_objectsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+
+    m_objectsTree = new QTreeWidget(m_objectsDock);
+    m_objectsTree->setHeaderLabels(QStringList() << "Nazwa" << "Współrzędne");
+    m_objectsTree->setColumnCount(2);
+    m_objectsTree->setRootIsDecorated(true);
+    m_objectsTree->setExpandsOnDoubleClick(true);
+    m_objectsDock->setWidget(m_objectsTree);
+
+    addDockWidget(Qt::RightDockWidgetArea, m_objectsDock);
+
+    m_propertiesDock = new QDockWidget("Właściwości", this);
+    m_propertiesDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+
+    m_propertiesWidget = new QWidget(m_propertiesDock);
+    m_propertiesLayout = new QVBoxLayout(m_propertiesWidget);
+    m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt, aby edytować jego właściwości"));
+    m_propertiesDock->setWidget(m_propertiesWidget);
+
+    addDockWidget(Qt::RightDockWidgetArea, m_propertiesDock);
+
+    m_modeLabel = new QLabel("Tryb: Normalny");
+    statusBar()->addPermanentWidget(m_modeLabel);
+}
+
+void MainWindow::connectSignals() {
+    connect(m_canvas, &Canvas::objectAdded, this, &MainWindow::onObjectAdded);
+    connect(m_canvas, &Canvas::objectRemoved, this, &MainWindow::onObjectRemoved);
+    connect(m_canvas, &Canvas::objectSelected, this, &MainWindow::onObjectSelected);
+    connect(m_canvas, &Canvas::selectionCleared, this, &MainWindow::onSelectionCleared);
+    connect(m_canvas, &Canvas::controlPointAdded, this, &MainWindow::onControlPointAdded);
+    connect(m_canvas, &Canvas::controlPointMoved, this, &MainWindow::onControlPointMoved);
+    connect(m_canvas, &Canvas::controlPointSelected, this, &MainWindow::onControlPointSelected);
+    connect(m_canvas, &Canvas::editingStarted, this, &MainWindow::onEditingStarted);
+    connect(m_canvas, &Canvas::editingFinished, this, &MainWindow::onEditingFinished);
+
+    connect(m_objectsTree, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem* item, int column) {
+        if (item->parent() == nullptr) {
+            int index = item->data(0, Qt::UserRole).toInt();
+            if (index >= 0 && index < static_cast<int>(m_canvas->objects().size())) {
+                m_canvas->selectObject(m_canvas->objects()[index]);
+                m_canvas->finishEditing();
+                m_selectModeAction->setChecked(true);
+                updateModeLabel();
+            }
+        }
+        else {
+            int pointIndex = item->data(0, Qt::UserRole).toInt();
+            int objectIndex = item->data(0, Qt::UserRole + 1).toInt();
+            if (objectIndex >= 0 && objectIndex < static_cast<int>(m_canvas->objects().size())) {
+                m_canvas->selectObject(m_canvas->objects()[objectIndex]);
+
+                auto curve = m_canvas->getSelectedCurve();
+                if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
+                    m_canvas->startMovingControlPoints();
+                    m_movePointModeAction->setChecked(true);
+                    m_canvas->selectControlPoint(pointIndex);
+                    updateModeLabel();
+                }
+            }
+        }
+    });
+
+    connect(m_objectsTree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int column) {
+        if (item->parent() != nullptr) {
+            int pointIndex = item->data(0, Qt::UserRole).toInt();
+            int objectIndex = item->data(0, Qt::UserRole + 1).toInt();
+
+            if (objectIndex >= 0 && objectIndex < static_cast<int>(m_canvas->objects().size())) {
+                m_canvas->selectObject(m_canvas->objects()[objectIndex]);
+
+                auto curve = m_canvas->getSelectedCurve();
+                if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
+                    m_canvas->startMovingControlPoints();
+                    m_movePointModeAction->setChecked(true);
+                    m_canvas->selectControlPoint(pointIndex);
+                    updateModeLabel();
+                    statusBar()->showMessage(QString("Edytowanie punktu kontrolnego %1. Możesz go przesunąć na canvasie.").arg(std::to_string(pointIndex)));
+                }
+            }
+        }
+    });
+}
+
+void MainWindow::updateObjectsTree() {
+    m_objectsTree->clear();
+
+    int index = 0;
+    for (const auto& obj : m_canvas->objects()) {
+        auto* item = new QTreeWidgetItem(m_objectsTree);
+        item->setText(0, QString("Obiekt %1").arg(std::to_string(index + 1)));
+
+        if (const auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(obj)) {
+            item->setText(1, "Krzywa");
+
+            const auto& points = curve->getPoints();
+            for (size_t i = 0; i < points.size(); ++i) {
+                auto* pointItem = new QTreeWidgetItem(item);
+                const Point& p = points[i];
+                pointItem->setText(0, QString("Punkt %1").arg(std::to_string(i)));
+                pointItem->setText(1, QString("(%1, %2)")
+                    .arg(QString::number(p.x(), 'f', 2), QString::number(p.y(), 'f', 2)));
+
+                pointItem->setData(0, Qt::UserRole, QVariant::fromValue(static_cast<int>(i)));
+                pointItem->setData(0, Qt::UserRole + 1, QVariant::fromValue(index));
+            }
+        }
+        else if (const auto image = std::dynamic_pointer_cast<ImageObject>(obj)) {
+            item->setText(1, "Obraz");
+
+            const auto& corners = image->getCornerPoints();
+            for (size_t i = 0; i < corners.size(); ++i) {
+                auto* cornerItem = new QTreeWidgetItem(item);
+                const Point& p = corners[i];
+                cornerItem->setText(0, QString("Narożnik %1").arg(std::to_string(i)));
+                cornerItem->setText(1, QString("(%1, %2)")
+                    .arg(QString::number(p.x(), 'f', 2),
+                         QString::number(p.y(), 'f', 2)));
+            }
+        } else {
+            item->setText(1, "Inny");
+        }
+
+        item->setData(0, Qt::UserRole, QVariant::fromValue(index));
+        index++;
+    }
+
+    m_objectsTree->expandAll();
+}
+
+void MainWindow::updatePropertiesPanel() {
+    QLayoutItem* child;
+    while ((child = m_propertiesLayout->takeAt(0)) != nullptr) {
+        delete child->widget();
+        delete child;
+    }
+
+    auto selectedObject = m_canvas->selectedObject();
+    if (!selectedObject) {
+        m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt, aby edytować jego właściwości"));
+        return;
+    }
+
+    auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObject);
+    if (curve) {
+        m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej interpolowanej</b>"));
+
+        m_propertiesLayout->addWidget(new QLabel("Typ interpolacji:"));
+
+        QComboBox* typeCombo = new QComboBox();
+        typeCombo->addItem("NIFS3 (Natural Cubic Spline)", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::NIFS3)));
+        typeCombo->addItem("OIFS3 (Closed Cubic Spline)", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::OIFS3)));
+        typeCombo->addItem("Lagrange", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Lagrange)));
+        typeCombo->addItem("Barycentric", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Barycentric)));
+
+        typeCombo->setCurrentIndex(static_cast<int>(curve->getInterpolationType()));
+        m_propertiesLayout->addWidget(typeCombo);
+
+        connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            [this, curve](int index) {
+                const auto type = static_cast<InterpolatedCurve::InterpolationType>(index);
+                curve->setInterpolationType(type);
+                m_canvas->refresh();
+                QTimer::singleShot(0, [this]() {
+                        updatePropertiesPanel();
+                    });
+
+                QString typeName;
+                switch (type) {
+                    case InterpolatedCurve::InterpolationType::NIFS3: typeName = "NIFS3"; break;
+                    case InterpolatedCurve::InterpolationType::OIFS3: typeName = "OIFS3"; break;
+                    case InterpolatedCurve::InterpolationType::Lagrange: typeName = "Lagrange"; break;
+                    case InterpolatedCurve::InterpolationType::Barycentric: typeName = "Barycentric"; break;
+                }
+
+                statusBar()->showMessage(QString("Zmieniono typ interpolacji na %1").arg(typeName));
+            });
+
+        m_propertiesLayout->addWidget(new QLabel("Kolor linii:"));
+
+        QPushButton* colorButton = new QPushButton();
+        colorButton->setFixedSize(80, 25);
+        QColor currentColor = curve->getColor();
+        QString styleSheet = QString("background-color: %1;").arg(currentColor.name());
+        colorButton->setStyleSheet(styleSheet);
+
+        m_propertiesLayout->addWidget(colorButton);
+
+        connect(colorButton, &QPushButton::clicked, [this, curve, colorButton]() {
+            QColor color = QColorDialog::getColor(curve->getColor(), nullptr, "Wybierz kolor linii");
+            if (color.isValid()) {
+                curve->setColor(color);
+                QString styleSheet = QString("background-color: %1;").arg(color.name());
+                colorButton->setStyleSheet(styleSheet);
+                m_canvas->refresh();
+                statusBar()->showMessage("Zmieniono kolor linii");
+            }
+        });
+
+        m_propertiesLayout->addWidget(new QLabel("Grubość linii:"));
+
+        auto* widthSpinBox = new QDoubleSpinBox();
+        widthSpinBox->setRange(0.1, 10.0);
+        widthSpinBox->setSingleStep(0.1);
+        widthSpinBox->setValue(curve->getLineWidth());
+
+        m_propertiesLayout->addWidget(widthSpinBox);
+
+        connect(widthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
+            curve->setLineWidth(value);
+            m_canvas->refresh();
+            statusBar()->showMessage(QString("Zmieniono grubość linii na %1").arg(std::to_string(value)));
+        });
+
+        m_propertiesLayout->addWidget(new QLabel("Styl linii:"));
+
+        auto* lineStyleCombo = new QComboBox();
+        lineStyleCombo->addItem("Ciągła", static_cast<int>(Qt::SolidLine));
+        lineStyleCombo->addItem("Przerywana", static_cast<int>(Qt::DashLine));
+        lineStyleCombo->addItem("Kropkowana", static_cast<int>(Qt::DotLine));
+        lineStyleCombo->addItem("Kreska-kropka", static_cast<int>(Qt::DashDotLine));
+        lineStyleCombo->addItem("Kreska-kropka-kropka", static_cast<int>(Qt::DashDotDotLine));
+
+        int styleIndex = 0;
+        switch (curve->getLineStyle()) {
+            case Qt::SolidLine: styleIndex = 0; break;
+            case Qt::DashLine: styleIndex = 1; break;
+            case Qt::DotLine: styleIndex = 2; break;
+            case Qt::DashDotLine: styleIndex = 3; break;
+            case Qt::DashDotDotLine: styleIndex = 4; break;
+            default: styleIndex = 0; break;
+        }
+
+        lineStyleCombo->setCurrentIndex(styleIndex);
+
+        m_propertiesLayout->addWidget(lineStyleCombo);
+
+        connect(lineStyleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, curve, lineStyleCombo](int index) {
+            Qt::PenStyle style = static_cast<Qt::PenStyle>(lineStyleCombo->itemData(index).toInt());
+            curve->setLineStyle(style);
+            m_canvas->refresh();
+            statusBar()->showMessage("Zmieniono styl linii");
+        });
+
+        m_propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: %1")
+            .arg(QString::number(curve->getLength(), 'f', 2))));
+    }
+    else {
+        m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt"));
+    }
+    m_propertiesLayout->addStretch();
+}
+
+void MainWindow::updateModeLabel() {
+    switch (m_canvas->getEditMode()) {
+        case Canvas::EditMode::None:
+            m_modeLabel->setText("Tryb: Normalny");
+            break;
+        case Canvas::EditMode::SelectObject:
+            m_modeLabel->setText("Tryb: Zaznaczanie obiektu");
+            break;
+        case Canvas::EditMode::AddPoint:
+            m_modeLabel->setText("Tryb: Dodawanie punktu");
+            break;
+        case Canvas::EditMode::MovePoint:
+            m_modeLabel->setText("Tryb: Przesuwanie punktu");
+            break;
+    }
+}
+
+void MainWindow::onObjectAdded(std::shared_ptr<GeometricObject> obj) {
+    updateObjectsTree();
+    statusBar()->showMessage("Dodano nowy obiekt");
+}
+
+void MainWindow::onObjectRemoved(std::shared_ptr<GeometricObject> obj) {
+    updateObjectsTree();
+    statusBar()->showMessage("Usunięto obiekt");
+}
+
+void MainWindow::onObjectSelected(std::shared_ptr<GeometricObject> obj) {
+    updateObjectsTree();
+    updatePropertiesPanel();
+    auto objects = m_canvas->objects();
+    auto it = std::find(objects.begin(), objects.end(), obj);
+    if (it != objects.end()) {
+        int index = static_cast<int>(std::distance(objects.begin(), it));
+
+        for (int i = 0; i < m_objectsTree->topLevelItemCount(); ++i) {
+            QTreeWidgetItem* item = m_objectsTree->topLevelItem(i);
+            if (item->data(0, Qt::UserRole).toInt() == index) {
+                m_objectsTree->setCurrentItem(item);
+                break;
+            }
+        }
+    }
+
+    statusBar()->showMessage("Wybrano obiekt");
+}
+
+void MainWindow::onSelectionCleared() {
+    m_objectsTree->clearSelection();
+    updatePropertiesPanel();
+    statusBar()->showMessage("Anulowano zaznaczenie");
+}
+
+void MainWindow::onControlPointAdded(int pointIndex) {
+    updateObjectsTree();
+    updatePropertiesPanel();
+    statusBar()->showMessage(QString("Dodano punkt kontrolny %1").arg(std::to_string(pointIndex)));
+}
+
+void MainWindow::onControlPointMoved(int pointIndex) {
+    updateObjectsTree();
+    updatePropertiesPanel();
+    statusBar()->showMessage(QString("Przesunięto punkt kontrolny %1").arg(std::to_string(pointIndex)));
+}
+
+void MainWindow::onControlPointSelected(int pointIndex) {
+    updateObjectsTree();
+
+    auto selectedObj = m_canvas->selectedObject();
+    auto objects = m_canvas->objects();
+    auto it = std::find(objects.begin(), objects.end(), selectedObj);
+    if (it != objects.end()) {
+        int objectIndex = static_cast<int>(std::distance(objects.begin(), it));
+
+        for (int i = 0; i < m_objectsTree->topLevelItemCount(); ++i) {
+            QTreeWidgetItem* objectItem = m_objectsTree->topLevelItem(i);
+            if (objectItem->data(0, Qt::UserRole).toInt() == objectIndex) {
+                for (int j = 0; j < objectItem->childCount(); ++j) {
+                    QTreeWidgetItem* pointItem = objectItem->child(j);
+                    if (pointItem->data(0, Qt::UserRole).toInt() == pointIndex) {
+                        m_objectsTree->setCurrentItem(pointItem);
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    statusBar()->showMessage(QString("Wybrano punkt kontrolny %1").arg(std::to_string(pointIndex)));
+}
+
+void MainWindow::onEditingStarted() {
+    updateModeLabel();
+    statusBar()->showMessage("Rozpoczęto edycję punktów kontrolnych");
+}
+
+void MainWindow::onEditingFinished() {
+    m_selectModeAction->setChecked(true);
+    updateModeLabel();
+    statusBar()->showMessage("Zakończono edycję punktów kontrolnych");
+}

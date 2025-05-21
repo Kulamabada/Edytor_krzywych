@@ -2,13 +2,11 @@
 #include "CommandManager.h"
 #include <stdexcept>
 
-// Implementacja Singletona
 ApplicationCore& ApplicationCore::getInstance() {
     static ApplicationCore instance;
     return instance;
 }
 
-// Konstruktor i destruktor
 ApplicationCore::ApplicationCore()
     : m_initialized(false)
     , m_commandManager(std::make_unique<CommandManager>()) {
@@ -18,7 +16,6 @@ ApplicationCore::~ApplicationCore() {
     shutdown();
 }
 
-// Funkcjonalność główna
 bool ApplicationCore::initialize() {
     if (m_initialized)
         return true;
