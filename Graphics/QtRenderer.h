@@ -33,7 +33,7 @@ public:
     void renderAxisTicks();
     void renderSelectionMarker(const QPointF& position) override;
     void renderControlPoint(const QPointF& position, bool isSelected = false, bool isActive = false) override;
-    void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int activeIndex = -1) override;
+    void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int draggingIndex = -1) override;
     void renderControlPolygon(const std::vector<Point>& points) override;
     void setPointStyle(const QColor& color, float size) override;
     void setCurveStyle(const QColor& color, float width, Qt::PenStyle style = Qt::SolidLine) override;

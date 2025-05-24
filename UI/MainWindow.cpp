@@ -105,11 +105,11 @@ void MainWindow::createMenus() {
 
     // Menu Krzywe
     m_interpolatedCurvesMenu = m_curvesMenu->addMenu("Krzywa interpolacyjna");
-    m_nifsAction = m_interpolatedCurvesMenu->addAction("NIFS3 (Natural Cubic Spline)");
-    m_oifsAction = m_interpolatedCurvesMenu->addAction("OIFS3 (Closed Cubic Spline)");
+    m_nifsAction = m_interpolatedCurvesMenu->addAction("NIFS3");
+    m_oifsAction = m_interpolatedCurvesMenu->addAction("OIFS3");
     m_lagrangeAction = m_interpolatedCurvesMenu->addAction("Lagrange");
     m_barycentricAction = m_interpolatedCurvesMenu->addAction("Barycentric");
-    m_parametricAction = m_curvesMenu->addAction("Krzywa parametryczna");
+    m_parametricAction = m_curvesMenu->addAction("Krzywa Beziera");
 
     // Menu Obrazy
     m_addImageAction = m_imageMenu->addAction("Dodaj obraz...");
@@ -230,30 +230,12 @@ void MainWindow::connectSignals() {
 
                 auto curve = m_canvas->getSelectedCurve();
                 if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
-                    m_canvas->startMovingControlPoints();
-                    m_movePointModeAction->setChecked(true);
+                    if (m_canvas->getEditMode() == Canvas::EditMode::None) {
+                        m_canvas->setEditMode(Canvas::EditMode::SelectPoint);
+                        m_selectModeAction->setChecked(true);
+                    }
                     m_canvas->selectControlPoint(pointIndex);
                     updateModeLabel();
-                }
-            }
-        }
-    });
-
-    connect(m_objectsTree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int column) {
-        if (item->parent() != nullptr) {
-            int pointIndex = item->data(0, Qt::UserRole).toInt();
-            int objectIndex = item->data(0, Qt::UserRole + 1).toInt();
-
-            if (objectIndex >= 0 && objectIndex < static_cast<int>(m_canvas->objects().size())) {
-                m_canvas->selectObject(m_canvas->objects()[objectIndex]);
-
-                auto curve = m_canvas->getSelectedCurve();
-                if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
-                    m_canvas->startMovingControlPoints();
-                    m_movePointModeAction->setChecked(true);
-                    m_canvas->selectControlPoint(pointIndex);
-                    updateModeLabel();
-                    statusBar()->showMessage(QString("Edytowanie punktu kontrolnego %1. Możesz go przesunąć na canvasie.").arg(std::to_string(pointIndex)));
                 }
             }
         }
@@ -434,7 +416,7 @@ void MainWindow::updateModeLabel() {
         case Canvas::EditMode::None:
             m_modeLabel->setText("Tryb: Normalny");
             break;
-        case Canvas::EditMode::SelectObject:
+        case Canvas::EditMode::SelectPoint:
             m_modeLabel->setText("Tryb: Zaznaczanie obiektu");
             break;
         case Canvas::EditMode::AddPoint:

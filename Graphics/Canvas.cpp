@@ -63,7 +63,6 @@ void Canvas::selectObject(std::shared_ptr<GeometricObject> object)
         m_selectedObject = object;
 
         m_selectedControlPointIndex = -1;
-        m_activeControlPointIndex = -1;
 
         if (m_isEditingPoints && !std::dynamic_pointer_cast<InterpolatedCurve>(object))
             finishEditing();
@@ -79,7 +78,6 @@ void Canvas::clearSelection()
         m_selectedObject = nullptr;
 
         m_selectedControlPointIndex = -1;
-        m_activeControlPointIndex = -1;
 
         if (m_isEditingPoints)
             finishEditing();
@@ -194,7 +192,6 @@ void Canvas::finishEditing() {
     m_isEditingPoints = false;
     m_isDraggingPoint = false;
     m_selectedControlPointIndex = -1;
-    m_activeControlPointIndex = -1;
 
     emit editingFinished();
     update();
@@ -332,7 +329,7 @@ void Canvas::drawControlPoints() {
 
     m_renderer->renderControlPolygon(points);
 
-    m_renderer->renderControlPoints(points, m_selectedControlPointIndex, m_activeControlPointIndex);
+    m_renderer->renderControlPoints(points, m_selectedControlPointIndex,m_isDraggingPoint ? m_selectedControlPointIndex : -1);
 }
 
 void Canvas::resizeEvent(QResizeEvent* event)
@@ -349,23 +346,36 @@ void Canvas::mousePressEvent(QMouseEvent* event)
 {
     m_lastMousePos = event->pos();
 
-    if (event->button() == Qt::LeftButton) {
-        if (m_editMode == EditMode::AddPoint) {
-            addControlPoint(event->pos());
-            return;
-        }
-        else if (m_editMode == EditMode::MovePoint) {
-            if (const int pointIndex = hitTestControlPoint(event->pos()); pointIndex >= 0) {
-                selectControlPoint(pointIndex);
-                m_isDraggingPoint = true;
-                m_activeControlPointIndex = pointIndex;
-                setCursor(Qt::ClosedHandCursor);
+    if (event->button() == Qt::LeftButton)
+    {
+        switch (m_editMode)
+        {
+            case EditMode::AddPoint:
+                addControlPoint(event->pos());
                 return;
-            }
-        }
-        else {
-            m_isSelecting = true;
-            m_selectionPoint = event->pos();
+
+            case EditMode::MovePoint:
+                if (const int pointIndex = hitTestControlPoint(event->pos()); pointIndex >= 0) {
+                    selectControlPoint(pointIndex);
+                    m_isDraggingPoint = true;
+                    setCursor(Qt::ClosedHandCursor);
+                    return;
+                }
+                break;
+
+            case EditMode::SelectPoint:
+                if (const int pointIndex = hitTestControlPoint(event->pos()); pointIndex >= 0) {
+                    selectControlPoint(pointIndex);
+                    return;
+                }
+                break;
+
+            case EditMode::None:
+                    break;
+
+            default:
+                qWarning() << "Nieobsługiwany tryb edycji:" << static_cast<int>(m_editMode);
+            break;
         }
     }
     else if (event->button() == Qt::MiddleButton) {
@@ -380,8 +390,8 @@ void Canvas::mouseMoveEvent(QMouseEvent* event)
 {
     const QPointF currentPos = event->pos();
     const QPointF delta = currentPos - m_lastMousePos;
-    if (m_isDraggingPoint && m_activeControlPointIndex >= 0) {
-        moveControlPoint(m_activeControlPointIndex, currentPos);
+    if (m_isDraggingPoint && m_selectedControlPointIndex >= 0) {
+        moveControlPoint(m_selectedControlPointIndex, currentPos);
     }
     else if (m_isPanning) {
         if (m_viewportManager) {
@@ -407,16 +417,12 @@ void Canvas::mouseReleaseEvent(QMouseEvent* event)
     if (event->button() == Qt::LeftButton) {
         if (m_isDraggingPoint) {
             m_isDraggingPoint = false;
-            m_activeControlPointIndex = -1;
 
             if (m_editMode == EditMode::MovePoint) {
                 setCursor(Qt::OpenHandCursor);
             } else {
                 setCursor(Qt::ArrowCursor);
             }
-        }
-        else if (m_isSelecting) {
-            m_isSelecting = false;
         }
     }
     else if (event->button() == Qt::MiddleButton) {

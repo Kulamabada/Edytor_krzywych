@@ -103,10 +103,10 @@ void ActionHandler::onDeleteAction() {
     }
 }
 
-void ActionHandler::onSelectModeAction() {
-    m_mainWindow.getCanvas()->setEditMode(Canvas::EditMode::SelectObject);
+void ActionHandler::onSelectModeAction() const {
+    m_mainWindow.getCanvas()->setEditMode(Canvas::EditMode::SelectPoint);
     m_mainWindow.updateModeLabel();
-    m_mainWindow.getStatusBar()->showMessage("Przełączono na tryb zaznaczania obiektu");
+    m_mainWindow.getStatusBar()->showMessage("Przełączono na tryb zaznaczania punktu kontrolnego");
 }
 
 void ActionHandler::onAddPointModeAction() {

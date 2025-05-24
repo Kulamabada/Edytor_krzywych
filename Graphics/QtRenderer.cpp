@@ -302,7 +302,7 @@ void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bo
     m_painter->restore();
 }
 
-void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selectedIndex, int activeIndex)
+void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selectedIndex, int draggingIndex)
 {
     if (!m_painter || !m_viewportManager || points.empty()) {
         return;
@@ -322,7 +322,7 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
     }
 
     for (size_t i = 0; i < points.size(); ++i) {
-        if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != activeIndex) {
+        if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != draggingIndex) {
             renderControlPoint(screenPositions[i], false, false);
         }
     }
@@ -331,8 +331,8 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         renderControlPoint(screenPositions[selectedIndex], true, false);
     }
 
-    if (activeIndex >= 0 && activeIndex < static_cast<int>(points.size()) && activeIndex != selectedIndex) {
-        renderControlPoint(screenPositions[activeIndex], false, true);
+    if (draggingIndex >= 0 && draggingIndex < static_cast<int>(points.size()) && draggingIndex != selectedIndex) {
+        renderControlPoint(screenPositions[draggingIndex], false, true);
     }
 
     m_painter->save();

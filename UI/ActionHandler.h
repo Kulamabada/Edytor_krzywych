@@ -23,7 +23,7 @@ public:
     void onUndoAction();
     void onRedoAction();
     void onDeleteAction();
-    void onSelectModeAction();
+    void onSelectModeAction() const;
     void onAddPointModeAction();
     void onMovePointModeAction();
     void onDeletePointAction();

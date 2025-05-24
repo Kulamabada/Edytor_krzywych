@@ -24,7 +24,7 @@ class Canvas : public QWidget {
 public:
     enum class EditMode {
         None,
-        SelectObject,
+        SelectPoint,
         AddPoint,
         MovePoint,
     };
@@ -98,13 +98,9 @@ private:
 
     bool m_isPanning{false};
     QPointF m_lastMousePos;
-    QPointF m_selectionPoint;
-    bool m_isSelecting{false};
 
     EditMode m_editMode{EditMode::None};
     int m_selectedControlPointIndex{-1};
-    int m_activeControlPointIndex{-1};
     bool m_isEditingPoints{false};
     bool m_isDraggingPoint{false};
-    int m_selectedImageCornerIndex{-1};
 };

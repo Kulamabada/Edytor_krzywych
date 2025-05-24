@@ -1,4 +1,4 @@
-// Plik wygenerowany automatycznie 2025-05-21 20:10:01
+// Plik wygenerowany automatycznie 2025-05-24 14:59:00
 // Zawiera 33 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
@@ -932,41 +932,82 @@ void InterpolatedCurve::rebuildInterpolation() const {
 
     needsRebuild = false;
 }
+
 void InterpolatedCurve::buildNIFS3() const {
     const size_t n = points.size();
     if (n < 2) return;
 
-    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(n, n);
-    Eigen::VectorXd bx = Eigen::VectorXd::Zero(n);
-    Eigen::VectorXd by = Eigen::VectorXd::Zero(n);
-
-    A(0, 0) = 1.0;
-    A(n-1, n-1) = 1.0;
-
-    for (size_t i = 1; i < n - 1; ++i) {
-        A(i, i-1) = 1.0;
-        A(i, i) = 4.0;
-        A(i, i+1) = 1.0;
-
-        bx(i) = 3.0 * (points[i+1].x() - points[i-1].x());
-        by(i) = 3.0 * (points[i+1].y() - points[i-1].y());
+    // Parametryzacja od 0 do 1
+    std::vector<double> xs(n), ys_x(n), ys_y(n);
+    for (size_t i = 0; i < n; ++i) {
+        xs[i] = static_cast<double>(i) / (n - 1);
+        ys_x[i] = points[i].x();
+        ys_y[i] = points[i].y();
     }
 
-    Eigen::VectorXd cx = A.colPivHouseholderQr().solve(bx);
-    Eigen::VectorXd cy = A.colPivHouseholderQr().solve(by);
+    // Obliczanie ilorazów różnicowych
+    std::vector<double> ds_x;
+    std::vector<double> ds_y;
+    for (size_t i = 1; i < n - 1; ++i) {
+        const double term1_x = (ys_x[i + 1] - ys_x[i]) / (xs[i + 1] - xs[i]);
+        const double term2_x = (ys_x[i] - ys_x[i - 1]) / (xs[i] - xs[i - 1]);
+        const double term1_y = (ys_y[i + 1] - ys_y[i]) / (xs[i + 1] - xs[i]);
+        const double term2_y = (ys_y[i] - ys_y[i - 1]) / (xs[i] - xs[i - 1]);
+        ds_x.push_back(6.0 * (term1_x - term2_x) / (xs[i + 1] - xs[i - 1]));
+        ds_y.push_back(6.0 * (term1_y - term2_y) / (xs[i + 1] - xs[i - 1]));
+    }
 
+    // Współczynniki p
+    std::vector<double> ps;
+    ps.push_back(0.0);
+    for (size_t i = 1; i < n - 1; ++i) {
+        double lambda = (xs[i] - xs[i - 1]) / (xs[i + 1] - xs[i - 1]);
+        ps.push_back((lambda - 1.0) / (lambda * ps[i - 1] + 2.0));
+    }
+
+    // Współczynniki q dla x i y
+    std::vector<double> qs_x;
+    std::vector<double> qs_y;
+    qs_x.push_back(0.0);
+    qs_y.push_back(0.0);
+    for (size_t i = 1; i < n - 1; ++i) {
+        const double lambda = (xs[i] - xs[i - 1]) / (xs[i + 1] - xs[i - 1]);
+        qs_x.push_back((ds_x[i - 1] - lambda * qs_x[i - 1]) / (lambda * ps[i - 1] + 2.0));
+        qs_y.push_back((ds_y[i - 1] - lambda * qs_y[i - 1]) / (lambda * ps[i - 1] + 2.0));
+    }
+
+    // Momenty M - dokładnie jak w Pythonie
+    std::vector<double> M_x(n, 0.0), M_y(n, 0.0);
+
+    // Uzupełniamy wartości od końca, zgodnie z algorytmem Pythona
+    M_x[n-1] = 0.0;  // Naturalne warunki brzegowe
+    M_y[n-1] = 0.0;
+    M_x[n-2] = qs_x.back();
+    M_y[n-2] = qs_y.back();
+
+    for (int i = n - 3; i > 0; --i) {
+        M_x[i] = ps[i] * M_x[i+1] + qs_x[i];
+        M_y[i] = ps[i] * M_y[i+1] + qs_y[i];
+    }
+    // M_x[0] i M_y[0] pozostają równe 0 (naturalne warunki brzegowe)
+
+    // Obliczanie współczynników wielomianów
+    coefficients.clear();
     for (size_t i = 0; i < n - 1; ++i) {
+        double h = xs[i + 1] - xs[i];
         Eigen::Matrix<double, 4, 2> coef;
 
-        coef(0, 0) = points[i].x();
-        coef(1, 0) = cx(i);
-        coef(2, 0) = 3.0 * (points[i+1].x() - points[i].x()) - 2.0 * cx(i) - cx(i+1);
-        coef(3, 0) = 2.0 * (points[i].x() - points[i+1].x()) + cx(i) + cx(i+1);
+        // Obliczamy współczynniki dla wielomianu w formie standardowej
+        // a + b*t + c*t^2 + d*t^3
+        coef(0, 0) = ys_x[i];
+        coef(1, 0) = (ys_x[i + 1] - ys_x[i]) - (h * h / 6.0) * (M_x[i + 1] + 2.0 * M_x[i]);
+        coef(2, 0) = (h * h / 2.0) * M_x[i];
+        coef(3, 0) = (h * h / 6.0) * (M_x[i + 1] - M_x[i]);
 
-        coef(0, 1) = points[i].y();
-        coef(1, 1) = cy(i);
-        coef(2, 1) = 3.0 * (points[i+1].y() - points[i].y()) - 2.0 * cy(i) - cy(i+1);
-        coef(3, 1) = 2.0 * (points[i].y() - points[i+1].y()) + cy(i) + cy(i+1);
+        coef(0, 1) = ys_y[i];
+        coef(1, 1) = (ys_y[i + 1] - ys_y[i]) - (h * h / 6.0) * (M_y[i + 1] + 2.0 * M_y[i]);
+        coef(2, 1) = (h * h / 2.0) * M_y[i];
+        coef(3, 1) = (h * h / 6.0) * (M_y[i + 1] - M_y[i]);
 
         coefficients.push_back(coef);
     }
@@ -1194,12 +1235,18 @@ class Point;
 
 class InterpolatedCurve final : public Curve {
 public:
-enum class InterpolationType {
-    NIFS3,
-    OIFS3,
-    Lagrange,
-    Barycentric
-};
+    enum class InterpolationType {
+        NIFS3,
+        OIFS3,
+        Lagrange,
+        Barycentric
+    };
+
+    enum class NodeDistribution {
+        Equidistant,
+        Chebyshev
+    };
+
     explicit InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
                                InterpolationType type);
     ~InterpolatedCurve() override = default;
@@ -1464,7 +1511,6 @@ void Canvas::selectObject(std::shared_ptr<GeometricObject> object)
         m_selectedObject = object;
 
         m_selectedControlPointIndex = -1;
-        m_activeControlPointIndex = -1;
 
         if (m_isEditingPoints && !std::dynamic_pointer_cast<InterpolatedCurve>(object))
             finishEditing();
@@ -1480,7 +1526,6 @@ void Canvas::clearSelection()
         m_selectedObject = nullptr;
 
         m_selectedControlPointIndex = -1;
-        m_activeControlPointIndex = -1;
 
         if (m_isEditingPoints)
             finishEditing();
@@ -1595,7 +1640,6 @@ void Canvas::finishEditing() {
     m_isEditingPoints = false;
     m_isDraggingPoint = false;
     m_selectedControlPointIndex = -1;
-    m_activeControlPointIndex = -1;
 
     emit editingFinished();
     update();
@@ -1733,7 +1777,7 @@ void Canvas::drawControlPoints() {
 
     m_renderer->renderControlPolygon(points);
 
-    m_renderer->renderControlPoints(points, m_selectedControlPointIndex, m_activeControlPointIndex);
+    m_renderer->renderControlPoints(points, m_selectedControlPointIndex,m_isDraggingPoint ? m_selectedControlPointIndex : -1);
 }
 
 void Canvas::resizeEvent(QResizeEvent* event)
@@ -1750,23 +1794,36 @@ void Canvas::mousePressEvent(QMouseEvent* event)
 {
     m_lastMousePos = event->pos();
 
-    if (event->button() == Qt::LeftButton) {
-        if (m_editMode == EditMode::AddPoint) {
-            addControlPoint(event->pos());
-            return;
-        }
-        else if (m_editMode == EditMode::MovePoint) {
-            if (const int pointIndex = hitTestControlPoint(event->pos()); pointIndex >= 0) {
-                selectControlPoint(pointIndex);
-                m_isDraggingPoint = true;
-                m_activeControlPointIndex = pointIndex;
-                setCursor(Qt::ClosedHandCursor);
+    if (event->button() == Qt::LeftButton)
+    {
+        switch (m_editMode)
+        {
+            case EditMode::AddPoint:
+                addControlPoint(event->pos());
                 return;
-            }
-        }
-        else {
-            m_isSelecting = true;
-            m_selectionPoint = event->pos();
+
+            case EditMode::MovePoint:
+                if (const int pointIndex = hitTestControlPoint(event->pos()); pointIndex >= 0) {
+                    selectControlPoint(pointIndex);
+                    m_isDraggingPoint = true;
+                    setCursor(Qt::ClosedHandCursor);
+                    return;
+                }
+                break;
+
+            case EditMode::SelectPoint:
+                if (const int pointIndex = hitTestControlPoint(event->pos()); pointIndex >= 0) {
+                    selectControlPoint(pointIndex);
+                    return;
+                }
+                break;
+
+            case EditMode::None:
+                    break;
+
+            default:
+                qWarning() << "Nieobsługiwany tryb edycji:" << static_cast<int>(m_editMode);
+            break;
         }
     }
     else if (event->button() == Qt::MiddleButton) {
@@ -1781,8 +1838,8 @@ void Canvas::mouseMoveEvent(QMouseEvent* event)
 {
     const QPointF currentPos = event->pos();
     const QPointF delta = currentPos - m_lastMousePos;
-    if (m_isDraggingPoint && m_activeControlPointIndex >= 0) {
-        moveControlPoint(m_activeControlPointIndex, currentPos);
+    if (m_isDraggingPoint && m_selectedControlPointIndex >= 0) {
+        moveControlPoint(m_selectedControlPointIndex, currentPos);
     }
     else if (m_isPanning) {
         if (m_viewportManager) {
@@ -1808,16 +1865,12 @@ void Canvas::mouseReleaseEvent(QMouseEvent* event)
     if (event->button() == Qt::LeftButton) {
         if (m_isDraggingPoint) {
             m_isDraggingPoint = false;
-            m_activeControlPointIndex = -1;
 
             if (m_editMode == EditMode::MovePoint) {
                 setCursor(Qt::OpenHandCursor);
             } else {
                 setCursor(Qt::ArrowCursor);
             }
-        }
-        else if (m_isSelecting) {
-            m_isSelecting = false;
         }
     }
     else if (event->button() == Qt::MiddleButton) {
@@ -1897,7 +1950,7 @@ class Canvas : public QWidget {
 public:
     enum class EditMode {
         None,
-        SelectObject,
+        SelectPoint,
         AddPoint,
         MovePoint,
     };
@@ -1971,15 +2024,11 @@ private:
 
     bool m_isPanning{false};
     QPointF m_lastMousePos;
-    QPointF m_selectionPoint;
-    bool m_isSelecting{false};
 
     EditMode m_editMode{EditMode::None};
     int m_selectedControlPointIndex{-1};
-    int m_activeControlPointIndex{-1};
     bool m_isEditingPoints{false};
     bool m_isDraggingPoint{false};
-    int m_selectedImageCornerIndex{-1};
 };
 
 //===== END FILE: Graphics\Canvas.h =====//
@@ -2345,7 +2394,7 @@ void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bo
     m_painter->restore();
 }
 
-void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selectedIndex, int activeIndex)
+void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selectedIndex, int draggingIndex)
 {
     if (!m_painter || !m_viewportManager || points.empty()) {
         return;
@@ -2365,7 +2414,7 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
     }
 
     for (size_t i = 0; i < points.size(); ++i) {
-        if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != activeIndex) {
+        if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != draggingIndex) {
             renderControlPoint(screenPositions[i], false, false);
         }
     }
@@ -2374,8 +2423,8 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         renderControlPoint(screenPositions[selectedIndex], true, false);
     }
 
-    if (activeIndex >= 0 && activeIndex < static_cast<int>(points.size()) && activeIndex != selectedIndex) {
-        renderControlPoint(screenPositions[activeIndex], false, true);
+    if (draggingIndex >= 0 && draggingIndex < static_cast<int>(points.size()) && draggingIndex != selectedIndex) {
+        renderControlPoint(screenPositions[draggingIndex], false, true);
     }
 
     m_painter->save();
@@ -2530,7 +2579,7 @@ public:
     void renderAxisTicks();
     void renderSelectionMarker(const QPointF& position) override;
     void renderControlPoint(const QPointF& position, bool isSelected = false, bool isActive = false) override;
-    void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int activeIndex = -1) override;
+    void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int draggingIndex = -1) override;
     void renderControlPolygon(const std::vector<Point>& points) override;
     void setPointStyle(const QColor& color, float size) override;
     void setCurveStyle(const QColor& color, float width, Qt::PenStyle style = Qt::SolidLine) override;
@@ -3072,10 +3121,10 @@ void ActionHandler::onDeleteAction() {
     }
 }
 
-void ActionHandler::onSelectModeAction() {
-    m_mainWindow.getCanvas()->setEditMode(Canvas::EditMode::SelectObject);
+void ActionHandler::onSelectModeAction() const {
+    m_mainWindow.getCanvas()->setEditMode(Canvas::EditMode::SelectPoint);
     m_mainWindow.updateModeLabel();
-    m_mainWindow.getStatusBar()->showMessage("Przełączono na tryb zaznaczania obiektu");
+    m_mainWindow.getStatusBar()->showMessage("Przełączono na tryb zaznaczania punktu kontrolnego");
 }
 
 void ActionHandler::onAddPointModeAction() {
@@ -3219,7 +3268,7 @@ public:
     void onUndoAction();
     void onRedoAction();
     void onDeleteAction();
-    void onSelectModeAction();
+    void onSelectModeAction() const;
     void onAddPointModeAction();
     void onMovePointModeAction();
     void onDeletePointAction();
@@ -3352,11 +3401,11 @@ void MainWindow::createMenus() {
 
     // Menu Krzywe
     m_interpolatedCurvesMenu = m_curvesMenu->addMenu("Krzywa interpolacyjna");
-    m_nifsAction = m_interpolatedCurvesMenu->addAction("NIFS3 (Natural Cubic Spline)");
-    m_oifsAction = m_interpolatedCurvesMenu->addAction("OIFS3 (Closed Cubic Spline)");
+    m_nifsAction = m_interpolatedCurvesMenu->addAction("NIFS3");
+    m_oifsAction = m_interpolatedCurvesMenu->addAction("OIFS3");
     m_lagrangeAction = m_interpolatedCurvesMenu->addAction("Lagrange");
     m_barycentricAction = m_interpolatedCurvesMenu->addAction("Barycentric");
-    m_parametricAction = m_curvesMenu->addAction("Krzywa parametryczna");
+    m_parametricAction = m_curvesMenu->addAction("Krzywa Beziera");
 
     // Menu Obrazy
     m_addImageAction = m_imageMenu->addAction("Dodaj obraz...");
@@ -3477,30 +3526,12 @@ void MainWindow::connectSignals() {
 
                 auto curve = m_canvas->getSelectedCurve();
                 if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
-                    m_canvas->startMovingControlPoints();
-                    m_movePointModeAction->setChecked(true);
+                    if (m_canvas->getEditMode() == Canvas::EditMode::None) {
+                        m_canvas->setEditMode(Canvas::EditMode::SelectPoint);
+                        m_selectModeAction->setChecked(true);
+                    }
                     m_canvas->selectControlPoint(pointIndex);
                     updateModeLabel();
-                }
-            }
-        }
-    });
-
-    connect(m_objectsTree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int column) {
-        if (item->parent() != nullptr) {
-            int pointIndex = item->data(0, Qt::UserRole).toInt();
-            int objectIndex = item->data(0, Qt::UserRole + 1).toInt();
-
-            if (objectIndex >= 0 && objectIndex < static_cast<int>(m_canvas->objects().size())) {
-                m_canvas->selectObject(m_canvas->objects()[objectIndex]);
-
-                auto curve = m_canvas->getSelectedCurve();
-                if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
-                    m_canvas->startMovingControlPoints();
-                    m_movePointModeAction->setChecked(true);
-                    m_canvas->selectControlPoint(pointIndex);
-                    updateModeLabel();
-                    statusBar()->showMessage(QString("Edytowanie punktu kontrolnego %1. Możesz go przesunąć na canvasie.").arg(std::to_string(pointIndex)));
                 }
             }
         }
@@ -3681,7 +3712,7 @@ void MainWindow::updateModeLabel() {
         case Canvas::EditMode::None:
             m_modeLabel->setText("Tryb: Normalny");
             break;
-        case Canvas::EditMode::SelectObject:
+        case Canvas::EditMode::SelectPoint:
             m_modeLabel->setText("Tryb: Zaznaczanie obiektu");
             break;
         case Canvas::EditMode::AddPoint:
