@@ -50,7 +50,6 @@ void MainWindow::createMenus() {
     m_imageMenu = menuBar()->addMenu("Obrazy");
     m_helpMenu = menuBar()->addMenu("Pomoc");
 
-    // Menu Plik
     m_newAction = m_fileMenu->addAction(QIcon::fromTheme("document-new"), "Nowy");
     m_newAction->setShortcut(QKeySequence::New);
     m_openAction = m_fileMenu->addAction(QIcon::fromTheme("document-open"), "Otwórz...");
@@ -63,7 +62,6 @@ void MainWindow::createMenus() {
     m_exitAction = m_fileMenu->addAction(QIcon::fromTheme("application-exit"), "Wyjście");
     m_exitAction->setShortcut(QKeySequence::Quit);
 
-    // Menu Edycja
     m_undoAction = m_editMenu->addAction(QIcon::fromTheme("edit-undo"), "Cofnij");
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_redoAction = m_editMenu->addAction(QIcon::fromTheme("edit-redo"), "Ponów");
@@ -94,7 +92,6 @@ void MainWindow::createMenus() {
     m_editModeGroup->addAction(m_movePointModeAction);
     m_selectModeAction->setChecked(true);
 
-    // Menu Widok
     m_zoomInAction = m_viewMenu->addAction(QIcon::fromTheme("zoom-in"), "Przybliż");
     m_zoomInAction->setShortcut(QKeySequence::ZoomIn);
     m_zoomOutAction = m_viewMenu->addAction(QIcon::fromTheme("zoom-out"), "Oddal");
@@ -103,7 +100,6 @@ void MainWindow::createMenus() {
     m_resetViewAction->setShortcut(QKeySequence("Ctrl+0"));
     m_fitContentAction = m_viewMenu->addAction(QIcon::fromTheme("zoom-fit-best"), "Dopasuj do zawartości");
 
-    // Menu Krzywe
     m_interpolatedCurvesMenu = m_curvesMenu->addMenu("Krzywa interpolacyjna");
     m_nifsAction = m_interpolatedCurvesMenu->addAction("NIFS3");
     m_oifsAction = m_interpolatedCurvesMenu->addAction("OIFS3");
@@ -111,12 +107,10 @@ void MainWindow::createMenus() {
     m_barycentricAction = m_interpolatedCurvesMenu->addAction("Barycentric");
     m_parametricAction = m_curvesMenu->addAction("Krzywa Beziera");
 
-    // Menu Obrazy
     m_addImageAction = m_imageMenu->addAction("Dodaj obraz...");
     m_editImageAction = m_imageMenu->addAction("Edytuj narożniki obrazu");
     m_lockImageAction = m_imageMenu->addAction("Zablokuj/Odblokuj obraz");
 
-    // Menu Pomoc
     m_aboutAction = m_helpMenu->addAction(QIcon::fromTheme("help-about"), "O programie");
 }
 
@@ -301,8 +295,7 @@ void MainWindow::updatePropertiesPanel() {
         return;
     }
 
-    auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObject);
-    if (curve) {
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObject)) {
         m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej interpolowanej</b>"));
 
         m_propertiesLayout->addWidget(new QLabel("Typ interpolacji:"));
@@ -335,6 +328,45 @@ void MainWindow::updatePropertiesPanel() {
 
                 statusBar()->showMessage(QString("Zmieniono typ interpolacji na %1").arg(typeName));
             });
+
+        // === SEKCJA KONTROLI RENDEROWANIA ===
+        m_propertiesLayout->addWidget(new QLabel("<b>Kontrola wyświetlania:</b>"));
+
+        // Checkbox dla krzywej interpolowanej
+        auto* drawCurveCheckBox = new QCheckBox("Rysuj krzywą interpolowaną");
+        drawCurveCheckBox->setChecked(curve->getDrawInterpolatedCurve());
+        m_propertiesLayout->addWidget(drawCurveCheckBox);
+
+        connect(drawCurveCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
+            curve->setDrawInterpolatedCurve(checked);
+            m_canvas->refresh();
+            statusBar()->showMessage(checked ? "Włączono rysowanie krzywej" : "Wyłączono rysowanie krzywej");
+        });
+
+        // Checkbox dla łamanej
+        auto* drawPolylineCheckBox = new QCheckBox("Rysuj łamaną łączącą punkty");
+        drawPolylineCheckBox->setChecked(curve->getDrawPolyline());
+        m_propertiesLayout->addWidget(drawPolylineCheckBox);
+
+        connect(drawPolylineCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
+            curve->setDrawPolyline(checked);
+            m_canvas->refresh();
+            statusBar()->showMessage(checked ? "Włączono rysowanie łamanej" : "Wyłączono rysowanie łamanej");
+        });
+
+        // Checkbox dla otoczki wypukłej
+        auto* drawConvexHullCheckBox = new QCheckBox("Rysuj otoczkę wypukłą punktów");
+        drawConvexHullCheckBox->setChecked(curve->getDrawConvexHull());
+        m_propertiesLayout->addWidget(drawConvexHullCheckBox);
+
+        connect(drawConvexHullCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
+            curve->setDrawConvexHull(checked);
+            m_canvas->refresh();
+            statusBar()->showMessage(checked ? "Włączono rysowanie otoczki wypukłej" : "Wyłączono rysowanie otoczki wypukłej");
+        });
+
+        // === WŁAŚCIWOŚCI KRZYWEJ INTERPOLOWANEJ ===
+        m_propertiesLayout->addWidget(new QLabel("<b>Styl krzywej interpolowanej:</b>"));
 
         m_propertiesLayout->addWidget(new QLabel("Kolor linii:"));
 
@@ -401,6 +433,83 @@ void MainWindow::updatePropertiesPanel() {
             m_canvas->refresh();
             statusBar()->showMessage("Zmieniono styl linii");
         });
+
+        // === WŁAŚCIWOŚCI ŁAMANEJ ===
+        m_propertiesLayout->addWidget(new QLabel("<b>Styl łamanej:</b>"));
+
+        // Kolor łamanej
+        m_propertiesLayout->addWidget(new QLabel("Kolor łamanej:"));
+        QPushButton* polylineColorButton = new QPushButton();
+        polylineColorButton->setFixedSize(80, 25);
+        QColor currentPolylineColor = curve->getPolylineColor();
+        polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(currentPolylineColor.name()));
+        m_propertiesLayout->addWidget(polylineColorButton);
+
+        connect(polylineColorButton, &QPushButton::clicked, [this, curve, polylineColorButton]() {
+            QColor color = QColorDialog::getColor(curve->getPolylineColor(), nullptr, "Wybierz kolor łamanej");
+            if (color.isValid()) {
+                curve->setPolylineColor(color);
+                polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+
+                // Ustaw styl w rendererze
+                if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
+                    qtRenderer->setPolylineStyle(color, curve->getPolylineWidth(), curve->getPolylineStyle());
+                }
+
+                m_canvas->refresh();
+                statusBar()->showMessage("Zmieniono kolor łamanej");
+            }
+        });
+
+        // Grubość łamanej
+        m_propertiesLayout->addWidget(new QLabel("Grubość łamanej:"));
+        auto* polylineWidthSpinBox = new QDoubleSpinBox();
+        polylineWidthSpinBox->setRange(0.1, 10.0);
+        polylineWidthSpinBox->setSingleStep(0.1);
+        polylineWidthSpinBox->setValue(curve->getPolylineWidth());
+        m_propertiesLayout->addWidget(polylineWidthSpinBox);
+
+        connect(polylineWidthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
+            curve->setPolylineWidth(value);
+
+            // Ustaw styl w rendererze
+            if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
+                qtRenderer->setPolylineStyle(curve->getPolylineColor(), value, curve->getPolylineStyle());
+            }
+
+            m_canvas->refresh();
+            statusBar()->showMessage(QString("Zmieniono grubość łamanej na %1").arg(std::to_string(value)));
+        });
+
+        // === WŁAŚCIWOŚCI OTOCZKI WYPUKŁEJ ===
+        m_propertiesLayout->addWidget(new QLabel("<b>Styl otoczki wypukłej:</b>"));
+
+        // Kolor otoczki wypukłej
+        m_propertiesLayout->addWidget(new QLabel("Kolor otoczki wypukłej:"));
+        QPushButton* convexHullColorButton = new QPushButton();
+        convexHullColorButton->setFixedSize(80, 25);
+        QColor currentConvexHullColor = curve->getConvexHullColor();
+        convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(currentConvexHullColor.name()));
+        m_propertiesLayout->addWidget(convexHullColorButton);
+
+        connect(convexHullColorButton, &QPushButton::clicked, [this, curve, convexHullColorButton]() {
+            QColor color = QColorDialog::getColor(curve->getConvexHullColor(), nullptr, "Wybierz kolor otoczki wypukłej");
+            if (color.isValid()) {
+                curve->setConvexHullColor(color);
+                convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+
+                // Ustaw styl w rendererze
+                if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
+                    qtRenderer->setConvexHullStyle(color, curve->getConvexHullWidth(), curve->getConvexHullStyle());
+                }
+
+                m_canvas->refresh();
+                statusBar()->showMessage("Zmieniono kolor otoczki wypukłej");
+            }
+        });
+
+        // Informacja o implementacji
+        m_propertiesLayout->addWidget(new QLabel("<i>Uwaga: Otoczka wypukła to obecnie placeholder</i>"));
 
         m_propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: %1")
             .arg(QString::number(curve->getLength(), 'f', 2))));

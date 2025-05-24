@@ -58,6 +58,33 @@ public:
     void setLineStyle(Qt::PenStyle style) { m_lineStyle = style; }
     Qt::PenStyle getLineStyle() const { return m_lineStyle; }
 
+    bool getDrawInterpolatedCurve() const { return m_drawInterpolatedCurve; }
+    void setDrawInterpolatedCurve(bool draw) { m_drawInterpolatedCurve = draw; }
+
+    bool getDrawPolyline() const { return m_drawPolyline; }
+    void setDrawPolyline(bool draw) { m_drawPolyline = draw; }
+
+    bool getDrawConvexHull() const { return m_drawConvexHull; }
+    void setDrawConvexHull(bool draw) { m_drawConvexHull = draw; }
+
+    QColor getPolylineColor() const { return m_polylineColor; }
+    void setPolylineColor(const QColor& color) { m_polylineColor = color; }
+
+    double getPolylineWidth() const { return m_polylineWidth; }
+    void setPolylineWidth(double width) { m_polylineWidth = width; }
+
+    Qt::PenStyle getPolylineStyle() const { return m_polylineStyle; }
+    void setPolylineStyle(Qt::PenStyle style) { m_polylineStyle = style; }
+
+    // Właściwości stylu otoczki wypukłej
+    QColor getConvexHullColor() const { return m_convexHullColor; }
+    void setConvexHullColor(const QColor& color) { m_convexHullColor = color; }
+
+    double getConvexHullWidth() const { return m_convexHullWidth; }
+    void setConvexHullWidth(double width) { m_convexHullWidth = width; }
+
+    Qt::PenStyle getConvexHullStyle() const { return m_convexHullStyle; }
+    void setConvexHullStyle(Qt::PenStyle style) { m_convexHullStyle = style; }
 private:
     std::vector<Point> points;
     InterpolationType type;
@@ -69,6 +96,20 @@ private:
     QColor m_color{Qt::blue};
     double m_lineWidth{1.0};
     Qt::PenStyle m_lineStyle{Qt::SolidLine};
+
+    bool m_drawInterpolatedCurve{true};
+    bool m_drawPolyline{false};
+    bool m_drawConvexHull{false};
+
+    // Dodatkowe właściwości stylu dla łamanej
+    QColor m_polylineColor{Qt::darkGreen};
+    double m_polylineWidth{1.0};
+    Qt::PenStyle m_polylineStyle{Qt::DashLine};
+
+    // Dodatkowe właściwości stylu dla otoczki wypukłej
+    QColor m_convexHullColor{Qt::red};
+    double m_convexHullWidth{1.0};
+    Qt::PenStyle m_convexHullStyle{Qt::DotLine};
 
     void buildNIFS3() const;
     void buildOIFS3() const;

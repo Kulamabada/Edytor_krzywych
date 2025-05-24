@@ -1,4 +1,4 @@
-// Plik wygenerowany automatycznie 2025-05-24 14:59:00
+// Plik wygenerowany automatycznie 2025-05-24 18:59:42
 // Zawiera 33 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
@@ -1282,6 +1282,33 @@ public:
     void setLineStyle(Qt::PenStyle style) { m_lineStyle = style; }
     Qt::PenStyle getLineStyle() const { return m_lineStyle; }
 
+    bool getDrawInterpolatedCurve() const { return m_drawInterpolatedCurve; }
+    void setDrawInterpolatedCurve(bool draw) { m_drawInterpolatedCurve = draw; }
+
+    bool getDrawPolyline() const { return m_drawPolyline; }
+    void setDrawPolyline(bool draw) { m_drawPolyline = draw; }
+
+    bool getDrawConvexHull() const { return m_drawConvexHull; }
+    void setDrawConvexHull(bool draw) { m_drawConvexHull = draw; }
+
+    QColor getPolylineColor() const { return m_polylineColor; }
+    void setPolylineColor(const QColor& color) { m_polylineColor = color; }
+
+    double getPolylineWidth() const { return m_polylineWidth; }
+    void setPolylineWidth(double width) { m_polylineWidth = width; }
+
+    Qt::PenStyle getPolylineStyle() const { return m_polylineStyle; }
+    void setPolylineStyle(Qt::PenStyle style) { m_polylineStyle = style; }
+
+    // Właściwości stylu otoczki wypukłej
+    QColor getConvexHullColor() const { return m_convexHullColor; }
+    void setConvexHullColor(const QColor& color) { m_convexHullColor = color; }
+
+    double getConvexHullWidth() const { return m_convexHullWidth; }
+    void setConvexHullWidth(double width) { m_convexHullWidth = width; }
+
+    Qt::PenStyle getConvexHullStyle() const { return m_convexHullStyle; }
+    void setConvexHullStyle(Qt::PenStyle style) { m_convexHullStyle = style; }
 private:
     std::vector<Point> points;
     InterpolationType type;
@@ -1293,6 +1320,20 @@ private:
     QColor m_color{Qt::blue};
     double m_lineWidth{1.0};
     Qt::PenStyle m_lineStyle{Qt::SolidLine};
+
+    bool m_drawInterpolatedCurve{true};
+    bool m_drawPolyline{false};
+    bool m_drawConvexHull{false};
+
+    // Dodatkowe właściwości stylu dla łamanej
+    QColor m_polylineColor{Qt::darkGreen};
+    double m_polylineWidth{1.0};
+    Qt::PenStyle m_polylineStyle{Qt::DashLine};
+
+    // Dodatkowe właściwości stylu dla otoczki wypukłej
+    QColor m_convexHullColor{Qt::red};
+    double m_convexHullWidth{1.0};
+    Qt::PenStyle m_convexHullStyle{Qt::DotLine};
 
     void buildNIFS3() const;
     void buildOIFS3() const;
@@ -1749,9 +1790,8 @@ void Canvas::paintEvent(QPaintEvent* event)
     m_renderer->renderGrid(1.0);
     m_renderer->renderAxes();
 
-    for (const auto& object : m_objects) {
+    for (const auto& object : m_objects)
         m_renderer->renderObject(*object);
-    }
 
     if (m_selectedObject) {
         const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_selectedObject.get());
@@ -1762,20 +1802,17 @@ void Canvas::paintEvent(QPaintEvent* event)
         }
     }
 
-    if (m_isEditingPoints && m_selectedObject) {
+    if (m_isEditingPoints && m_selectedObject)
         drawControlPoints();
-    }
 
     m_renderer->endRender();
 }
 
 void Canvas::drawControlPoints() {
-    auto curve = getSelectedCurve();
+    const auto curve = getSelectedCurve();
     if (!curve || !m_renderer) return;
 
     const auto& points = curve->getPoints();
-
-    m_renderer->renderControlPolygon(points);
 
     m_renderer->renderControlPoints(points, m_selectedControlPointIndex,m_isDraggingPoint ? m_selectedControlPointIndex : -1);
 }
@@ -1786,7 +1823,6 @@ void Canvas::resizeEvent(QResizeEvent* event)
         m_viewportManager->setWindowSize(event->size().width(), event->size().height());
         emit viewportChanged();
     }
-
     QWidget::resizeEvent(event);
 }
 
@@ -2082,6 +2118,12 @@ public:
     virtual void setDrawGrid(bool draw) = 0;
     virtual void setDrawAxes(bool draw) = 0;
     virtual void setDrawControlPolygon(bool draw) = 0;
+
+    virtual void renderPolyline(const std::vector<Point>& points) = 0;
+    virtual void renderConvexHull(const std::vector<Point>& points) = 0;
+
+    virtual void setPolylineStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) = 0;
+    virtual void setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) = 0;
 };
 
 #endif
@@ -2147,31 +2189,34 @@ void QtRenderer::renderCurve(const Curve& curve)
         return;
 
     const auto interpolatedCurve = dynamic_cast<const InterpolatedCurve*>(&curve);
+    if (!interpolatedCurve) return;
 
-    QColor color = m_curveColor;
-    double width = m_curveWidth;
-    Qt::PenStyle style = m_curveStyle;
+    if (interpolatedCurve->getDrawInterpolatedCurve()) {
+        QColor color = interpolatedCurve->getColor();
+        double width = interpolatedCurve->getLineWidth();
+        Qt::PenStyle style = interpolatedCurve->getLineStyle();
 
-    if (interpolatedCurve) {
-        color = interpolatedCurve->getColor();
-        width = interpolatedCurve->getLineWidth();
-        style = interpolatedCurve->getLineStyle();
+        const QPen pen(color, width, style);
+        m_painter->setPen(pen);
+        m_painter->setBrush(Qt::NoBrush);
+
+        constexpr int numSegments = 5000;
+        QPolygonF points;
+
+        for (int i = 0; i <= numSegments; ++i) {
+            double t = static_cast<double>(i) / numSegments;
+            Point p = curve.getPointAt(t);
+            points.append(QPointF(p.x(), p.y()));
+        }
+
+        m_painter->drawPolyline(points);
     }
 
-    const QPen pen(color, width, style);
-    m_painter->setPen(pen);
-    m_painter->setBrush(Qt::NoBrush);
+    if (interpolatedCurve->getDrawPolyline())
+        renderPolyline(interpolatedCurve->getPoints());
 
-    constexpr int numSegments = 5000;
-    QPolygonF points;
-
-    for (int i = 0; i <= numSegments; ++i) {
-        double t = static_cast<double>(i) / numSegments;
-        Point p = curve.getPointAt(t);
-        points.append(QPointF(p.x(), p.y()));
-    }
-
-    m_painter->drawPolyline(points);
+    if (interpolatedCurve->getDrawConvexHull())
+        renderConvexHull(interpolatedCurve->getPoints());
 }
 
 void QtRenderer::renderObject(const GeometricObject& object)
@@ -2396,36 +2441,28 @@ void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bo
 
 void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selectedIndex, int draggingIndex)
 {
-    if (!m_painter || !m_viewportManager || points.empty()) {
+    if (!m_painter || !m_viewportManager || points.empty())
         return;
-    }
 
-    if (m_drawControlPolygon && points.size() >= 2) {
+    if (m_drawControlPolygon && points.size() >= 2)
         renderControlPolygon(points);
-    }
 
     std::vector<QPointF> screenPositions;
     screenPositions.reserve(points.size());
 
-    for (const auto& point : points) {
-        screenPositions.push_back(
-            m_viewportManager->worldToScreen(QPointF(point.x(), point.y()))
-        );
-    }
+    for (const auto& point : points)
+        screenPositions.push_back(m_viewportManager->worldToScreen(QPointF(point.x(), point.y())));
 
-    for (size_t i = 0; i < points.size(); ++i) {
-        if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != draggingIndex) {
+    for (size_t i = 0; i < points.size(); ++i)
+        if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != draggingIndex)
             renderControlPoint(screenPositions[i], false, false);
-        }
-    }
 
-    if (selectedIndex >= 0 && selectedIndex < static_cast<int>(points.size())) {
+    if (selectedIndex >= 0 && selectedIndex < static_cast<int>(points.size()))
         renderControlPoint(screenPositions[selectedIndex], true, false);
-    }
 
-    if (draggingIndex >= 0 && draggingIndex < static_cast<int>(points.size()) && draggingIndex != selectedIndex) {
+    if (draggingIndex >= 0 && draggingIndex < static_cast<int>(points.size()) && draggingIndex != selectedIndex)
         renderControlPoint(screenPositions[draggingIndex], false, true);
-    }
+
 
     m_painter->save();
     m_painter->resetTransform();
@@ -2455,9 +2492,8 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
 
 void QtRenderer::renderControlPolygon(const std::vector<Point>& points)
 {
-    if (!m_painter || !m_viewportManager || points.size() < 2) {
+    if (!m_painter || !m_viewportManager || points.size() < 2)
         return;
-    }
 
     m_painter->save();
     m_painter->resetTransform();
@@ -2540,6 +2576,75 @@ void QtRenderer::setDrawControlPolygon(bool draw)
     m_drawControlPolygon = draw;
 }
 
+void QtRenderer::renderPolyline(const std::vector<Point>& points)
+{
+    if (!m_painter || !m_viewportManager || points.size() < 2)
+        return;
+
+    QPen pen(m_polylineColor, m_polylineWidth, m_polylineStyle);
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
+
+    QPolygonF polygon;
+    for (const auto& point : points) {
+        polygon << QPointF(point.x(), point.y());
+    }
+
+    m_painter->drawPolyline(polygon);
+}
+
+void QtRenderer::renderConvexHull(const std::vector<Point>& points)
+{
+    if (!m_painter || !m_viewportManager || points.size() < 3)
+        return;
+
+    // TODO: Implementacja algorytmu otoczki wypukłej (np. Graham Scan)
+    // Na razie placeholder - rysuj prostokąt otaczający
+
+    QPen pen(m_convexHullColor, m_convexHullWidth, m_convexHullStyle);
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
+
+    // Znajdź bounding box jako placeholder
+    double minX = points[0].x(), maxX = points[0].x();
+    double minY = points[0].y(), maxY = points[0].y();
+
+    for (const auto& point : points) {
+        minX = std::min(minX, point.x());
+        maxX = std::max(maxX, point.x());
+        minY = std::min(minY, point.y());
+        maxY = std::max(maxY, point.y());
+    }
+
+    QRectF boundingRect(minX, minY, maxX - minX, maxY - minY);
+    m_painter->drawRect(boundingRect);
+
+    // Dodaj tekst informujący że to placeholder
+    m_painter->save();
+    m_painter->resetTransform();
+    QPointF screenPos = m_viewportManager->worldToScreen(QPointF(minX, maxY));
+    m_painter->setPen(Qt::black);
+    QFont font = m_painter->font();
+    font.setPointSize(8);
+    m_painter->setFont(font);
+    m_painter->drawText(screenPos + QPointF(5, -5), "Convex Hull (placeholder)");
+    m_painter->restore();
+}
+
+void QtRenderer::setPolylineStyle(const QColor& color, float width, Qt::PenStyle style)
+{
+    m_polylineColor = color;
+    m_polylineWidth = width;
+    m_polylineStyle = style;
+}
+
+void QtRenderer::setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style)
+{
+    m_convexHullColor = color;
+    m_convexHullWidth = width;
+    m_convexHullStyle = style;
+}
+
 //===== END FILE: Graphics\QtRenderer.cpp =====//
 
 //===== START FILE: Graphics\QtRenderer.h =====//
@@ -2592,6 +2697,10 @@ public:
     void setDrawAxes(bool draw) override;
     void setDrawControlPolygon(bool draw) override;
 
+    void renderPolyline(const std::vector<Point>& points) override;
+    void renderConvexHull(const std::vector<Point>& points) override;
+    void setPolylineStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) override;
+    void setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) override;
 private:
     QColor m_pointColor{Qt::black};
     float m_pointSize{4.0f};
@@ -2613,9 +2722,17 @@ private:
     float m_controlPolygonWidth{1.0f};
     Qt::PenStyle m_controlPolygonStyle{Qt::DashLine};
 
+    QColor m_polylineColor{Qt::darkGreen};
+    float m_polylineWidth{1.0f};
+    Qt::PenStyle m_polylineStyle{Qt::DashLine};
+
+    QColor m_convexHullColor{Qt::red};
+    float m_convexHullWidth{1.0f};
+    Qt::PenStyle m_convexHullStyle{Qt::DotLine};
+
     bool m_drawGrid{true};
     bool m_drawAxes{true};
-    bool m_drawControlPolygon{true};
+    bool m_drawControlPolygon{false};
 
     QPainter* m_painter{nullptr};
     ViewportManager* m_viewportManager{nullptr};
@@ -3346,7 +3463,6 @@ void MainWindow::createMenus() {
     m_imageMenu = menuBar()->addMenu("Obrazy");
     m_helpMenu = menuBar()->addMenu("Pomoc");
 
-    // Menu Plik
     m_newAction = m_fileMenu->addAction(QIcon::fromTheme("document-new"), "Nowy");
     m_newAction->setShortcut(QKeySequence::New);
     m_openAction = m_fileMenu->addAction(QIcon::fromTheme("document-open"), "Otwórz...");
@@ -3359,7 +3475,6 @@ void MainWindow::createMenus() {
     m_exitAction = m_fileMenu->addAction(QIcon::fromTheme("application-exit"), "Wyjście");
     m_exitAction->setShortcut(QKeySequence::Quit);
 
-    // Menu Edycja
     m_undoAction = m_editMenu->addAction(QIcon::fromTheme("edit-undo"), "Cofnij");
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_redoAction = m_editMenu->addAction(QIcon::fromTheme("edit-redo"), "Ponów");
@@ -3390,7 +3505,6 @@ void MainWindow::createMenus() {
     m_editModeGroup->addAction(m_movePointModeAction);
     m_selectModeAction->setChecked(true);
 
-    // Menu Widok
     m_zoomInAction = m_viewMenu->addAction(QIcon::fromTheme("zoom-in"), "Przybliż");
     m_zoomInAction->setShortcut(QKeySequence::ZoomIn);
     m_zoomOutAction = m_viewMenu->addAction(QIcon::fromTheme("zoom-out"), "Oddal");
@@ -3399,7 +3513,6 @@ void MainWindow::createMenus() {
     m_resetViewAction->setShortcut(QKeySequence("Ctrl+0"));
     m_fitContentAction = m_viewMenu->addAction(QIcon::fromTheme("zoom-fit-best"), "Dopasuj do zawartości");
 
-    // Menu Krzywe
     m_interpolatedCurvesMenu = m_curvesMenu->addMenu("Krzywa interpolacyjna");
     m_nifsAction = m_interpolatedCurvesMenu->addAction("NIFS3");
     m_oifsAction = m_interpolatedCurvesMenu->addAction("OIFS3");
@@ -3407,12 +3520,10 @@ void MainWindow::createMenus() {
     m_barycentricAction = m_interpolatedCurvesMenu->addAction("Barycentric");
     m_parametricAction = m_curvesMenu->addAction("Krzywa Beziera");
 
-    // Menu Obrazy
     m_addImageAction = m_imageMenu->addAction("Dodaj obraz...");
     m_editImageAction = m_imageMenu->addAction("Edytuj narożniki obrazu");
     m_lockImageAction = m_imageMenu->addAction("Zablokuj/Odblokuj obraz");
 
-    // Menu Pomoc
     m_aboutAction = m_helpMenu->addAction(QIcon::fromTheme("help-about"), "O programie");
 }
 
@@ -3597,8 +3708,7 @@ void MainWindow::updatePropertiesPanel() {
         return;
     }
 
-    auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObject);
-    if (curve) {
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObject)) {
         m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej interpolowanej</b>"));
 
         m_propertiesLayout->addWidget(new QLabel("Typ interpolacji:"));
@@ -3631,6 +3741,45 @@ void MainWindow::updatePropertiesPanel() {
 
                 statusBar()->showMessage(QString("Zmieniono typ interpolacji na %1").arg(typeName));
             });
+
+        // === SEKCJA KONTROLI RENDEROWANIA ===
+        m_propertiesLayout->addWidget(new QLabel("<b>Kontrola wyświetlania:</b>"));
+
+        // Checkbox dla krzywej interpolowanej
+        auto* drawCurveCheckBox = new QCheckBox("Rysuj krzywą interpolowaną");
+        drawCurveCheckBox->setChecked(curve->getDrawInterpolatedCurve());
+        m_propertiesLayout->addWidget(drawCurveCheckBox);
+
+        connect(drawCurveCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
+            curve->setDrawInterpolatedCurve(checked);
+            m_canvas->refresh();
+            statusBar()->showMessage(checked ? "Włączono rysowanie krzywej" : "Wyłączono rysowanie krzywej");
+        });
+
+        // Checkbox dla łamanej
+        auto* drawPolylineCheckBox = new QCheckBox("Rysuj łamaną łączącą punkty");
+        drawPolylineCheckBox->setChecked(curve->getDrawPolyline());
+        m_propertiesLayout->addWidget(drawPolylineCheckBox);
+
+        connect(drawPolylineCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
+            curve->setDrawPolyline(checked);
+            m_canvas->refresh();
+            statusBar()->showMessage(checked ? "Włączono rysowanie łamanej" : "Wyłączono rysowanie łamanej");
+        });
+
+        // Checkbox dla otoczki wypukłej
+        auto* drawConvexHullCheckBox = new QCheckBox("Rysuj otoczkę wypukłą punktów");
+        drawConvexHullCheckBox->setChecked(curve->getDrawConvexHull());
+        m_propertiesLayout->addWidget(drawConvexHullCheckBox);
+
+        connect(drawConvexHullCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
+            curve->setDrawConvexHull(checked);
+            m_canvas->refresh();
+            statusBar()->showMessage(checked ? "Włączono rysowanie otoczki wypukłej" : "Wyłączono rysowanie otoczki wypukłej");
+        });
+
+        // === WŁAŚCIWOŚCI KRZYWEJ INTERPOLOWANEJ ===
+        m_propertiesLayout->addWidget(new QLabel("<b>Styl krzywej interpolowanej:</b>"));
 
         m_propertiesLayout->addWidget(new QLabel("Kolor linii:"));
 
@@ -3697,6 +3846,83 @@ void MainWindow::updatePropertiesPanel() {
             m_canvas->refresh();
             statusBar()->showMessage("Zmieniono styl linii");
         });
+
+        // === WŁAŚCIWOŚCI ŁAMANEJ ===
+        m_propertiesLayout->addWidget(new QLabel("<b>Styl łamanej:</b>"));
+
+        // Kolor łamanej
+        m_propertiesLayout->addWidget(new QLabel("Kolor łamanej:"));
+        QPushButton* polylineColorButton = new QPushButton();
+        polylineColorButton->setFixedSize(80, 25);
+        QColor currentPolylineColor = curve->getPolylineColor();
+        polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(currentPolylineColor.name()));
+        m_propertiesLayout->addWidget(polylineColorButton);
+
+        connect(polylineColorButton, &QPushButton::clicked, [this, curve, polylineColorButton]() {
+            QColor color = QColorDialog::getColor(curve->getPolylineColor(), nullptr, "Wybierz kolor łamanej");
+            if (color.isValid()) {
+                curve->setPolylineColor(color);
+                polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+
+                // Ustaw styl w rendererze
+                if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
+                    qtRenderer->setPolylineStyle(color, curve->getPolylineWidth(), curve->getPolylineStyle());
+                }
+
+                m_canvas->refresh();
+                statusBar()->showMessage("Zmieniono kolor łamanej");
+            }
+        });
+
+        // Grubość łamanej
+        m_propertiesLayout->addWidget(new QLabel("Grubość łamanej:"));
+        auto* polylineWidthSpinBox = new QDoubleSpinBox();
+        polylineWidthSpinBox->setRange(0.1, 10.0);
+        polylineWidthSpinBox->setSingleStep(0.1);
+        polylineWidthSpinBox->setValue(curve->getPolylineWidth());
+        m_propertiesLayout->addWidget(polylineWidthSpinBox);
+
+        connect(polylineWidthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
+            curve->setPolylineWidth(value);
+
+            // Ustaw styl w rendererze
+            if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
+                qtRenderer->setPolylineStyle(curve->getPolylineColor(), value, curve->getPolylineStyle());
+            }
+
+            m_canvas->refresh();
+            statusBar()->showMessage(QString("Zmieniono grubość łamanej na %1").arg(std::to_string(value)));
+        });
+
+        // === WŁAŚCIWOŚCI OTOCZKI WYPUKŁEJ ===
+        m_propertiesLayout->addWidget(new QLabel("<b>Styl otoczki wypukłej:</b>"));
+
+        // Kolor otoczki wypukłej
+        m_propertiesLayout->addWidget(new QLabel("Kolor otoczki wypukłej:"));
+        QPushButton* convexHullColorButton = new QPushButton();
+        convexHullColorButton->setFixedSize(80, 25);
+        QColor currentConvexHullColor = curve->getConvexHullColor();
+        convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(currentConvexHullColor.name()));
+        m_propertiesLayout->addWidget(convexHullColorButton);
+
+        connect(convexHullColorButton, &QPushButton::clicked, [this, curve, convexHullColorButton]() {
+            QColor color = QColorDialog::getColor(curve->getConvexHullColor(), nullptr, "Wybierz kolor otoczki wypukłej");
+            if (color.isValid()) {
+                curve->setConvexHullColor(color);
+                convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+
+                // Ustaw styl w rendererze
+                if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
+                    qtRenderer->setConvexHullStyle(color, curve->getConvexHullWidth(), curve->getConvexHullStyle());
+                }
+
+                m_canvas->refresh();
+                statusBar()->showMessage("Zmieniono kolor otoczki wypukłej");
+            }
+        });
+
+        // Informacja o implementacji
+        m_propertiesLayout->addWidget(new QLabel("<i>Uwaga: Otoczka wypukła to obecnie placeholder</i>"));
 
         m_propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: %1")
             .arg(QString::number(curve->getLength(), 'f', 2))));

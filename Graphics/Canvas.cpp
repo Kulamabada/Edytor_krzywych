@@ -301,9 +301,8 @@ void Canvas::paintEvent(QPaintEvent* event)
     m_renderer->renderGrid(1.0);
     m_renderer->renderAxes();
 
-    for (const auto& object : m_objects) {
+    for (const auto& object : m_objects)
         m_renderer->renderObject(*object);
-    }
 
     if (m_selectedObject) {
         const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_selectedObject.get());
@@ -314,20 +313,17 @@ void Canvas::paintEvent(QPaintEvent* event)
         }
     }
 
-    if (m_isEditingPoints && m_selectedObject) {
+    if (m_isEditingPoints && m_selectedObject)
         drawControlPoints();
-    }
 
     m_renderer->endRender();
 }
 
 void Canvas::drawControlPoints() {
-    auto curve = getSelectedCurve();
+    const auto curve = getSelectedCurve();
     if (!curve || !m_renderer) return;
 
     const auto& points = curve->getPoints();
-
-    m_renderer->renderControlPolygon(points);
 
     m_renderer->renderControlPoints(points, m_selectedControlPointIndex,m_isDraggingPoint ? m_selectedControlPointIndex : -1);
 }
@@ -338,7 +334,6 @@ void Canvas::resizeEvent(QResizeEvent* event)
         m_viewportManager->setWindowSize(event->size().width(), event->size().height());
         emit viewportChanged();
     }
-
     QWidget::resizeEvent(event);
 }
 

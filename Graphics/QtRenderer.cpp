@@ -55,31 +55,34 @@ void QtRenderer::renderCurve(const Curve& curve)
         return;
 
     const auto interpolatedCurve = dynamic_cast<const InterpolatedCurve*>(&curve);
+    if (!interpolatedCurve) return;
 
-    QColor color = m_curveColor;
-    double width = m_curveWidth;
-    Qt::PenStyle style = m_curveStyle;
+    if (interpolatedCurve->getDrawInterpolatedCurve()) {
+        QColor color = interpolatedCurve->getColor();
+        double width = interpolatedCurve->getLineWidth();
+        Qt::PenStyle style = interpolatedCurve->getLineStyle();
 
-    if (interpolatedCurve) {
-        color = interpolatedCurve->getColor();
-        width = interpolatedCurve->getLineWidth();
-        style = interpolatedCurve->getLineStyle();
+        const QPen pen(color, width, style);
+        m_painter->setPen(pen);
+        m_painter->setBrush(Qt::NoBrush);
+
+        constexpr int numSegments = 5000;
+        QPolygonF points;
+
+        for (int i = 0; i <= numSegments; ++i) {
+            double t = static_cast<double>(i) / numSegments;
+            Point p = curve.getPointAt(t);
+            points.append(QPointF(p.x(), p.y()));
+        }
+
+        m_painter->drawPolyline(points);
     }
 
-    const QPen pen(color, width, style);
-    m_painter->setPen(pen);
-    m_painter->setBrush(Qt::NoBrush);
+    if (interpolatedCurve->getDrawPolyline())
+        renderPolyline(interpolatedCurve->getPoints());
 
-    constexpr int numSegments = 5000;
-    QPolygonF points;
-
-    for (int i = 0; i <= numSegments; ++i) {
-        double t = static_cast<double>(i) / numSegments;
-        Point p = curve.getPointAt(t);
-        points.append(QPointF(p.x(), p.y()));
-    }
-
-    m_painter->drawPolyline(points);
+    if (interpolatedCurve->getDrawConvexHull())
+        renderConvexHull(interpolatedCurve->getPoints());
 }
 
 void QtRenderer::renderObject(const GeometricObject& object)
@@ -304,36 +307,28 @@ void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bo
 
 void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selectedIndex, int draggingIndex)
 {
-    if (!m_painter || !m_viewportManager || points.empty()) {
+    if (!m_painter || !m_viewportManager || points.empty())
         return;
-    }
 
-    if (m_drawControlPolygon && points.size() >= 2) {
+    if (m_drawControlPolygon && points.size() >= 2)
         renderControlPolygon(points);
-    }
 
     std::vector<QPointF> screenPositions;
     screenPositions.reserve(points.size());
 
-    for (const auto& point : points) {
-        screenPositions.push_back(
-            m_viewportManager->worldToScreen(QPointF(point.x(), point.y()))
-        );
-    }
+    for (const auto& point : points)
+        screenPositions.push_back(m_viewportManager->worldToScreen(QPointF(point.x(), point.y())));
 
-    for (size_t i = 0; i < points.size(); ++i) {
-        if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != draggingIndex) {
+    for (size_t i = 0; i < points.size(); ++i)
+        if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != draggingIndex)
             renderControlPoint(screenPositions[i], false, false);
-        }
-    }
 
-    if (selectedIndex >= 0 && selectedIndex < static_cast<int>(points.size())) {
+    if (selectedIndex >= 0 && selectedIndex < static_cast<int>(points.size()))
         renderControlPoint(screenPositions[selectedIndex], true, false);
-    }
 
-    if (draggingIndex >= 0 && draggingIndex < static_cast<int>(points.size()) && draggingIndex != selectedIndex) {
+    if (draggingIndex >= 0 && draggingIndex < static_cast<int>(points.size()) && draggingIndex != selectedIndex)
         renderControlPoint(screenPositions[draggingIndex], false, true);
-    }
+
 
     m_painter->save();
     m_painter->resetTransform();
@@ -363,9 +358,8 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
 
 void QtRenderer::renderControlPolygon(const std::vector<Point>& points)
 {
-    if (!m_painter || !m_viewportManager || points.size() < 2) {
+    if (!m_painter || !m_viewportManager || points.size() < 2)
         return;
-    }
 
     m_painter->save();
     m_painter->resetTransform();
@@ -446,4 +440,73 @@ void QtRenderer::setDrawAxes(bool draw)
 void QtRenderer::setDrawControlPolygon(bool draw)
 {
     m_drawControlPolygon = draw;
+}
+
+void QtRenderer::renderPolyline(const std::vector<Point>& points)
+{
+    if (!m_painter || !m_viewportManager || points.size() < 2)
+        return;
+
+    QPen pen(m_polylineColor, m_polylineWidth, m_polylineStyle);
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
+
+    QPolygonF polygon;
+    for (const auto& point : points) {
+        polygon << QPointF(point.x(), point.y());
+    }
+
+    m_painter->drawPolyline(polygon);
+}
+
+void QtRenderer::renderConvexHull(const std::vector<Point>& points)
+{
+    if (!m_painter || !m_viewportManager || points.size() < 3)
+        return;
+
+    // TODO: Implementacja algorytmu otoczki wypukłej (np. Graham Scan)
+    // Na razie placeholder - rysuj prostokąt otaczający
+
+    QPen pen(m_convexHullColor, m_convexHullWidth, m_convexHullStyle);
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
+
+    // Znajdź bounding box jako placeholder
+    double minX = points[0].x(), maxX = points[0].x();
+    double minY = points[0].y(), maxY = points[0].y();
+
+    for (const auto& point : points) {
+        minX = std::min(minX, point.x());
+        maxX = std::max(maxX, point.x());
+        minY = std::min(minY, point.y());
+        maxY = std::max(maxY, point.y());
+    }
+
+    QRectF boundingRect(minX, minY, maxX - minX, maxY - minY);
+    m_painter->drawRect(boundingRect);
+
+    // Dodaj tekst informujący że to placeholder
+    m_painter->save();
+    m_painter->resetTransform();
+    QPointF screenPos = m_viewportManager->worldToScreen(QPointF(minX, maxY));
+    m_painter->setPen(Qt::black);
+    QFont font = m_painter->font();
+    font.setPointSize(8);
+    m_painter->setFont(font);
+    m_painter->drawText(screenPos + QPointF(5, -5), "Convex Hull (placeholder)");
+    m_painter->restore();
+}
+
+void QtRenderer::setPolylineStyle(const QColor& color, float width, Qt::PenStyle style)
+{
+    m_polylineColor = color;
+    m_polylineWidth = width;
+    m_polylineStyle = style;
+}
+
+void QtRenderer::setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style)
+{
+    m_convexHullColor = color;
+    m_convexHullWidth = width;
+    m_convexHullStyle = style;
 }

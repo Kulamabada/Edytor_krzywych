@@ -46,6 +46,10 @@ public:
     void setDrawAxes(bool draw) override;
     void setDrawControlPolygon(bool draw) override;
 
+    void renderPolyline(const std::vector<Point>& points) override;
+    void renderConvexHull(const std::vector<Point>& points) override;
+    void setPolylineStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) override;
+    void setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) override;
 private:
     QColor m_pointColor{Qt::black};
     float m_pointSize{4.0f};
@@ -67,9 +71,17 @@ private:
     float m_controlPolygonWidth{1.0f};
     Qt::PenStyle m_controlPolygonStyle{Qt::DashLine};
 
+    QColor m_polylineColor{Qt::darkGreen};
+    float m_polylineWidth{1.0f};
+    Qt::PenStyle m_polylineStyle{Qt::DashLine};
+
+    QColor m_convexHullColor{Qt::red};
+    float m_convexHullWidth{1.0f};
+    Qt::PenStyle m_convexHullStyle{Qt::DotLine};
+
     bool m_drawGrid{true};
     bool m_drawAxes{true};
-    bool m_drawControlPolygon{true};
+    bool m_drawControlPolygon{false};
 
     QPainter* m_painter{nullptr};
     ViewportManager* m_viewportManager{nullptr};
