@@ -11,12 +11,18 @@ class Point;
 
 class InterpolatedCurve final : public Curve {
 public:
-enum class InterpolationType {
-    NIFS3,
-    OIFS3,
-    Lagrange,
-    Barycentric
-};
+    enum class InterpolationType {
+        NIFS3,
+        OIFS3,
+        Lagrange,
+        Barycentric
+    };
+
+    enum class NodeDistribution {
+        Equidistant,
+        Chebyshev
+    };
+
     explicit InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
                                InterpolationType type);
     ~InterpolatedCurve() override = default;
