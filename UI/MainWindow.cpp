@@ -434,24 +434,20 @@ void MainWindow::updatePropertiesPanel() {
             statusBar()->showMessage("Zmieniono styl linii");
         });
 
-        // === WŁAŚCIWOŚCI ŁAMANEJ ===
         m_propertiesLayout->addWidget(new QLabel("<b>Styl łamanej:</b>"));
 
-        // Kolor łamanej
         m_propertiesLayout->addWidget(new QLabel("Kolor łamanej:"));
-        QPushButton* polylineColorButton = new QPushButton();
+        auto polylineColorButton = new QPushButton();
         polylineColorButton->setFixedSize(80, 25);
         QColor currentPolylineColor = curve->getPolylineColor();
         polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(currentPolylineColor.name()));
         m_propertiesLayout->addWidget(polylineColorButton);
 
         connect(polylineColorButton, &QPushButton::clicked, [this, curve, polylineColorButton]() {
-            QColor color = QColorDialog::getColor(curve->getPolylineColor(), nullptr, "Wybierz kolor łamanej");
-            if (color.isValid()) {
+            if (QColor color = QColorDialog::getColor(curve->getPolylineColor(), nullptr, "Wybierz kolor łamanej"); color.isValid()) {
                 curve->setPolylineColor(color);
                 polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
 
-                // Ustaw styl w rendererze
                 if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
                     qtRenderer->setPolylineStyle(color, curve->getPolylineWidth(), curve->getPolylineStyle());
                 }
@@ -461,7 +457,6 @@ void MainWindow::updatePropertiesPanel() {
             }
         });
 
-        // Grubość łamanej
         m_propertiesLayout->addWidget(new QLabel("Grubość łamanej:"));
         auto* polylineWidthSpinBox = new QDoubleSpinBox();
         polylineWidthSpinBox->setRange(0.1, 10.0);
@@ -472,19 +467,15 @@ void MainWindow::updatePropertiesPanel() {
         connect(polylineWidthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
             curve->setPolylineWidth(value);
 
-            // Ustaw styl w rendererze
-            if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
+            if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get()))
                 qtRenderer->setPolylineStyle(curve->getPolylineColor(), value, curve->getPolylineStyle());
-            }
 
             m_canvas->refresh();
             statusBar()->showMessage(QString("Zmieniono grubość łamanej na %1").arg(std::to_string(value)));
         });
 
-        // === WŁAŚCIWOŚCI OTOCZKI WYPUKŁEJ ===
         m_propertiesLayout->addWidget(new QLabel("<b>Styl otoczki wypukłej:</b>"));
 
-        // Kolor otoczki wypukłej
         m_propertiesLayout->addWidget(new QLabel("Kolor otoczki wypukłej:"));
         QPushButton* convexHullColorButton = new QPushButton();
         convexHullColorButton->setFixedSize(80, 25);
@@ -498,7 +489,6 @@ void MainWindow::updatePropertiesPanel() {
                 curve->setConvexHullColor(color);
                 convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
 
-                // Ustaw styl w rendererze
                 if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
                     qtRenderer->setConvexHullStyle(color, curve->getConvexHullWidth(), curve->getConvexHullStyle());
                 }
@@ -508,8 +498,7 @@ void MainWindow::updatePropertiesPanel() {
             }
         });
 
-        // Informacja o implementacji
-        m_propertiesLayout->addWidget(new QLabel("<i>Uwaga: Otoczka wypukła to obecnie placeholder</i>"));
+        m_propertiesLayout->addWidget(new QLabel("<i>Otoczka wypukła obliczana algorytmem Graham Scan</i>"));
 
         m_propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: %1")
             .arg(QString::number(curve->getLength(), 'f', 2))));
@@ -573,7 +562,7 @@ void MainWindow::onSelectionCleared() {
     statusBar()->showMessage("Anulowano zaznaczenie");
 }
 
-void MainWindow::onControlPointAdded(int pointIndex) {
+void MainWindow::onControlPointAdded(const int pointIndex) {
     updateObjectsTree();
     updatePropertiesPanel();
     statusBar()->showMessage(QString("Dodano punkt kontrolny %1").arg(std::to_string(pointIndex)));
@@ -595,7 +584,7 @@ void MainWindow::onControlPointSelected(int pointIndex) {
         int objectIndex = static_cast<int>(std::distance(objects.begin(), it));
 
         for (int i = 0; i < m_objectsTree->topLevelItemCount(); ++i) {
-            QTreeWidgetItem* objectItem = m_objectsTree->topLevelItem(i);
+            const QTreeWidgetItem* objectItem = m_objectsTree->topLevelItem(i);
             if (objectItem->data(0, Qt::UserRole).toInt() == objectIndex) {
                 for (int j = 0; j < objectItem->childCount(); ++j) {
                     QTreeWidgetItem* pointItem = objectItem->child(j);

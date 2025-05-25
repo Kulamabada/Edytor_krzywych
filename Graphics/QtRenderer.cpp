@@ -447,55 +447,39 @@ void QtRenderer::renderPolyline(const std::vector<Point>& points)
     if (!m_painter || !m_viewportManager || points.size() < 2)
         return;
 
-    QPen pen(m_polylineColor, m_polylineWidth, m_polylineStyle);
+    const QPen pen(m_polylineColor, m_polylineWidth, m_polylineStyle);
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 
     QPolygonF polygon;
-    for (const auto& point : points) {
+    for (const auto& point : points)
         polygon << QPointF(point.x(), point.y());
-    }
 
     m_painter->drawPolyline(polygon);
 }
 
 void QtRenderer::renderConvexHull(const std::vector<Point>& points)
 {
-    if (!m_painter || !m_viewportManager || points.size() < 3)
-        return;
+    if (!m_painter || !m_viewportManager || points.size() < 3) return;
 
-    // TODO: Implementacja algorytmu otoczki wypukłej (np. Graham Scan)
-    // Na razie placeholder - rysuj prostokąt otaczający
+    const std::vector<Point> hull = computeConvexHull(points);
 
-    QPen pen(m_convexHullColor, m_convexHullWidth, m_convexHullStyle);
+    if (hull.size() < 3) return;
+
+    const QPen pen(m_convexHullColor, m_convexHullWidth, m_convexHullStyle);
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 
-    // Znajdź bounding box jako placeholder
-    double minX = points[0].x(), maxX = points[0].x();
-    double minY = points[0].y(), maxY = points[0].y();
+    QPolygonF polygon;
+    for (const auto& point : hull)
+        polygon << QPointF(point.x(), point.y());
 
-    for (const auto& point : points) {
-        minX = std::min(minX, point.x());
-        maxX = std::max(maxX, point.x());
-        minY = std::min(minY, point.y());
-        maxY = std::max(maxY, point.y());
-    }
+    if (!hull.empty())
+        polygon << QPointF(hull[0].x(), hull[0].y());
 
-    QRectF boundingRect(minX, minY, maxX - minX, maxY - minY);
-    m_painter->drawRect(boundingRect);
-
-    // Dodaj tekst informujący że to placeholder
-    m_painter->save();
-    m_painter->resetTransform();
-    QPointF screenPos = m_viewportManager->worldToScreen(QPointF(minX, maxY));
-    m_painter->setPen(Qt::black);
-    QFont font = m_painter->font();
-    font.setPointSize(8);
-    m_painter->setFont(font);
-    m_painter->drawText(screenPos + QPointF(5, -5), "Convex Hull (placeholder)");
-    m_painter->restore();
+    m_painter->drawPolyline(polygon);
 }
+
 
 void QtRenderer::setPolylineStyle(const QColor& color, float width, Qt::PenStyle style)
 {
@@ -509,4 +493,70 @@ void QtRenderer::setConvexHullStyle(const QColor& color, float width, Qt::PenSty
     m_convexHullColor = color;
     m_convexHullWidth = width;
     m_convexHullStyle = style;
+}
+
+std::vector<Point> QtRenderer::computeConvexHull(const std::vector<Point>& points) const
+{
+    if (points.size() < 3) return points;
+
+    std::vector<Point> pts = points;
+
+    const auto pivotIt = std::ranges::min_element(pts,
+                                                  [](const Point& a, const Point& b) {
+                                                      if (std::abs(a.y() - b.y()) < 1e-9)
+                                                          return a.x() < b.x();
+                                                      return a.y() < b.y();
+                                                  });
+    Point pivot = *pivotIt;
+    std::swap(*pivotIt, pts[0]);
+
+    std::sort(pts.begin() + 1, pts.end(),
+        [this, &pivot](const Point& a, const Point& b) {
+            const double angleA = polarAngle(pivot, a), angleB = polarAngle(pivot, b);
+
+            if (std::abs(angleA - angleB) < 1e-9)
+                return distanceSquared(pivot, a) < distanceSquared(pivot, b);
+
+            return angleA < angleB;
+        });
+
+    std::vector<Point> filtered;
+    filtered.push_back(pts[0]);
+
+    for (size_t i = 1; i < pts.size(); ++i) {
+        for (;i < pts.size() - 1 &&
+            std::abs(polarAngle(pivot, pts[i]) - polarAngle(pivot, pts[i + 1])) < 1e-9;
+            i++) {}
+        filtered.push_back(pts[i]);
+    }
+
+    if (filtered.size() < 3) return filtered;
+
+    std::vector<Point> hull;
+    hull.push_back(filtered[0]);
+    hull.push_back(filtered[1]);
+
+    for (size_t i = 2; i < filtered.size(); ++i) {
+        while (hull.size() > 1 && crossProduct(hull[hull.size()-2], hull[hull.size()-1], filtered[i]) <= 0)
+            hull.pop_back();
+        hull.push_back(filtered[i]);
+    }
+
+    return hull;
+}
+
+double QtRenderer::crossProduct(const Point& O, const Point& A, const Point& B)
+{
+    return (A.x() - O.x()) * (B.y() - O.y()) - (A.y() - O.y()) * (B.x() - O.x());
+}
+
+double QtRenderer::polarAngle(const Point& pivot, const Point& point)
+{
+    return std::atan2(point.y() - pivot.y(), point.x() - pivot.x());
+}
+
+double QtRenderer::distanceSquared(const Point& a, const Point& b)
+{
+    const double dx = a.x() - b.x(), dy = a.y() - b.y();
+    return dx * dx + dy * dy;
 }

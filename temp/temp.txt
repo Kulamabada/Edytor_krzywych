@@ -1,4 +1,4 @@
-// Plik wygenerowany automatycznie 2025-05-24 18:59:42
+// Plik wygenerowany automatycznie 2025-05-24 19:04:57
 // Zawiera 33 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
