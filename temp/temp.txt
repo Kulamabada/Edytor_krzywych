@@ -1,4 +1,4 @@
-// Plik wygenerowany automatycznie 2025-05-27 11:31:32
+// Plik wygenerowany automatycznie 2025-05-27 21:55:25
 // Zawiera 35 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
@@ -1085,28 +1085,28 @@ public:
     explicit BezierCurve();
     ~BezierCurve() override = default;
 
-    // Zarządzanie punktami kontrolnymi
-    void addControlPoint(const Point& point);
-    void insertControlPoint(size_t index, const Point& point);
-    void removeControlPoint(size_t index);
-    void setControlPoints(const std::vector<Point>& points);
-    void moveControlPoint(size_t index, const Point& newPosition);
-    const std::vector<Point>& getControlPoints() const;
-    size_t getControlPointCount() const;
     int getDegree() const;
 
-    // Implementacja Curve
+    // Curve
     double getLength() const override;
     Point getPointAt(double t) const override;
     Vector getTangentAt(double t) const override;
     std::unique_ptr<Curve> clone() const override;
 
-    // Implementacja GeometricObject
+    bool hasControlPoints() const override { return true; }
+    void addControlPoint(const Point& point) override;
+    void insertControlPoint(size_t index, const Point& point) override;
+    void removeControlPoint(size_t index) override;
+    void setControlPoints(const std::vector<Point>& points) override;
+    void moveControlPoint(size_t index, const Point& newPosition) override;
+    const std::vector<Point>& getControlPoints() const override;
+    size_t getControlPointCount() const override;
+
+    //  GeometricObject
     Vector getPosition() const override;
     void setPosition(const Eigen::Vector3d& position) override;
     void transform(const TransformMatrix& matrix) override;
 
-    // Właściwości wizualne
     void setColor(const QColor& color) { m_color = color; }
     QColor getColor() const { return m_color; }
 
@@ -1131,7 +1131,6 @@ public:
 private:
     std::vector<Point> m_controlPoints;
 
-    // Właściwości wizualne
     QColor m_color{Qt::blue};
     double m_lineWidth{2.0};
     Qt::PenStyle m_lineStyle{Qt::SolidLine};
@@ -1141,7 +1140,6 @@ private:
     double m_controlPolygonWidth{1.0};
     Qt::PenStyle m_controlPolygonStyle{Qt::DashLine};
 
-    // Algorytm de Casteljau
     Point deCasteljau(double t) const;
     Vector deCasteljauDerivative(double t) const;
 };
@@ -1169,6 +1167,18 @@ public:
     virtual Vector getTangentAt(double t) const = 0;
 
     virtual std::unique_ptr<Curve> clone() const = 0;
+
+    virtual bool hasControlPoints() const { return false; }
+    virtual void addControlPoint(const Point& point) {}
+    virtual void insertControlPoint(size_t index, const Point& point) {}
+    virtual void removeControlPoint(size_t index) {}
+    virtual void setControlPoints(const std::vector<Point>& points) {}
+    virtual void moveControlPoint(size_t index, const Point& newPosition) {}
+    virtual const std::vector<Point>& getControlPoints() const {
+        static std::vector<Point> empty;
+        return empty;
+    }
+    virtual size_t getControlPointCount() const { return 0; }
 
     // Override from GeometricObject
     void transform(const TransformMatrix& matrix) override = 0;
@@ -1706,6 +1716,7 @@ public:
                                InterpolationType type);
     ~InterpolatedCurve() override = default;
 
+    // deprecated, should be deleted and renamed
     void addPoint(const Point& point);
     void insertPoint(size_t index, const Point& point);
     void removePoint(size_t index);
@@ -1721,6 +1732,15 @@ public:
     double getLength() const override;
     Point getPointAt(double t) const override;
     Vector getTangentAt(double t) const override;
+
+    bool hasControlPoints() const override { return true; }
+    void addControlPoint(const Point& point) override { addPoint(point); }
+    void insertControlPoint(size_t index, const Point& point) override { insertPoint(index, point); }
+    void removeControlPoint(size_t index) override { removePoint(index); }
+    void setControlPoints(const std::vector<Point>& points) override { setPoints(points); }
+    void moveControlPoint(size_t index, const Point& newPosition) override { movePoint(index, newPosition); }
+    const std::vector<Point>& getControlPoints() const override { return getPoints(); }
+    size_t getControlPointCount() const override { return getPointCount(); }
 
     // GeometricObject
     void transform(const TransformMatrix& matrix) override;
@@ -2006,10 +2026,11 @@ void Canvas::selectObject(std::shared_ptr<GeometricObject> object)
 {
     if (m_selectedObject != object) {
         m_selectedObject = object;
-
         m_selectedControlPointIndex = -1;
 
-        if (m_isEditingPoints && !std::dynamic_pointer_cast<InterpolatedCurve>(object))
+        const auto curve = std::dynamic_pointer_cast<Curve>(object);
+
+        if (bool hasControlPoints = curve && curve->hasControlPoints(); m_isEditingPoints && !hasControlPoints)
             finishEditing();
 
         emit objectSelected(object);
@@ -2073,7 +2094,7 @@ void Canvas::fitToContents()
         return;
     }
 
-    QRectF bounds(-10, -10, 20, 20);
+    constexpr QRectF bounds(-10, -10, 20, 20);
 
     if (m_viewportManager) {
         m_viewportManager->fitView(bounds);
@@ -2142,41 +2163,23 @@ void Canvas::finishEditing() {
     update();
 }
 
-std::shared_ptr<InterpolatedCurve> Canvas::getSelectedCurve() const {
-    auto selectedObj = selectedObject();
-    if (!selectedObj) return nullptr;
-
-    return std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj);
-}
-
-int Canvas::hitTestControlPoint(const QPointF& pos, double tolerance) {
+int Canvas::hitTestControlPoint(const QPointF& pos, double tolerance) const {
     if (!m_viewportManager) return -1;
 
-    auto selectedObj = selectedObject();
+    const auto selectedObj = selectedObject();
     if (!selectedObj) return -1;
 
-    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-        const auto& points = curve->getPoints();
+    if (const auto curve = std::dynamic_pointer_cast<Curve>(selectedObj)) {
+        if (!curve->hasControlPoints()) return -1;
+
+        const auto& points = curve->getControlPoints();
         for (size_t i = 0; i < points.size(); ++i) {
             QPointF screenPos = m_viewportManager->worldToScreen(
                 QPointF(points[i].x(), points[i].y()));
-            if (QLineF(pos, screenPos).length() <= tolerance) {
+            if (QLineF(pos, screenPos).length() <= tolerance)
                 return static_cast<int>(i);
-            }
         }
     }
-
-    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
-        const auto& points = bezierCurve->getControlPoints();
-        for (size_t i = 0; i < points.size(); ++i) {
-            QPointF screenPos = m_viewportManager->worldToScreen(
-                QPointF(points[i].x(), points[i].y()));
-            if (QLineF(pos, screenPos).length() <= tolerance) {
-                return static_cast<int>(i);
-            }
-        }
-    }
-
     return -1;
 }
 
@@ -2186,27 +2189,19 @@ bool Canvas::addControlPoint(const QPointF& screenPos) {
     auto selectedObj = selectedObject();
     if (!selectedObj) return false;
 
-    const QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
-    int newPointIndex = -1;
+    if (auto curve = std::dynamic_pointer_cast<Curve>(selectedObj)) {
+        if (!curve->hasControlPoints()) return false;
 
-    // Obsługa InterpolatedCurve
-    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-        curve->addPoint(Point(worldPos.x(), worldPos.y()));
-        newPointIndex = static_cast<int>(curve->getPointCount()) - 1;
-    }
-    // Obsługa BezierCurve
-    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
-        bezierCurve->addControlPoint(Point(worldPos.x(), worldPos.y()));
-        newPointIndex = static_cast<int>(bezierCurve->getControlPointCount()) - 1;
-    }
-    else {
-        return false;
-    }
+        const QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
+        curve->addControlPoint(Point(worldPos.x(), worldPos.y()));
 
-    selectControlPoint(newPointIndex);
-    emit controlPointAdded(newPointIndex);
-    update();
-    return true;
+        int newPointIndex = static_cast<int>(curve->getControlPointCount()) - 1;
+        selectControlPoint(newPointIndex);
+        emit controlPointAdded(newPointIndex);
+        update();
+        return true;
+    }
+    return false;
 }
 
 bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
@@ -2215,31 +2210,20 @@ bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
     auto selectedObj = selectedObject();
     if (!selectedObj) return false;
 
-    QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
+    if (auto curve = std::dynamic_pointer_cast<Curve>(selectedObj)) {
+        if (!curve->hasControlPoints()) return false;
+        if (pointIndex >= static_cast<int>(curve->getControlPointCount())) return false;
 
-    // Obsługa InterpolatedCurve
-    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-        if (pointIndex >= static_cast<int>(curve->getPointCount())) return false;
-
-        const auto& points = curve->getPoints();
+        QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
+        const auto& points = curve->getControlPoints();
         auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
-        curve->movePoint(pointIndex, newPoint);
-    }
-    // Obsługa BezierCurve
-    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
-        if (pointIndex >= static_cast<int>(bezierCurve->getControlPointCount())) return false;
+        curve->moveControlPoint(pointIndex, newPoint);
 
-        const auto& points = bezierCurve->getControlPoints();
-        auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
-        bezierCurve->moveControlPoint(pointIndex, newPoint);
+        emit controlPointMoved(pointIndex);
+        update();
+        return true;
     }
-    else {
-        return false;
-    }
-
-    emit controlPointMoved(pointIndex);
-    update();
-    return true;
+    return false;
 }
 
 void Canvas::selectControlPoint(const int pointIndex) {
@@ -2320,23 +2304,16 @@ void Canvas::paintEvent(QPaintEvent* event)
 void Canvas::drawControlPoints() {
     if (!m_renderer) return;
 
-    auto selectedObj = selectedObject();
+    const auto selectedObj = selectedObject();
     if (!selectedObj) return;
 
-    // Obsługa InterpolatedCurve
-    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-        const auto& points = curve->getPoints();
-        m_renderer->renderControlPoints(points, m_selectedControlPointIndex,
-                                      m_isDraggingPoint ? m_selectedControlPointIndex : -1);
-    }
-    // Obsługa BezierCurve
-    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
-        const auto& points = bezierCurve->getControlPoints();
-        m_renderer->renderControlPoints(points, m_selectedControlPointIndex,
-                                      m_isDraggingPoint ? m_selectedControlPointIndex : -1);
-    }
+    if (const auto curve = std::dynamic_pointer_cast<Curve>(selectedObj))
+        if (curve->hasControlPoints()) {
+            const auto& points = curve->getControlPoints();
+            m_renderer->renderControlPoints(points, m_selectedControlPointIndex,
+                                          m_isDraggingPoint ? m_selectedControlPointIndex : -1);
+        }
 }
-
 
 void Canvas::resizeEvent(QResizeEvent* event)
 {
@@ -2376,7 +2353,17 @@ void Canvas::mousePressEvent(QMouseEvent* event)
                 break;
 
             case EditMode::None:
-                    break;
+                    if (const auto hitObject = hitTestObject(event->pos())) {
+                        selectObject(hitObject);
+
+                        if (hasSelectedCurveWithControlPoints()) {
+                            setEditMode(EditMode::SelectPoint);
+                            emit editingStarted();
+                        }
+                        return;
+                    }
+                    clearSelection();
+            break;
 
             default:
                 qWarning() << "Nieobsługiwany tryb edycji:" << static_cast<int>(m_editMode);
@@ -2506,20 +2493,40 @@ std::shared_ptr<BezierCurve> Canvas::getSelectedBezierCurve() const {
 }
 
 bool Canvas::hasSelectedCurveWithControlPoints() const {
-    auto selectedObj = selectedObject();
+    const auto selectedObj = selectedObject();
     if (!selectedObj) return false;
 
-    // Sprawdź InterpolatedCurve
-    if (std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-        return true;
+    if (const auto curve = std::dynamic_pointer_cast<Curve>(selectedObj)) {
+        return curve->hasControlPoints();
     }
-
-    // Sprawdź BezierCurve
-    if (std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
-        return true;
-    }
-
     return false;
+}
+
+std::shared_ptr<GeometricObject> Canvas::hitTestObject(const QPointF& pos, double tolerance) const {
+    if (!m_viewportManager) return nullptr;
+
+    QPointF worldPos = m_viewportManager->screenToWorld(pos);
+
+    // Sprawdź każdy obiekt od końca (ostatnie dodane mają priorytet)
+    for (auto it = m_objects.rbegin(); it != m_objects.rend(); ++it) {
+        const auto& object = *it;
+
+        if (auto curve = std::dynamic_pointer_cast<Curve>(object)) {
+            // Test kolizji z krzywą - sprawdź punkty wzdłuż krzywej
+            constexpr int testPoints = 100;
+            for (int i = 0; i <= testPoints; ++i) {
+                double t = static_cast<double>(i) / testPoints;
+                Point curvePoint = curve->getPointAt(t);
+                QPointF screenCurvePos = m_viewportManager->worldToScreen(
+                    QPointF(curvePoint.x(), curvePoint.y()));
+
+                if (QLineF(pos, screenCurvePos).length() <= tolerance)
+                    return object;
+            }
+        }
+    }
+
+    return nullptr;
 }
 
 //===== END FILE: Graphics\Canvas.cpp =====//
@@ -2584,7 +2591,6 @@ public:
     bool isEditingCurve() const;
     void finishEditing();
 
-    std::shared_ptr<InterpolatedCurve> getSelectedCurve() const;
     void selectControlPoint(int pointIndex);
     bool hasSelectedCurveWithControlPoints() const;
 
@@ -2615,11 +2621,12 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
 
 private:
-    int hitTestControlPoint(const QPointF& pos, double tolerance = 10.0);
+    int hitTestControlPoint(const QPointF& pos, double tolerance = 10.0) const;
     bool addControlPoint(const QPointF& screenPos);
     bool moveControlPoint(int pointIndex, const QPointF& screenPos);
     void drawControlPoints();
     std::shared_ptr<BezierCurve> getSelectedBezierCurve() const;
+    std::shared_ptr<GeometricObject> hitTestObject(const QPointF& pos, double tolerance = 10.0) const;
 
     std::vector<std::shared_ptr<GeometricObject>> m_objects;
     std::shared_ptr<GeometricObject> m_selectedObject;
@@ -2798,7 +2805,7 @@ void QtRenderer::renderCurve(const Curve& curve) {
         m_painter->setBrush(Qt::NoBrush);
 
         if (bezierCurve->getControlPointCount() >= 2) {
-            constexpr int numSegments = 100;
+            constexpr int numSegments = 1000;
             QPolygonF points;
 
             for (int i = 0; i <= numSegments; ++i) {
@@ -4032,9 +4039,8 @@ void ActionHandler::onBarycentricAction() {
 }
 
 void ActionHandler::onBezierAction() {
-    auto curve = std::make_shared<BezierCurve>();
+    const auto curve = std::make_shared<BezierCurve>();
 
-    // Domyślne punkty kontrolne dla demonstracji
     curve->addControlPoint(Point(-50, -25, 0));
     curve->addControlPoint(Point(-25, 75, 0));
     curve->addControlPoint(Point(25, 75, 0));
@@ -4047,12 +4053,11 @@ void ActionHandler::onBezierAction() {
     m_mainWindow.getStatusBar()->showMessage("Utworzono krzywą Béziera");
 }
 
-void ActionHandler::onAboutAction() {
+void ActionHandler::onAboutAction() const {
     QMessageBox::about(&m_mainWindow, "O programie",
         "<h3>Edytor Krzywych</h3>"
         "<p>Wersja 1.0</p>"
         "<p>Program do tworzenia i edycji krzywych matematycznych.</p>"
-        "<p>Używa biblioteki Eigen do obliczeń matematycznych.</p>"
         "<p><b>Funkcjonalności edycji punktów kontrolnych:</b></p>"
         "<ul>"
         "<li>Dodawanie nowych punktów kontrolnych</li>"
@@ -4111,7 +4116,7 @@ public slots:
 
     void onBezierAction();
 
-    void onAboutAction();
+    void onAboutAction() const;
 
 private:
     void connectActions();
@@ -4348,8 +4353,8 @@ void MainWindow::connectSignals() {
             if (objectIndex >= 0 && objectIndex < static_cast<int>(m_canvas->objects().size())) {
                 m_canvas->selectObject(m_canvas->objects()[objectIndex]);
 
-                auto curve = m_canvas->getSelectedCurve();
-                if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
+                auto curve = std::dynamic_pointer_cast<Curve>(m_canvas->selectedObject());
+                if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getControlPointCount())) {
                     if (m_canvas->getEditMode() == Canvas::EditMode::None) {
                         m_canvas->setEditMode(Canvas::EditMode::SelectPoint);
                         m_selectModeAction->setChecked(true);

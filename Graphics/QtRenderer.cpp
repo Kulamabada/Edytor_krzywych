@@ -96,7 +96,7 @@ void QtRenderer::renderCurve(const Curve& curve) {
         m_painter->setBrush(Qt::NoBrush);
 
         if (bezierCurve->getControlPointCount() >= 2) {
-            constexpr int numSegments = 100;
+            constexpr int numSegments = 1000;
             QPolygonF points;
 
             for (int i = 0; i <= numSegments; ++i) {

@@ -119,7 +119,8 @@ void ActionHandler::onAddPointModeAction() {
     } else {
         QMessageBox::warning(&m_mainWindow, "Edycja punktów kontrolnych",
                             "Najpierw zaznacz krzywą, aby dodać do niej punkty kontrolne.");
-        m_mainWindow.m_selectModeAction->setChecked(true);
+
+        m_mainWindow.m_addPointModeAction->setChecked(false);
     }
 }
 
@@ -131,9 +132,11 @@ void ActionHandler::onMovePointModeAction() {
     } else {
         QMessageBox::warning(&m_mainWindow, "Edycja punktów kontrolnych",
                             "Najpierw zaznacz krzywą, aby przesuwać jej punkty kontrolne.");
-        m_mainWindow.m_selectModeAction->setChecked(true);
+
+        m_mainWindow.m_movePointModeAction->setChecked(false);
     }
 }
+
 
 void ActionHandler::onDeletePointAction() {
     auto selectedObj = m_mainWindow.getCanvas()->selectedObject();
@@ -159,7 +162,11 @@ void ActionHandler::onDeletePointAction() {
 
 void ActionHandler::onFinishEditingAction() {
     m_mainWindow.getCanvas()->finishEditing();
-    m_mainWindow.m_selectModeAction->setChecked(true);
+
+    m_mainWindow.m_selectModeAction->setChecked(false);
+    m_mainWindow.m_addPointModeAction->setChecked(false);
+    m_mainWindow.m_movePointModeAction->setChecked(false);
+
     m_mainWindow.updateModeLabel();
     m_mainWindow.getStatusBar()->showMessage("Zakończono edycję punktów kontrolnych");
 }
@@ -232,7 +239,7 @@ void ActionHandler::onBezierAction() {
     m_mainWindow.getStatusBar()->showMessage("Utworzono krzywą Béziera");
 }
 
-void ActionHandler::onAboutAction() {
+void ActionHandler::onAboutAction() const {
     QMessageBox::about(&m_mainWindow, "O programie",
         "<h3>Edytor Krzywych</h3>"
         "<p>Wersja 1.0</p>"

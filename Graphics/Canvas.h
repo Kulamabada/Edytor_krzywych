@@ -56,7 +56,6 @@ public:
     bool isEditingCurve() const;
     void finishEditing();
 
-    std::shared_ptr<InterpolatedCurve> getSelectedCurve() const;
     void selectControlPoint(int pointIndex);
     bool hasSelectedCurveWithControlPoints() const;
 
@@ -87,11 +86,12 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
 
 private:
-    int hitTestControlPoint(const QPointF& pos, double tolerance = 10.0);
+    int hitTestControlPoint(const QPointF& pos, double tolerance = 10.0) const;
     bool addControlPoint(const QPointF& screenPos);
     bool moveControlPoint(int pointIndex, const QPointF& screenPos);
     void drawControlPoints();
     std::shared_ptr<BezierCurve> getSelectedBezierCurve() const;
+    std::shared_ptr<GeometricObject> hitTestObject(const QPointF& pos, double tolerance = 10.0) const;
 
     std::vector<std::shared_ptr<GeometricObject>> m_objects;
     std::shared_ptr<GeometricObject> m_selectedObject;

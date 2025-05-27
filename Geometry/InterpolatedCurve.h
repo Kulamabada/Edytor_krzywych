@@ -27,6 +27,7 @@ public:
                                InterpolationType type);
     ~InterpolatedCurve() override = default;
 
+    // deprecated, should be deleted and renamed
     void addPoint(const Point& point);
     void insertPoint(size_t index, const Point& point);
     void removePoint(size_t index);
@@ -42,6 +43,15 @@ public:
     double getLength() const override;
     Point getPointAt(double t) const override;
     Vector getTangentAt(double t) const override;
+
+    bool hasControlPoints() const override { return true; }
+    void addControlPoint(const Point& point) override { addPoint(point); }
+    void insertControlPoint(size_t index, const Point& point) override { insertPoint(index, point); }
+    void removeControlPoint(size_t index) override { removePoint(index); }
+    void setControlPoints(const std::vector<Point>& points) override { setPoints(points); }
+    void moveControlPoint(size_t index, const Point& newPosition) override { movePoint(index, newPosition); }
+    const std::vector<Point>& getControlPoints() const override { return getPoints(); }
+    size_t getControlPointCount() const override { return getPointCount(); }
 
     // GeometricObject
     void transform(const TransformMatrix& matrix) override;

@@ -43,7 +43,7 @@ public slots:
 
     void onBezierAction();
 
-    void onAboutAction();
+    void onAboutAction() const;
 
 private:
     void connectActions();

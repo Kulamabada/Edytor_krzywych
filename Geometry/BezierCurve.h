@@ -11,28 +11,28 @@ public:
     explicit BezierCurve();
     ~BezierCurve() override = default;
 
-    // Zarządzanie punktami kontrolnymi
-    void addControlPoint(const Point& point);
-    void insertControlPoint(size_t index, const Point& point);
-    void removeControlPoint(size_t index);
-    void setControlPoints(const std::vector<Point>& points);
-    void moveControlPoint(size_t index, const Point& newPosition);
-    const std::vector<Point>& getControlPoints() const;
-    size_t getControlPointCount() const;
     int getDegree() const;
 
-    // Implementacja Curve
+    // Curve
     double getLength() const override;
     Point getPointAt(double t) const override;
     Vector getTangentAt(double t) const override;
     std::unique_ptr<Curve> clone() const override;
 
-    // Implementacja GeometricObject
+    bool hasControlPoints() const override { return true; }
+    void addControlPoint(const Point& point) override;
+    void insertControlPoint(size_t index, const Point& point) override;
+    void removeControlPoint(size_t index) override;
+    void setControlPoints(const std::vector<Point>& points) override;
+    void moveControlPoint(size_t index, const Point& newPosition) override;
+    const std::vector<Point>& getControlPoints() const override;
+    size_t getControlPointCount() const override;
+
+    //  GeometricObject
     Vector getPosition() const override;
     void setPosition(const Eigen::Vector3d& position) override;
     void transform(const TransformMatrix& matrix) override;
 
-    // Właściwości wizualne
     void setColor(const QColor& color) { m_color = color; }
     QColor getColor() const { return m_color; }
 
@@ -57,7 +57,6 @@ public:
 private:
     std::vector<Point> m_controlPoints;
 
-    // Właściwości wizualne
     QColor m_color{Qt::blue};
     double m_lineWidth{2.0};
     Qt::PenStyle m_lineStyle{Qt::SolidLine};
@@ -67,7 +66,6 @@ private:
     double m_controlPolygonWidth{1.0};
     Qt::PenStyle m_controlPolygonStyle{Qt::DashLine};
 
-    // Algorytm de Casteljau
     Point deCasteljau(double t) const;
     Vector deCasteljauDerivative(double t) const;
 };

@@ -222,8 +222,8 @@ void MainWindow::connectSignals() {
             if (objectIndex >= 0 && objectIndex < static_cast<int>(m_canvas->objects().size())) {
                 m_canvas->selectObject(m_canvas->objects()[objectIndex]);
 
-                auto curve = m_canvas->getSelectedCurve();
-                if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
+                auto curve = std::dynamic_pointer_cast<Curve>(m_canvas->selectedObject());
+                if (curve && pointIndex >= 0 && pointIndex < static_cast<int>(curve->getControlPointCount())) {
                     if (m_canvas->getEditMode() == Canvas::EditMode::None) {
                         m_canvas->setEditMode(Canvas::EditMode::SelectPoint);
                         m_selectModeAction->setChecked(true);

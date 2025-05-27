@@ -18,6 +18,18 @@ public:
 
     virtual std::unique_ptr<Curve> clone() const = 0;
 
+    virtual bool hasControlPoints() const { return false; }
+    virtual void addControlPoint(const Point& point) {}
+    virtual void insertControlPoint(size_t index, const Point& point) {}
+    virtual void removeControlPoint(size_t index) {}
+    virtual void setControlPoints(const std::vector<Point>& points) {}
+    virtual void moveControlPoint(size_t index, const Point& newPosition) {}
+    virtual const std::vector<Point>& getControlPoints() const {
+        static std::vector<Point> empty;
+        return empty;
+    }
+    virtual size_t getControlPointCount() const { return 0; }
+
     // Override from GeometricObject
     void transform(const TransformMatrix& matrix) override = 0;
 
