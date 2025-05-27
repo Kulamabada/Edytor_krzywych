@@ -51,6 +51,8 @@ add_executable(edytor_krzywych
         UI/MainWindow.h
         UI/ActionHandler.cpp
         UI/ActionHandler.h
+        Geometry/BezierCurve.cpp
+        Geometry/BezierCurve.h
 )
 
 find_package(Qt6 COMPONENTS Core Gui Widgets REQUIRED)

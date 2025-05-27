@@ -40,6 +40,8 @@ void ActionHandler::connectActions() {
     connect(m_mainWindow.m_lagrangeAction, &QAction::triggered, this, &ActionHandler::onLagrangeAction);
     connect(m_mainWindow.m_barycentricAction, &QAction::triggered, this, &ActionHandler::onBarycentricAction);
 
+    connect(m_mainWindow.m_bezierAction, &QAction::triggered, this, &ActionHandler::onBezierAction);
+
     connect(m_mainWindow.m_aboutAction, &QAction::triggered, this, &ActionHandler::onAboutAction);
 }
 
@@ -110,10 +112,10 @@ void ActionHandler::onSelectModeAction() const {
 }
 
 void ActionHandler::onAddPointModeAction() {
-    if (m_mainWindow.getCanvas()->getSelectedCurve()) {
+    if (m_mainWindow.getCanvas()->hasSelectedCurveWithControlPoints()) {
         m_mainWindow.getCanvas()->startAddingControlPoints();
         m_mainWindow.updateModeLabel();
-        m_mainWindow.getStatusBar()->showMessage("Tryb dodawania punktów kontrolnych. Kliknij w obszarze rysowania, aby dodać punkt.");
+        m_mainWindow.getStatusBar()->showMessage("Tryb dodawania punktów kontrolnych...");
     } else {
         QMessageBox::warning(&m_mainWindow, "Edycja punktów kontrolnych",
                             "Najpierw zaznacz krzywą, aby dodać do niej punkty kontrolne.");
@@ -122,10 +124,10 @@ void ActionHandler::onAddPointModeAction() {
 }
 
 void ActionHandler::onMovePointModeAction() {
-    if (m_mainWindow.getCanvas()->getSelectedCurve()) {
+    if (m_mainWindow.getCanvas()->hasSelectedCurveWithControlPoints()) {
         m_mainWindow.getCanvas()->startMovingControlPoints();
         m_mainWindow.updateModeLabel();
-        m_mainWindow.getStatusBar()->showMessage("Tryb przesuwania punktów kontrolnych. Kliknij i przeciągnij punkt kontrolny.");
+        m_mainWindow.getStatusBar()->showMessage("Tryb przesuwania punktów kontrolnych...");
     } else {
         QMessageBox::warning(&m_mainWindow, "Edycja punktów kontrolnych",
                             "Najpierw zaznacz krzywą, aby przesuwać jej punkty kontrolne.");
@@ -134,7 +136,16 @@ void ActionHandler::onMovePointModeAction() {
 }
 
 void ActionHandler::onDeletePointAction() {
-    if (auto curve = m_mainWindow.getCanvas()->getSelectedCurve()) {
+    auto selectedObj = m_mainWindow.getCanvas()->selectedObject();
+    if (!selectedObj) {
+        m_mainWindow.getStatusBar()->showMessage("Nie wybrano krzywej");
+        return;
+    }
+
+    const bool isCurveWithControlPoints = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj) ||
+        std::dynamic_pointer_cast<BezierCurve>(selectedObj);
+
+    if (isCurveWithControlPoints) {
         QKeyEvent keyEvent(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
         QApplication::sendEvent(m_mainWindow.getCanvas(), &keyEvent);
 
@@ -206,12 +217,26 @@ void ActionHandler::onBarycentricAction() {
     createInterpolatedCurve(InterpolatedCurve::InterpolationType::Barycentric, "Barycentric");
 }
 
+void ActionHandler::onBezierAction() {
+    const auto curve = std::make_shared<BezierCurve>();
+
+    curve->addControlPoint(Point(-50, -25, 0));
+    curve->addControlPoint(Point(-25, 75, 0));
+    curve->addControlPoint(Point(25, 75, 0));
+    curve->addControlPoint(Point(50, -25, 0));
+
+    m_mainWindow.getCanvas()->addObject(curve);
+    m_mainWindow.getCanvas()->selectObject(curve);
+    m_mainWindow.getCanvas()->refresh();
+    m_mainWindow.updateObjectsTree();
+    m_mainWindow.getStatusBar()->showMessage("Utworzono krzywą Béziera");
+}
+
 void ActionHandler::onAboutAction() {
     QMessageBox::about(&m_mainWindow, "O programie",
         "<h3>Edytor Krzywych</h3>"
         "<p>Wersja 1.0</p>"
         "<p>Program do tworzenia i edycji krzywych matematycznych.</p>"
-        "<p>Używa biblioteki Eigen do obliczeń matematycznych.</p>"
         "<p><b>Funkcjonalności edycji punktów kontrolnych:</b></p>"
         "<ul>"
         "<li>Dodawanie nowych punktów kontrolnych</li>"

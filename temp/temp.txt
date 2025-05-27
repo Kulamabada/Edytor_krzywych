@@ -1,5 +1,5 @@
-// Plik wygenerowany automatycznie 2025-05-24 19:04:57
-// Zawiera 33 plików z projektu edytora krzywych
+// Plik wygenerowany automatycznie 2025-05-27 11:31:32
+// Zawiera 35 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
 
@@ -404,6 +404,130 @@ namespace {
     }
 }
 
+
+// Implementacja AddBezierCurveCommand
+AddBezierCurveCommand::AddBezierCurveCommand(std::shared_ptr<BezierCurve> curve)
+    : m_curve(std::move(curve)), m_curveId(-1) {
+}
+
+bool AddBezierCurveCommand::execute() {
+    if (!m_curve) {
+        return false;
+    }
+
+    m_curveId = addObjectToScene(m_curve);
+    return m_curveId >= 0;
+}
+
+bool AddBezierCurveCommand::undo() {
+    if (m_curveId < 0)
+        return false;
+
+    return removeObjectFromScene(m_curveId);
+}
+
+bool AddBezierCurveCommand::redo() {
+    return execute();
+}
+
+// Implementacja AddBezierControlPointCommand
+AddBezierControlPointCommand::AddBezierControlPointCommand(std::shared_ptr<BezierCurve> curve, const Point& point, int index)
+    : BezierCurveCommand(curve), m_point(point), m_index(index), m_addedIndex(-1) {
+}
+
+bool AddBezierControlPointCommand::execute() {
+    if (!m_curve)
+        return false;
+
+    if (m_index < 0 || m_index > static_cast<int>(m_curve->getControlPointCount())) {
+        m_curve->addControlPoint(m_point);
+        m_addedIndex = static_cast<int>(m_curve->getControlPointCount()) - 1;
+    } else {
+        m_curve->insertControlPoint(m_index, m_point);
+        m_addedIndex = m_index;
+    }
+
+    return true;
+}
+
+bool AddBezierControlPointCommand::undo() {
+    if (!m_curve || m_addedIndex < 0 ||
+        m_addedIndex >= static_cast<int>(m_curve->getControlPointCount())) {
+        return false;
+    }
+
+    m_curve->removeControlPoint(m_addedIndex);
+    return true;
+}
+
+// Implementacja MoveBezierControlPointCommand
+MoveBezierControlPointCommand::MoveBezierControlPointCommand(std::shared_ptr<BezierCurve> curve,
+                                                           int pointIndex,
+                                                           const Point& newPosition)
+    : BezierCurveCommand(curve), m_pointIndex(pointIndex), m_newPosition(newPosition) {
+
+    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
+        const auto& points = m_curve->getControlPoints();
+        m_oldPosition = points[m_pointIndex];
+    }
+}
+
+bool MoveBezierControlPointCommand::execute() {
+    if (!m_curve || m_pointIndex < 0 ||
+        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
+        return false;
+    }
+
+    m_curve->moveControlPoint(m_pointIndex, m_newPosition);
+    return true;
+}
+
+bool MoveBezierControlPointCommand::undo() {
+    if (!m_curve || m_pointIndex < 0 ||
+        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
+        return false;
+    }
+
+    m_curve->moveControlPoint(m_pointIndex, m_oldPosition);
+    return true;
+}
+
+// Implementacja DeleteBezierControlPointCommand
+DeleteBezierControlPointCommand::DeleteBezierControlPointCommand(std::shared_ptr<BezierCurve> curve,
+                                                                int pointIndex)
+    : BezierCurveCommand(curve), m_pointIndex(pointIndex) {
+
+    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
+        const auto& points = m_curve->getControlPoints();
+        m_deletedPoint = points[m_pointIndex];
+    }
+}
+
+bool DeleteBezierControlPointCommand::execute() {
+    if (!m_curve || m_pointIndex < 0 ||
+        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
+        return false;
+    }
+
+    if (m_curve->getControlPointCount() < 3)
+        return false;
+
+    m_curve->removeControlPoint(m_pointIndex);
+    return true;
+}
+
+bool DeleteBezierControlPointCommand::undo() {
+    if (!m_curve)
+        return false;
+
+    if (m_pointIndex >= static_cast<int>(m_curve->getControlPointCount()))
+        m_curve->addControlPoint(m_deletedPoint);
+    else
+        m_curve->insertControlPoint(m_pointIndex, m_deletedPoint);
+
+    return true;
+}
+
 //===== END FILE: Core\Command.cpp =====//
 
 //===== START FILE: Core\Command.h =====//
@@ -419,6 +543,7 @@ namespace {
 #include "../Geometry/GeometricObject.h"
 #include "../Geometry/Point.h"
 #include "../Geometry/InterpolatedCurve.h"
+#include "../Geometry/BezierCurve.h"
 #include "CurveCommand.h"
 
 // Command to add a geometric object to the scene
@@ -560,6 +685,76 @@ private:
     std::vector<Point> m_newPoints;
 };
 
+// Komenda do dodawania krzywej Béziera
+class AddBezierCurveCommand : public AbstractCommand {
+public:
+    explicit AddBezierCurveCommand(std::shared_ptr<BezierCurve> curve);
+    ~AddBezierCurveCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<BezierCurve> m_curve;
+    int m_curveId{-1};
+};
+
+// Komendy dla edycji punktów kontrolnych krzywej Béziera
+class BezierCurveCommand : public AbstractCommand {
+protected:
+    std::shared_ptr<BezierCurve> m_curve;
+
+public:
+    explicit BezierCurveCommand(std::shared_ptr<BezierCurve> curve) : m_curve(curve) {}
+    virtual ~BezierCurveCommand() = default;
+
+    bool redo() override {
+        return execute();
+    }
+};
+
+class AddBezierControlPointCommand : public BezierCurveCommand {
+public:
+    AddBezierControlPointCommand(std::shared_ptr<BezierCurve> curve, const Point& point, int index = -1);
+    ~AddBezierControlPointCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+
+private:
+    Point m_point;
+    int m_index;
+    int m_addedIndex;
+};
+
+class MoveBezierControlPointCommand : public BezierCurveCommand {
+public:
+    MoveBezierControlPointCommand(std::shared_ptr<BezierCurve> curve, int pointIndex, const Point& newPosition);
+    ~MoveBezierControlPointCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+
+private:
+    int m_pointIndex;
+    Point m_oldPosition;
+    Point m_newPosition;
+};
+
+class DeleteBezierControlPointCommand : public BezierCurveCommand {
+public:
+    DeleteBezierControlPointCommand(std::shared_ptr<BezierCurve> curve, int pointIndex);
+    ~DeleteBezierControlPointCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+
+private:
+    int m_pointIndex;
+    Point m_deletedPoint;
+};
+
 #endif // COMMAND_H
 
 //===== END FILE: Core\Command.h =====//
@@ -692,6 +887,266 @@ public:
 };
 
 //===== END FILE: Core\CurveCommand.h =====//
+
+//===== START FILE: Geometry\BezierCurve.cpp =====//
+
+#include "BezierCurve.h"
+#include "TransformMatrix.h"
+#include <cmath>
+#include <algorithm>
+
+BezierCurve::BezierCurve() {
+}
+
+void BezierCurve::addControlPoint(const Point& point) {
+    m_controlPoints.push_back(point);
+}
+
+void BezierCurve::insertControlPoint(size_t index, const Point& point) {
+    if (index <= m_controlPoints.size()) {
+        m_controlPoints.insert(m_controlPoints.begin() + index, point);
+    }
+}
+
+void BezierCurve::removeControlPoint(size_t index) {
+    if (index < m_controlPoints.size()) {
+        m_controlPoints.erase(m_controlPoints.begin() + index);
+    }
+}
+
+void BezierCurve::setControlPoints(const std::vector<Point>& points) {
+    m_controlPoints = points;
+}
+
+void BezierCurve::moveControlPoint(size_t index, const Point& newPosition) {
+    if (index < m_controlPoints.size()) {
+        m_controlPoints[index] = newPosition;
+    }
+}
+
+const std::vector<Point>& BezierCurve::getControlPoints() const {
+    return m_controlPoints;
+}
+
+size_t BezierCurve::getControlPointCount() const {
+    return m_controlPoints.size();
+}
+
+int BezierCurve::getDegree() const {
+    return static_cast<int>(m_controlPoints.size()) - 1;
+}
+
+Point BezierCurve::deCasteljau(double t) const {
+    if (m_controlPoints.empty()) {
+        return Point(0, 0, 0);
+    }
+
+    if (m_controlPoints.size() == 1) {
+        return m_controlPoints[0];
+    }
+
+    // Kopiujemy punkty kontrolne do tymczasowej tablicy
+    std::vector<Point> temp = m_controlPoints;
+
+    // Algorytm de Casteljau - iteracyjna implementacja
+    for (size_t level = 1; level < m_controlPoints.size(); ++level) {
+        for (size_t i = 0; i < m_controlPoints.size() - level; ++i) {
+            double x = (1.0 - t) * temp[i].x() + t * temp[i + 1].x();
+            double y = (1.0 - t) * temp[i].y() + t * temp[i + 1].y();
+            double z = (1.0 - t) * temp[i].z() + t * temp[i + 1].z();
+            temp[i] = Point(x, y, z);
+        }
+    }
+
+    return temp[0];
+}
+
+Vector BezierCurve::deCasteljauDerivative(double t) const {
+    if (m_controlPoints.size() < 2) {
+        return Vector::Zero();
+    }
+
+    // Tworzymy krzywą różnicową (derivative curve)
+    std::vector<Point> derivativePoints;
+    int n = static_cast<int>(m_controlPoints.size()) - 1;
+
+    for (size_t i = 0; i < m_controlPoints.size() - 1; ++i) {
+        double dx = n * (m_controlPoints[i + 1].x() - m_controlPoints[i].x());
+        double dy = n * (m_controlPoints[i + 1].y() - m_controlPoints[i].y());
+        double dz = n * (m_controlPoints[i + 1].z() - m_controlPoints[i].z());
+        derivativePoints.emplace_back(dx, dy, dz);
+    }
+
+    // Algorytm de Casteljau dla krzywej pochodnej
+    for (size_t level = 1; level < derivativePoints.size(); ++level) {
+        for (size_t i = 0; i < derivativePoints.size() - level; ++i) {
+            double x = (1.0 - t) * derivativePoints[i].x() + t * derivativePoints[i + 1].x();
+            double y = (1.0 - t) * derivativePoints[i].y() + t * derivativePoints[i + 1].y();
+            double z = (1.0 - t) * derivativePoints[i].z() + t * derivativePoints[i + 1].z();
+            derivativePoints[i] = Point(x, y, z);
+        }
+    }
+
+    if (derivativePoints.empty()) {
+        return Vector::Zero();
+    }
+
+    return Vector(derivativePoints[0].x(), derivativePoints[0].y(), derivativePoints[0].z());
+}
+
+Point BezierCurve::getPointAt(double t) const {
+    t = std::max(0.0, std::min(1.0, t));
+    return deCasteljau(t);
+}
+
+Vector BezierCurve::getTangentAt(double t) const {
+    t = std::max(0.0, std::min(1.0, t));
+    return deCasteljauDerivative(t);
+}
+
+double BezierCurve::getLength() const {
+    if (m_controlPoints.size() < 2) {
+        return 0.0;
+    }
+
+    // Przybliżenie długości przez próbkowanie
+    constexpr int numSamples = 1000;
+    double length = 0.0;
+    Point prevPoint = getPointAt(0.0);
+
+    for (int i = 1; i <= numSamples; ++i) {
+        double t = static_cast<double>(i) / numSamples;
+        Point currentPoint = getPointAt(t);
+        length += prevPoint.distanceTo(currentPoint);
+        prevPoint = currentPoint;
+    }
+
+    return length;
+}
+
+Vector BezierCurve::getPosition() const {
+    if (m_controlPoints.empty())
+        return Vector::Zero();
+
+
+    Vector sum = Vector::Zero();
+    for (const auto& point : m_controlPoints)
+        sum += Vector(point.x(), point.y(), point.z());
+
+    return sum / static_cast<double>(m_controlPoints.size());
+}
+
+void BezierCurve::setPosition(const Eigen::Vector3d& position) {
+    if (m_controlPoints.empty())
+        return;
+
+    const Vector currentCenter = getPosition();
+    Vector delta = position - currentCenter;
+
+    for (auto& point : m_controlPoints) {
+        point.setX(point.x() + delta.x());
+        point.setY(point.y() + delta.y());
+        point.setZ(point.z() + delta.z());
+    }
+}
+
+void BezierCurve::transform(const TransformMatrix& matrix) {
+    for (auto& point : m_controlPoints)
+        point.transform(matrix);
+}
+
+std::unique_ptr<Curve> BezierCurve::clone() const {
+    auto copy = std::make_unique<BezierCurve>();
+    copy->setControlPoints(m_controlPoints);
+    copy->setColor(m_color);
+    copy->setLineWidth(m_lineWidth);
+    copy->setLineStyle(m_lineStyle);
+    copy->setShowControlPolygon(m_showControlPolygon);
+    copy->setControlPolygonColor(m_controlPolygonColor);
+    copy->setControlPolygonWidth(m_controlPolygonWidth);
+    copy->setControlPolygonStyle(m_controlPolygonStyle);
+    return copy;
+}
+
+//===== END FILE: Geometry\BezierCurve.cpp =====//
+
+//===== START FILE: Geometry\BezierCurve.h =====//
+
+#pragma once
+
+#include "Curve.h"
+#include "Point.h"
+#include <vector>
+#include <QColor>
+#include <Qt>
+
+class BezierCurve final : public Curve {
+public:
+    explicit BezierCurve();
+    ~BezierCurve() override = default;
+
+    // Zarządzanie punktami kontrolnymi
+    void addControlPoint(const Point& point);
+    void insertControlPoint(size_t index, const Point& point);
+    void removeControlPoint(size_t index);
+    void setControlPoints(const std::vector<Point>& points);
+    void moveControlPoint(size_t index, const Point& newPosition);
+    const std::vector<Point>& getControlPoints() const;
+    size_t getControlPointCount() const;
+    int getDegree() const;
+
+    // Implementacja Curve
+    double getLength() const override;
+    Point getPointAt(double t) const override;
+    Vector getTangentAt(double t) const override;
+    std::unique_ptr<Curve> clone() const override;
+
+    // Implementacja GeometricObject
+    Vector getPosition() const override;
+    void setPosition(const Eigen::Vector3d& position) override;
+    void transform(const TransformMatrix& matrix) override;
+
+    // Właściwości wizualne
+    void setColor(const QColor& color) { m_color = color; }
+    QColor getColor() const { return m_color; }
+
+    void setLineWidth(double width) { m_lineWidth = width; }
+    double getLineWidth() const { return m_lineWidth; }
+
+    void setLineStyle(Qt::PenStyle style) { m_lineStyle = style; }
+    Qt::PenStyle getLineStyle() const { return m_lineStyle; }
+
+    void setShowControlPolygon(bool show) { m_showControlPolygon = show; }
+    bool getShowControlPolygon() const { return m_showControlPolygon; }
+
+    void setControlPolygonColor(const QColor& color) { m_controlPolygonColor = color; }
+    QColor getControlPolygonColor() const { return m_controlPolygonColor; }
+
+    void setControlPolygonWidth(double width) { m_controlPolygonWidth = width; }
+    double getControlPolygonWidth() const { return m_controlPolygonWidth; }
+
+    void setControlPolygonStyle(Qt::PenStyle style) { m_controlPolygonStyle = style; }
+    Qt::PenStyle getControlPolygonStyle() const { return m_controlPolygonStyle; }
+
+private:
+    std::vector<Point> m_controlPoints;
+
+    // Właściwości wizualne
+    QColor m_color{Qt::blue};
+    double m_lineWidth{2.0};
+    Qt::PenStyle m_lineStyle{Qt::SolidLine};
+
+    bool m_showControlPolygon{true};
+    QColor m_controlPolygonColor{Qt::darkGray};
+    double m_controlPolygonWidth{1.0};
+    Qt::PenStyle m_controlPolygonStyle{Qt::DashLine};
+
+    // Algorytm de Casteljau
+    Point deCasteljau(double t) const;
+    Vector deCasteljauDerivative(double t) const;
+};
+
+//===== END FILE: Geometry\BezierCurve.h =====//
 
 //===== START FILE: Geometry\Curve.h =====//
 
@@ -1491,6 +1946,7 @@ private:
 #include <utility>
 #include <QMessageBox>
 #include "../Geometry/ImageObject.h"
+#include "../Geometry/BezierCurve.h"
 
 Canvas::Canvas(QWidget* parent): QWidget(parent)
 {
@@ -1655,12 +2111,12 @@ void Canvas::setEditMode(EditMode mode) {
     if (mode == EditMode::None) {
         finishEditing();
     } else {
-        if ((mode == EditMode::AddPoint || mode == EditMode::MovePoint) && !getSelectedCurve()) {
+        if ((mode == EditMode::AddPoint || mode == EditMode::MovePoint) && !hasSelectedCurveWithControlPoints()) {
             m_editMode = EditMode::None;
             QMessageBox::warning(this, "Edycja punktów",
                 "Najpierw wybierz krzywą do edycji punktów kontrolnych.");
             return;
-        }
+            }
 
         m_isEditingPoints = true;
         emit editingStarted();
@@ -1694,16 +2150,30 @@ std::shared_ptr<InterpolatedCurve> Canvas::getSelectedCurve() const {
 }
 
 int Canvas::hitTestControlPoint(const QPointF& pos, double tolerance) {
-    auto curve = getSelectedCurve();
-    if (!curve || !m_viewportManager) return -1;
+    if (!m_viewportManager) return -1;
 
-    const auto& points = curve->getPoints();
-    for (size_t i = 0; i < points.size(); ++i) {
-        QPointF screenPos = m_viewportManager->worldToScreen(
-            QPointF(points[i].x(), points[i].y()));
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return -1;
 
-        if (QLineF(pos, screenPos).length() <= tolerance) {
-            return static_cast<int>(i);
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+        const auto& points = curve->getPoints();
+        for (size_t i = 0; i < points.size(); ++i) {
+            QPointF screenPos = m_viewportManager->worldToScreen(
+                QPointF(points[i].x(), points[i].y()));
+            if (QLineF(pos, screenPos).length() <= tolerance) {
+                return static_cast<int>(i);
+            }
+        }
+    }
+
+    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        const auto& points = bezierCurve->getControlPoints();
+        for (size_t i = 0; i < points.size(); ++i) {
+            QPointF screenPos = m_viewportManager->worldToScreen(
+                QPointF(points[i].x(), points[i].y()));
+            if (QLineF(pos, screenPos).length() <= tolerance) {
+                return static_cast<int>(i);
+            }
         }
     }
 
@@ -1711,47 +2181,86 @@ int Canvas::hitTestControlPoint(const QPointF& pos, double tolerance) {
 }
 
 bool Canvas::addControlPoint(const QPointF& screenPos) {
-    const auto curve = getSelectedCurve();
-    if (!curve || !m_viewportManager) return false;
+    if (!m_viewportManager) return false;
+
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return false;
 
     const QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
+    int newPointIndex = -1;
 
-    curve->addPoint(Point(worldPos.x(), worldPos.y()));
-
-    const int newPointIndex = static_cast<int>(curve->getPointCount()) - 1;
+    // Obsługa InterpolatedCurve
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+        curve->addPoint(Point(worldPos.x(), worldPos.y()));
+        newPointIndex = static_cast<int>(curve->getPointCount()) - 1;
+    }
+    // Obsługa BezierCurve
+    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        bezierCurve->addControlPoint(Point(worldPos.x(), worldPos.y()));
+        newPointIndex = static_cast<int>(bezierCurve->getControlPointCount()) - 1;
+    }
+    else {
+        return false;
+    }
 
     selectControlPoint(newPointIndex);
-
     emit controlPointAdded(newPointIndex);
-
     update();
     return true;
 }
 
 bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
-    auto curve = getSelectedCurve();
-    if (!curve || !m_viewportManager ||
-        pointIndex < 0 || pointIndex >= static_cast<int>(curve->getPointCount())) {
-        return false;
-    }
+    if (!m_viewportManager || pointIndex < 0) return false;
+
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return false;
 
     QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
 
-    const auto& points = curve->getPoints();
-    auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
-    curve->movePoint(pointIndex, newPoint);
+    // Obsługa InterpolatedCurve
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+        if (pointIndex >= static_cast<int>(curve->getPointCount())) return false;
+
+        const auto& points = curve->getPoints();
+        auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
+        curve->movePoint(pointIndex, newPoint);
+    }
+    // Obsługa BezierCurve
+    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        if (pointIndex >= static_cast<int>(bezierCurve->getControlPointCount())) return false;
+
+        const auto& points = bezierCurve->getControlPoints();
+        auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
+        bezierCurve->moveControlPoint(pointIndex, newPoint);
+    }
+    else {
+        return false;
+    }
 
     emit controlPointMoved(pointIndex);
-
     update();
     return true;
 }
 
 void Canvas::selectControlPoint(const int pointIndex) {
-    const auto curve = getSelectedCurve();
-    if (!curve) return;
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return;
 
-    if (pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
+    int maxPointCount = 0;
+
+    // Sprawdź InterpolatedCurve
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+        maxPointCount = static_cast<int>(curve->getPointCount());
+    }
+    // Sprawdź BezierCurve
+    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        maxPointCount = static_cast<int>(bezierCurve->getControlPointCount());
+    }
+    else {
+        return;
+    }
+
+    if (pointIndex >= 0 && pointIndex < maxPointCount) {
         m_selectedControlPointIndex = pointIndex;
         emit controlPointSelected(pointIndex);
     } else {
@@ -1809,13 +2318,25 @@ void Canvas::paintEvent(QPaintEvent* event)
 }
 
 void Canvas::drawControlPoints() {
-    const auto curve = getSelectedCurve();
-    if (!curve || !m_renderer) return;
+    if (!m_renderer) return;
 
-    const auto& points = curve->getPoints();
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return;
 
-    m_renderer->renderControlPoints(points, m_selectedControlPointIndex,m_isDraggingPoint ? m_selectedControlPointIndex : -1);
+    // Obsługa InterpolatedCurve
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+        const auto& points = curve->getPoints();
+        m_renderer->renderControlPoints(points, m_selectedControlPointIndex,
+                                      m_isDraggingPoint ? m_selectedControlPointIndex : -1);
+    }
+    // Obsługa BezierCurve
+    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        const auto& points = bezierCurve->getControlPoints();
+        m_renderer->renderControlPoints(points, m_selectedControlPointIndex,
+                                      m_isDraggingPoint ? m_selectedControlPointIndex : -1);
+    }
 }
+
 
 void Canvas::resizeEvent(QResizeEvent* event)
 {
@@ -1938,22 +2459,67 @@ void Canvas::keyPressEvent(QKeyEvent* event)
         finishEditing();
     }
     else if (event->key() == Qt::Key_Delete && m_selectedControlPointIndex >= 0) {
-        auto curve = getSelectedCurve();
-        if (curve && m_selectedControlPointIndex >= 0 &&
-            m_selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
+        auto selectedObj = selectedObject();
+        if (!selectedObj) return;
 
-            if (curve->getPointCount() > 2) {
-                curve->removePoint(m_selectedControlPointIndex);
-                m_selectedControlPointIndex = -1;
-                update();
-            } else {
-                QMessageBox::warning(this, "Usuwanie punktu",
-                    "Krzywa musi mieć co najmniej 2 punkty.");
+        bool deleted = false;
+
+        // Obsługa InterpolatedCurve
+        if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+            if (m_selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
+                if (curve->getPointCount() > 2) {
+                    curve->removePoint(m_selectedControlPointIndex);
+                    deleted = true;
+                } else {
+                    QMessageBox::warning(this, "Usuwanie punktu",
+                        "Krzywa musi mieć co najmniej 2 punkty.");
+                }
             }
+        }
+        // Obsługa BezierCurve
+        else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+            if (m_selectedControlPointIndex < static_cast<int>(bezierCurve->getControlPointCount())) {
+                if (bezierCurve->getControlPointCount() > 2) {
+                    bezierCurve->removeControlPoint(m_selectedControlPointIndex);
+                    deleted = true;
+                } else {
+                    QMessageBox::warning(this, "Usuwanie punktu",
+                        "Krzywa Béziera musi mieć co najmniej 2 punkty kontrolne.");
+                }
+            }
+        }
+
+        if (deleted) {
+            m_selectedControlPointIndex = -1;
+            update();
         }
     }
 
     QWidget::keyPressEvent(event);
+}
+
+std::shared_ptr<BezierCurve> Canvas::getSelectedBezierCurve() const {
+    const auto selectedObj = selectedObject();
+    if (!selectedObj) return nullptr;
+
+    return std::dynamic_pointer_cast<BezierCurve>(selectedObj);
+}
+
+bool Canvas::hasSelectedCurveWithControlPoints() const {
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return false;
+
+    // Sprawdź InterpolatedCurve
+    if (std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+        return true;
+    }
+
+    // Sprawdź BezierCurve
+    if (std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        return true;
+    }
+
+    return false;
 }
 
 //===== END FILE: Graphics\Canvas.cpp =====//
@@ -2020,6 +2586,7 @@ public:
 
     std::shared_ptr<InterpolatedCurve> getSelectedCurve() const;
     void selectControlPoint(int pointIndex);
+    bool hasSelectedCurveWithControlPoints() const;
 
 public slots:
     void refresh();
@@ -2052,6 +2619,7 @@ private:
     bool addControlPoint(const QPointF& screenPos);
     bool moveControlPoint(int pointIndex, const QPointF& screenPos);
     void drawControlPoints();
+    std::shared_ptr<BezierCurve> getSelectedBezierCurve() const;
 
     std::vector<std::shared_ptr<GeometricObject>> m_objects;
     std::shared_ptr<GeometricObject> m_selectedObject;
@@ -2135,6 +2703,7 @@ public:
 #include "QtRenderer.h"
 #include "../Geometry/InterpolatedCurve.h"
 #include "../Geometry/ImageObject.h"
+#include "../Geometry/BezierCurve.h"
 
 QtRenderer::QtRenderer() = default;
 
@@ -2183,40 +2752,72 @@ void QtRenderer::renderPoint(const Point& point)
     m_painter->drawEllipse(QPointF(x, y), m_pointSize, m_pointSize);
 }
 
-void QtRenderer::renderCurve(const Curve& curve)
-{
-    if (!m_painter || !m_viewportManager)
-        return;
+void QtRenderer::renderCurve(const Curve& curve) {
+    if (!m_painter || !m_viewportManager) return;
 
-    const auto interpolatedCurve = dynamic_cast<const InterpolatedCurve*>(&curve);
-    if (!interpolatedCurve) return;
+    if (const auto interpolatedCurve = dynamic_cast<const InterpolatedCurve*>(&curve)) {
 
-    if (interpolatedCurve->getDrawInterpolatedCurve()) {
-        QColor color = interpolatedCurve->getColor();
-        double width = interpolatedCurve->getLineWidth();
-        Qt::PenStyle style = interpolatedCurve->getLineStyle();
+        if (interpolatedCurve->getDrawInterpolatedCurve()) {
+            QColor color = interpolatedCurve->getColor();
+            double width = interpolatedCurve->getLineWidth();
+            Qt::PenStyle style = interpolatedCurve->getLineStyle();
+
+            const QPen pen(color, width, style);
+            m_painter->setPen(pen);
+            m_painter->setBrush(Qt::NoBrush);
+
+            constexpr int numSegments = 5000;
+            QPolygonF points;
+
+            for (int i = 0; i <= numSegments; ++i) {
+                double t = static_cast<double>(i) / numSegments;
+                Point p = curve.getPointAt(t);
+                points.append(QPointF(p.x(), p.y()));
+            }
+
+            m_painter->drawPolyline(points);
+        }
+
+        if (interpolatedCurve->getDrawPolyline())
+            renderPolyline(interpolatedCurve->getPoints());
+
+        if (interpolatedCurve->getDrawConvexHull())
+            renderConvexHull(interpolatedCurve->getPoints());
+    }
+
+
+    const auto bezierCurve = dynamic_cast<const BezierCurve*>(&curve);
+    if (bezierCurve) {
+        // Renderowanie krzywej Béziera
+        QColor color = bezierCurve->getColor();
+        double width = bezierCurve->getLineWidth();
+        Qt::PenStyle style = bezierCurve->getLineStyle();
 
         const QPen pen(color, width, style);
         m_painter->setPen(pen);
         m_painter->setBrush(Qt::NoBrush);
 
-        constexpr int numSegments = 5000;
-        QPolygonF points;
+        if (bezierCurve->getControlPointCount() >= 2) {
+            constexpr int numSegments = 100;
+            QPolygonF points;
 
-        for (int i = 0; i <= numSegments; ++i) {
-            double t = static_cast<double>(i) / numSegments;
-            Point p = curve.getPointAt(t);
-            points.append(QPointF(p.x(), p.y()));
+            for (int i = 0; i <= numSegments; ++i) {
+                double t = static_cast<double>(i) / numSegments;
+                Point p = curve.getPointAt(t);
+                points.append(QPointF(p.x(), p.y()));
+            }
+
+            m_painter->drawPolyline(points);
         }
 
-        m_painter->drawPolyline(points);
+        // Renderowanie wielokąta kontrolnego jeśli włączone
+        if (bezierCurve->getShowControlPolygon()) {
+            renderBezierControlPolygon(bezierCurve->getControlPoints(),
+                                     bezierCurve->getControlPolygonColor(),
+                                     bezierCurve->getControlPolygonWidth(),
+                                     bezierCurve->getControlPolygonStyle());
+        }
     }
-
-    if (interpolatedCurve->getDrawPolyline())
-        renderPolyline(interpolatedCurve->getPoints());
-
-    if (interpolatedCurve->getDrawConvexHull())
-        renderConvexHull(interpolatedCurve->getPoints());
 }
 
 void QtRenderer::renderObject(const GeometricObject& object)
@@ -2581,54 +3182,37 @@ void QtRenderer::renderPolyline(const std::vector<Point>& points)
     if (!m_painter || !m_viewportManager || points.size() < 2)
         return;
 
-    QPen pen(m_polylineColor, m_polylineWidth, m_polylineStyle);
+    const QPen pen(m_polylineColor, m_polylineWidth, m_polylineStyle);
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 
     QPolygonF polygon;
-    for (const auto& point : points) {
+    for (const auto& point : points)
         polygon << QPointF(point.x(), point.y());
-    }
 
     m_painter->drawPolyline(polygon);
 }
 
 void QtRenderer::renderConvexHull(const std::vector<Point>& points)
 {
-    if (!m_painter || !m_viewportManager || points.size() < 3)
-        return;
+    if (!m_painter || !m_viewportManager || points.size() < 3) return;
 
-    // TODO: Implementacja algorytmu otoczki wypukłej (np. Graham Scan)
-    // Na razie placeholder - rysuj prostokąt otaczający
+    const std::vector<Point> hull = computeConvexHull(points);
 
-    QPen pen(m_convexHullColor, m_convexHullWidth, m_convexHullStyle);
+    if (hull.size() < 3) return;
+
+    const QPen pen(m_convexHullColor, m_convexHullWidth, m_convexHullStyle);
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 
-    // Znajdź bounding box jako placeholder
-    double minX = points[0].x(), maxX = points[0].x();
-    double minY = points[0].y(), maxY = points[0].y();
+    QPolygonF polygon;
+    for (const auto& point : hull)
+        polygon << QPointF(point.x(), point.y());
 
-    for (const auto& point : points) {
-        minX = std::min(minX, point.x());
-        maxX = std::max(maxX, point.x());
-        minY = std::min(minY, point.y());
-        maxY = std::max(maxY, point.y());
-    }
+    if (!hull.empty())
+        polygon << QPointF(hull[0].x(), hull[0].y());
 
-    QRectF boundingRect(minX, minY, maxX - minX, maxY - minY);
-    m_painter->drawRect(boundingRect);
-
-    // Dodaj tekst informujący że to placeholder
-    m_painter->save();
-    m_painter->resetTransform();
-    QPointF screenPos = m_viewportManager->worldToScreen(QPointF(minX, maxY));
-    m_painter->setPen(Qt::black);
-    QFont font = m_painter->font();
-    font.setPointSize(8);
-    m_painter->setFont(font);
-    m_painter->drawText(screenPos + QPointF(5, -5), "Convex Hull (placeholder)");
-    m_painter->restore();
+    m_painter->drawPolyline(polygon);
 }
 
 void QtRenderer::setPolylineStyle(const QColor& color, float width, Qt::PenStyle style)
@@ -2643,6 +3227,91 @@ void QtRenderer::setConvexHullStyle(const QColor& color, float width, Qt::PenSty
     m_convexHullColor = color;
     m_convexHullWidth = width;
     m_convexHullStyle = style;
+}
+
+std::vector<Point> QtRenderer::computeConvexHull(const std::vector<Point>& points) const
+{
+    if (points.size() < 3) return points;
+
+    std::vector<Point> pts = points;
+
+    const auto pivotIt = std::ranges::min_element(pts,
+                                                  [](const Point& a, const Point& b) {
+                                                      if (std::abs(a.y() - b.y()) < 1e-9)
+                                                          return a.x() < b.x();
+                                                      return a.y() < b.y();
+                                                  });
+    Point pivot = *pivotIt;
+    std::swap(*pivotIt, pts[0]);
+
+    std::sort(pts.begin() + 1, pts.end(),
+        [this, &pivot](const Point& a, const Point& b) {
+            const double angleA = polarAngle(pivot, a), angleB = polarAngle(pivot, b);
+
+            if (std::abs(angleA - angleB) < 1e-9)
+                return distanceSquared(pivot, a) < distanceSquared(pivot, b);
+
+            return angleA < angleB;
+        });
+
+    std::vector<Point> filtered;
+    filtered.push_back(pts[0]);
+
+    for (size_t i = 1; i < pts.size(); ++i) {
+        for (;i < pts.size() - 1 &&
+            std::abs(polarAngle(pivot, pts[i]) - polarAngle(pivot, pts[i + 1])) < 1e-9;
+            i++) {}
+        filtered.push_back(pts[i]);
+    }
+
+    if (filtered.size() < 3) return filtered;
+
+    std::vector<Point> hull;
+    hull.push_back(filtered[0]);
+    hull.push_back(filtered[1]);
+
+    for (size_t i = 2; i < filtered.size(); ++i) {
+        while (hull.size() > 1 && crossProduct(hull[hull.size()-2], hull[hull.size()-1], filtered[i]) <= 0)
+            hull.pop_back();
+        hull.push_back(filtered[i]);
+    }
+
+    return hull;
+}
+
+double QtRenderer::crossProduct(const Point& O, const Point& A, const Point& B)
+{
+    return (A.x() - O.x()) * (B.y() - O.y()) - (A.y() - O.y()) * (B.x() - O.x());
+}
+
+double QtRenderer::polarAngle(const Point& pivot, const Point& point)
+{
+    return std::atan2(point.y() - pivot.y(), point.x() - pivot.x());
+}
+
+double QtRenderer::distanceSquared(const Point& a, const Point& b)
+{
+    const double dx = a.x() - b.x(), dy = a.y() - b.y();
+    return dx * dx + dy * dy;
+}
+
+void QtRenderer::renderBezierControlPolygon(const std::vector<Point>& points,
+                                          const QColor& color,
+                                          double width,
+                                          Qt::PenStyle style) {
+    if (!m_painter || !m_viewportManager || points.size() < 2)
+        return;
+
+    QPen pen(color, width, style);
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
+
+    QPolygonF polygon;
+    for (const auto& point : points) {
+        polygon << QPointF(point.x(), point.y());
+    }
+
+    m_painter->drawPolyline(polygon);
 }
 
 //===== END FILE: Graphics\QtRenderer.cpp =====//
@@ -2736,6 +3405,16 @@ private:
 
     QPainter* m_painter{nullptr};
     ViewportManager* m_viewportManager{nullptr};
+
+    std::vector<Point> computeConvexHull(const std::vector<Point>& points) const;
+    static double crossProduct(const Point& O, const Point& A, const Point& B) ;
+    static double polarAngle(const Point& pivot, const Point& point) ;
+    static double distanceSquared(const Point& a, const Point& b) ;
+
+    void renderBezierControlPolygon(const std::vector<Point>& points,
+                              const QColor& color,
+                              double width,
+                              Qt::PenStyle style);
 };
 
 //===== END FILE: Graphics\QtRenderer.h =====//
@@ -3175,6 +3854,8 @@ void ActionHandler::connectActions() {
     connect(m_mainWindow.m_lagrangeAction, &QAction::triggered, this, &ActionHandler::onLagrangeAction);
     connect(m_mainWindow.m_barycentricAction, &QAction::triggered, this, &ActionHandler::onBarycentricAction);
 
+    connect(m_mainWindow.m_bezierAction, &QAction::triggered, this, &ActionHandler::onBezierAction);
+
     connect(m_mainWindow.m_aboutAction, &QAction::triggered, this, &ActionHandler::onAboutAction);
 }
 
@@ -3245,10 +3926,10 @@ void ActionHandler::onSelectModeAction() const {
 }
 
 void ActionHandler::onAddPointModeAction() {
-    if (m_mainWindow.getCanvas()->getSelectedCurve()) {
+    if (m_mainWindow.getCanvas()->hasSelectedCurveWithControlPoints()) {
         m_mainWindow.getCanvas()->startAddingControlPoints();
         m_mainWindow.updateModeLabel();
-        m_mainWindow.getStatusBar()->showMessage("Tryb dodawania punktów kontrolnych. Kliknij w obszarze rysowania, aby dodać punkt.");
+        m_mainWindow.getStatusBar()->showMessage("Tryb dodawania punktów kontrolnych...");
     } else {
         QMessageBox::warning(&m_mainWindow, "Edycja punktów kontrolnych",
                             "Najpierw zaznacz krzywą, aby dodać do niej punkty kontrolne.");
@@ -3257,10 +3938,10 @@ void ActionHandler::onAddPointModeAction() {
 }
 
 void ActionHandler::onMovePointModeAction() {
-    if (m_mainWindow.getCanvas()->getSelectedCurve()) {
+    if (m_mainWindow.getCanvas()->hasSelectedCurveWithControlPoints()) {
         m_mainWindow.getCanvas()->startMovingControlPoints();
         m_mainWindow.updateModeLabel();
-        m_mainWindow.getStatusBar()->showMessage("Tryb przesuwania punktów kontrolnych. Kliknij i przeciągnij punkt kontrolny.");
+        m_mainWindow.getStatusBar()->showMessage("Tryb przesuwania punktów kontrolnych...");
     } else {
         QMessageBox::warning(&m_mainWindow, "Edycja punktów kontrolnych",
                             "Najpierw zaznacz krzywą, aby przesuwać jej punkty kontrolne.");
@@ -3269,7 +3950,16 @@ void ActionHandler::onMovePointModeAction() {
 }
 
 void ActionHandler::onDeletePointAction() {
-    if (auto curve = m_mainWindow.getCanvas()->getSelectedCurve()) {
+    auto selectedObj = m_mainWindow.getCanvas()->selectedObject();
+    if (!selectedObj) {
+        m_mainWindow.getStatusBar()->showMessage("Nie wybrano krzywej");
+        return;
+    }
+
+    const bool isCurveWithControlPoints = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj) ||
+        std::dynamic_pointer_cast<BezierCurve>(selectedObj);
+
+    if (isCurveWithControlPoints) {
         QKeyEvent keyEvent(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
         QApplication::sendEvent(m_mainWindow.getCanvas(), &keyEvent);
 
@@ -3341,6 +4031,22 @@ void ActionHandler::onBarycentricAction() {
     createInterpolatedCurve(InterpolatedCurve::InterpolationType::Barycentric, "Barycentric");
 }
 
+void ActionHandler::onBezierAction() {
+    auto curve = std::make_shared<BezierCurve>();
+
+    // Domyślne punkty kontrolne dla demonstracji
+    curve->addControlPoint(Point(-50, -25, 0));
+    curve->addControlPoint(Point(-25, 75, 0));
+    curve->addControlPoint(Point(25, 75, 0));
+    curve->addControlPoint(Point(50, -25, 0));
+
+    m_mainWindow.getCanvas()->addObject(curve);
+    m_mainWindow.getCanvas()->selectObject(curve);
+    m_mainWindow.getCanvas()->refresh();
+    m_mainWindow.updateObjectsTree();
+    m_mainWindow.getStatusBar()->showMessage("Utworzono krzywą Béziera");
+}
+
 void ActionHandler::onAboutAction() {
     QMessageBox::about(&m_mainWindow, "O programie",
         "<h3>Edytor Krzywych</h3>"
@@ -3374,30 +4080,37 @@ class ActionHandler : public QObject {
 
 public:
     explicit ActionHandler(MainWindow& mainWindow);
-    ~ActionHandler() = default;
+    ~ActionHandler() override = default;
 
-    public slots:
-        void onNewAction();
+public slots:
+    void onNewAction();
     void onOpenAction();
     void onSaveAction();
     void onSaveAsAction();
+
     void onExitAction();
     void onUndoAction();
     void onRedoAction();
     void onDeleteAction();
+
     void onSelectModeAction() const;
     void onAddPointModeAction();
     void onMovePointModeAction();
     void onDeletePointAction();
     void onFinishEditingAction();
+
     void onZoomInAction();
     void onZoomOutAction();
     void onResetViewAction();
     void onFitContentAction();
+
     void onNifsAction();
     void onOifsAction();
     void onLagrangeAction();
     void onBarycentricAction();
+
+    void onBezierAction();
+
     void onAboutAction();
 
 private:
@@ -3518,7 +4231,7 @@ void MainWindow::createMenus() {
     m_oifsAction = m_interpolatedCurvesMenu->addAction("OIFS3");
     m_lagrangeAction = m_interpolatedCurvesMenu->addAction("Lagrange");
     m_barycentricAction = m_interpolatedCurvesMenu->addAction("Barycentric");
-    m_parametricAction = m_curvesMenu->addAction("Krzywa Beziera");
+    m_bezierAction = m_curvesMenu->addAction("Krzywa Beziera");
 
     m_addImageAction = m_imageMenu->addAction("Dodaj obraz...");
     m_editImageAction = m_imageMenu->addAction("Edytuj narożniki obrazu");
@@ -3545,7 +4258,7 @@ void MainWindow::createToolbars() {
     m_interpolatedButton->setMenu(m_interpolatedCurvesMenu);
     m_mainToolBar->addWidget(m_interpolatedButton);
 
-    m_mainToolBar->addAction(m_parametricAction);
+    m_mainToolBar->addAction(m_bezierAction);
     m_mainToolBar->addSeparator();
     m_mainToolBar->addAction(m_zoomInAction);
     m_mainToolBar->addAction(m_zoomOutAction);
@@ -3684,7 +4397,23 @@ void MainWindow::updateObjectsTree() {
                     .arg(QString::number(p.x(), 'f', 2),
                          QString::number(p.y(), 'f', 2)));
             }
-        } else {
+        }
+        else if (const auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(obj)) {
+            item->setText(1, "Krzywa Béziera");
+
+            const auto& points = bezierCurve->getControlPoints();
+            for (size_t i = 0; i < points.size(); ++i) {
+                auto* pointItem = new QTreeWidgetItem(item);
+                const Point& p = points[i];
+                pointItem->setText(0, QString("Punkt %1").arg(std::to_string(i)));
+                pointItem->setText(1, QString("(%1, %2)")
+                    .arg(QString::number(p.x(), 'f', 2), QString::number(p.y(), 'f', 2)));
+
+                pointItem->setData(0, Qt::UserRole, QVariant::fromValue(static_cast<int>(i)));
+                pointItem->setData(0, Qt::UserRole + 1, QVariant::fromValue(index));
+            }
+        }
+        else {
             item->setText(1, "Inny");
         }
 
@@ -3847,24 +4576,20 @@ void MainWindow::updatePropertiesPanel() {
             statusBar()->showMessage("Zmieniono styl linii");
         });
 
-        // === WŁAŚCIWOŚCI ŁAMANEJ ===
         m_propertiesLayout->addWidget(new QLabel("<b>Styl łamanej:</b>"));
 
-        // Kolor łamanej
         m_propertiesLayout->addWidget(new QLabel("Kolor łamanej:"));
-        QPushButton* polylineColorButton = new QPushButton();
+        auto polylineColorButton = new QPushButton();
         polylineColorButton->setFixedSize(80, 25);
         QColor currentPolylineColor = curve->getPolylineColor();
         polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(currentPolylineColor.name()));
         m_propertiesLayout->addWidget(polylineColorButton);
 
         connect(polylineColorButton, &QPushButton::clicked, [this, curve, polylineColorButton]() {
-            QColor color = QColorDialog::getColor(curve->getPolylineColor(), nullptr, "Wybierz kolor łamanej");
-            if (color.isValid()) {
+            if (QColor color = QColorDialog::getColor(curve->getPolylineColor(), nullptr, "Wybierz kolor łamanej"); color.isValid()) {
                 curve->setPolylineColor(color);
                 polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
 
-                // Ustaw styl w rendererze
                 if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
                     qtRenderer->setPolylineStyle(color, curve->getPolylineWidth(), curve->getPolylineStyle());
                 }
@@ -3874,7 +4599,6 @@ void MainWindow::updatePropertiesPanel() {
             }
         });
 
-        // Grubość łamanej
         m_propertiesLayout->addWidget(new QLabel("Grubość łamanej:"));
         auto* polylineWidthSpinBox = new QDoubleSpinBox();
         polylineWidthSpinBox->setRange(0.1, 10.0);
@@ -3885,19 +4609,15 @@ void MainWindow::updatePropertiesPanel() {
         connect(polylineWidthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
             curve->setPolylineWidth(value);
 
-            // Ustaw styl w rendererze
-            if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
+            if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get()))
                 qtRenderer->setPolylineStyle(curve->getPolylineColor(), value, curve->getPolylineStyle());
-            }
 
             m_canvas->refresh();
             statusBar()->showMessage(QString("Zmieniono grubość łamanej na %1").arg(std::to_string(value)));
         });
 
-        // === WŁAŚCIWOŚCI OTOCZKI WYPUKŁEJ ===
         m_propertiesLayout->addWidget(new QLabel("<b>Styl otoczki wypukłej:</b>"));
 
-        // Kolor otoczki wypukłej
         m_propertiesLayout->addWidget(new QLabel("Kolor otoczki wypukłej:"));
         QPushButton* convexHullColorButton = new QPushButton();
         convexHullColorButton->setFixedSize(80, 25);
@@ -3911,7 +4631,6 @@ void MainWindow::updatePropertiesPanel() {
                 curve->setConvexHullColor(color);
                 convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
 
-                // Ustaw styl w rendererze
                 if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
                     qtRenderer->setConvexHullStyle(color, curve->getConvexHullWidth(), curve->getConvexHullStyle());
                 }
@@ -3921,11 +4640,65 @@ void MainWindow::updatePropertiesPanel() {
             }
         });
 
-        // Informacja o implementacji
-        m_propertiesLayout->addWidget(new QLabel("<i>Uwaga: Otoczka wypukła to obecnie placeholder</i>"));
+        m_propertiesLayout->addWidget(new QLabel("<i>Otoczka wypukła obliczana algorytmem Graham Scan</i>"));
 
         m_propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: %1")
             .arg(QString::number(curve->getLength(), 'f', 2))));
+    }
+    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObject)) {
+        m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej Béziera</b>"));
+
+        // Informacje o krzywej
+        m_propertiesLayout->addWidget(new QLabel(QString("Liczba punktów kontrolnych: %1")
+                                                .arg(std::to_string(bezierCurve->getControlPointCount()))));
+        m_propertiesLayout->addWidget(new QLabel(QString("Stopień krzywej: %1")
+                                                .arg(std::to_string(bezierCurve->getDegree()))));
+
+        // Checkbox dla wielokąta kontrolnego
+        auto* showPolygonCheckBox = new QCheckBox("Pokaż linie pomocnicze");
+        showPolygonCheckBox->setChecked(bezierCurve->getShowControlPolygon());
+        m_propertiesLayout->addWidget(showPolygonCheckBox);
+
+        connect(showPolygonCheckBox, &QCheckBox::toggled, [this, bezierCurve](bool checked) {
+            bezierCurve->setShowControlPolygon(checked);
+            m_canvas->refresh();
+            statusBar()->showMessage(checked ? "Włączono linie pomocnicze" : "Wyłączono linie pomocnicze");
+        });
+
+        // Kolor krzywej
+        m_propertiesLayout->addWidget(new QLabel("Kolor krzywej:"));
+        QPushButton* colorButton = new QPushButton();
+        colorButton->setFixedSize(80, 25);
+        QColor currentColor = bezierCurve->getColor();
+        colorButton->setStyleSheet(QString("background-color: %1;").arg(currentColor.name()));
+        m_propertiesLayout->addWidget(colorButton);
+
+        connect(colorButton, &QPushButton::clicked, [this, bezierCurve, colorButton]() {
+            QColor color = QColorDialog::getColor(bezierCurve->getColor(), nullptr, "Wybierz kolor krzywej");
+            if (color.isValid()) {
+                bezierCurve->setColor(color);
+                colorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+                m_canvas->refresh();
+                statusBar()->showMessage("Zmieniono kolor krzywej");
+            }
+        });
+
+        // Grubość linii
+        m_propertiesLayout->addWidget(new QLabel("Grubość linii:"));
+        auto* widthSpinBox = new QDoubleSpinBox();
+        widthSpinBox->setRange(0.1, 10.0);
+        widthSpinBox->setSingleStep(0.1);
+        widthSpinBox->setValue(bezierCurve->getLineWidth());
+        m_propertiesLayout->addWidget(widthSpinBox);
+
+        connect(widthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                [this, bezierCurve](double value) {
+            bezierCurve->setLineWidth(value);
+            m_canvas->refresh();
+            statusBar()->showMessage(QString("Zmieniono grubość linii na %1").arg(std::to_string(value)));
+        });
+
+        return;
     }
     else {
         m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt"));
@@ -3986,7 +4759,7 @@ void MainWindow::onSelectionCleared() {
     statusBar()->showMessage("Anulowano zaznaczenie");
 }
 
-void MainWindow::onControlPointAdded(int pointIndex) {
+void MainWindow::onControlPointAdded(const int pointIndex) {
     updateObjectsTree();
     updatePropertiesPanel();
     statusBar()->showMessage(QString("Dodano punkt kontrolny %1").arg(std::to_string(pointIndex)));
@@ -4008,7 +4781,7 @@ void MainWindow::onControlPointSelected(int pointIndex) {
         int objectIndex = static_cast<int>(std::distance(objects.begin(), it));
 
         for (int i = 0; i < m_objectsTree->topLevelItemCount(); ++i) {
-            QTreeWidgetItem* objectItem = m_objectsTree->topLevelItem(i);
+            const QTreeWidgetItem* objectItem = m_objectsTree->topLevelItem(i);
             if (objectItem->data(0, Qt::UserRole).toInt() == objectIndex) {
                 for (int j = 0; j < objectItem->childCount(); ++j) {
                     QTreeWidgetItem* pointItem = objectItem->child(j);
@@ -4141,7 +4914,7 @@ private:
     QAction* m_oifsAction;
     QAction* m_lagrangeAction;
     QAction* m_barycentricAction;
-    QAction* m_parametricAction;
+    QAction* m_bezierAction;
     QAction* m_addImageAction;
     QAction* m_editImageAction;
     QAction* m_lockImageAction;

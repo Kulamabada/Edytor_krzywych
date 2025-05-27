@@ -304,3 +304,127 @@ namespace {
         return objectId > 0;
     }
 }
+
+
+// Implementacja AddBezierCurveCommand
+AddBezierCurveCommand::AddBezierCurveCommand(std::shared_ptr<BezierCurve> curve)
+    : m_curve(std::move(curve)), m_curveId(-1) {
+}
+
+bool AddBezierCurveCommand::execute() {
+    if (!m_curve) {
+        return false;
+    }
+
+    m_curveId = addObjectToScene(m_curve);
+    return m_curveId >= 0;
+}
+
+bool AddBezierCurveCommand::undo() {
+    if (m_curveId < 0)
+        return false;
+
+    return removeObjectFromScene(m_curveId);
+}
+
+bool AddBezierCurveCommand::redo() {
+    return execute();
+}
+
+// Implementacja AddBezierControlPointCommand
+AddBezierControlPointCommand::AddBezierControlPointCommand(std::shared_ptr<BezierCurve> curve, const Point& point, int index)
+    : BezierCurveCommand(curve), m_point(point), m_index(index), m_addedIndex(-1) {
+}
+
+bool AddBezierControlPointCommand::execute() {
+    if (!m_curve)
+        return false;
+
+    if (m_index < 0 || m_index > static_cast<int>(m_curve->getControlPointCount())) {
+        m_curve->addControlPoint(m_point);
+        m_addedIndex = static_cast<int>(m_curve->getControlPointCount()) - 1;
+    } else {
+        m_curve->insertControlPoint(m_index, m_point);
+        m_addedIndex = m_index;
+    }
+
+    return true;
+}
+
+bool AddBezierControlPointCommand::undo() {
+    if (!m_curve || m_addedIndex < 0 ||
+        m_addedIndex >= static_cast<int>(m_curve->getControlPointCount())) {
+        return false;
+    }
+
+    m_curve->removeControlPoint(m_addedIndex);
+    return true;
+}
+
+// Implementacja MoveBezierControlPointCommand
+MoveBezierControlPointCommand::MoveBezierControlPointCommand(std::shared_ptr<BezierCurve> curve,
+                                                           int pointIndex,
+                                                           const Point& newPosition)
+    : BezierCurveCommand(curve), m_pointIndex(pointIndex), m_newPosition(newPosition) {
+
+    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
+        const auto& points = m_curve->getControlPoints();
+        m_oldPosition = points[m_pointIndex];
+    }
+}
+
+bool MoveBezierControlPointCommand::execute() {
+    if (!m_curve || m_pointIndex < 0 ||
+        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
+        return false;
+    }
+
+    m_curve->moveControlPoint(m_pointIndex, m_newPosition);
+    return true;
+}
+
+bool MoveBezierControlPointCommand::undo() {
+    if (!m_curve || m_pointIndex < 0 ||
+        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
+        return false;
+    }
+
+    m_curve->moveControlPoint(m_pointIndex, m_oldPosition);
+    return true;
+}
+
+// Implementacja DeleteBezierControlPointCommand
+DeleteBezierControlPointCommand::DeleteBezierControlPointCommand(std::shared_ptr<BezierCurve> curve,
+                                                                int pointIndex)
+    : BezierCurveCommand(curve), m_pointIndex(pointIndex) {
+
+    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
+        const auto& points = m_curve->getControlPoints();
+        m_deletedPoint = points[m_pointIndex];
+    }
+}
+
+bool DeleteBezierControlPointCommand::execute() {
+    if (!m_curve || m_pointIndex < 0 ||
+        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
+        return false;
+    }
+
+    if (m_curve->getControlPointCount() < 3)
+        return false;
+
+    m_curve->removeControlPoint(m_pointIndex);
+    return true;
+}
+
+bool DeleteBezierControlPointCommand::undo() {
+    if (!m_curve)
+        return false;
+
+    if (m_pointIndex >= static_cast<int>(m_curve->getControlPointCount()))
+        m_curve->addControlPoint(m_deletedPoint);
+    else
+        m_curve->insertControlPoint(m_pointIndex, m_deletedPoint);
+
+    return true;
+}

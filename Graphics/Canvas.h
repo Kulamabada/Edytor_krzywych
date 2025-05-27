@@ -58,6 +58,7 @@ public:
 
     std::shared_ptr<InterpolatedCurve> getSelectedCurve() const;
     void selectControlPoint(int pointIndex);
+    bool hasSelectedCurveWithControlPoints() const;
 
 public slots:
     void refresh();
@@ -90,6 +91,7 @@ private:
     bool addControlPoint(const QPointF& screenPos);
     bool moveControlPoint(int pointIndex, const QPointF& screenPos);
     void drawControlPoints();
+    std::shared_ptr<BezierCurve> getSelectedBezierCurve() const;
 
     std::vector<std::shared_ptr<GeometricObject>> m_objects;
     std::shared_ptr<GeometricObject> m_selectedObject;

@@ -2,6 +2,7 @@
 #include <utility>
 #include <QMessageBox>
 #include "../Geometry/ImageObject.h"
+#include "../Geometry/BezierCurve.h"
 
 Canvas::Canvas(QWidget* parent): QWidget(parent)
 {
@@ -166,12 +167,12 @@ void Canvas::setEditMode(EditMode mode) {
     if (mode == EditMode::None) {
         finishEditing();
     } else {
-        if ((mode == EditMode::AddPoint || mode == EditMode::MovePoint) && !getSelectedCurve()) {
+        if ((mode == EditMode::AddPoint || mode == EditMode::MovePoint) && !hasSelectedCurveWithControlPoints()) {
             m_editMode = EditMode::None;
             QMessageBox::warning(this, "Edycja punktów",
                 "Najpierw wybierz krzywą do edycji punktów kontrolnych.");
             return;
-        }
+            }
 
         m_isEditingPoints = true;
         emit editingStarted();
@@ -205,16 +206,30 @@ std::shared_ptr<InterpolatedCurve> Canvas::getSelectedCurve() const {
 }
 
 int Canvas::hitTestControlPoint(const QPointF& pos, double tolerance) {
-    auto curve = getSelectedCurve();
-    if (!curve || !m_viewportManager) return -1;
+    if (!m_viewportManager) return -1;
 
-    const auto& points = curve->getPoints();
-    for (size_t i = 0; i < points.size(); ++i) {
-        QPointF screenPos = m_viewportManager->worldToScreen(
-            QPointF(points[i].x(), points[i].y()));
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return -1;
 
-        if (QLineF(pos, screenPos).length() <= tolerance) {
-            return static_cast<int>(i);
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+        const auto& points = curve->getPoints();
+        for (size_t i = 0; i < points.size(); ++i) {
+            QPointF screenPos = m_viewportManager->worldToScreen(
+                QPointF(points[i].x(), points[i].y()));
+            if (QLineF(pos, screenPos).length() <= tolerance) {
+                return static_cast<int>(i);
+            }
+        }
+    }
+
+    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        const auto& points = bezierCurve->getControlPoints();
+        for (size_t i = 0; i < points.size(); ++i) {
+            QPointF screenPos = m_viewportManager->worldToScreen(
+                QPointF(points[i].x(), points[i].y()));
+            if (QLineF(pos, screenPos).length() <= tolerance) {
+                return static_cast<int>(i);
+            }
         }
     }
 
@@ -222,47 +237,86 @@ int Canvas::hitTestControlPoint(const QPointF& pos, double tolerance) {
 }
 
 bool Canvas::addControlPoint(const QPointF& screenPos) {
-    const auto curve = getSelectedCurve();
-    if (!curve || !m_viewportManager) return false;
+    if (!m_viewportManager) return false;
+
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return false;
 
     const QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
+    int newPointIndex = -1;
 
-    curve->addPoint(Point(worldPos.x(), worldPos.y()));
-
-    const int newPointIndex = static_cast<int>(curve->getPointCount()) - 1;
+    // Obsługa InterpolatedCurve
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+        curve->addPoint(Point(worldPos.x(), worldPos.y()));
+        newPointIndex = static_cast<int>(curve->getPointCount()) - 1;
+    }
+    // Obsługa BezierCurve
+    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        bezierCurve->addControlPoint(Point(worldPos.x(), worldPos.y()));
+        newPointIndex = static_cast<int>(bezierCurve->getControlPointCount()) - 1;
+    }
+    else {
+        return false;
+    }
 
     selectControlPoint(newPointIndex);
-
     emit controlPointAdded(newPointIndex);
-
     update();
     return true;
 }
 
 bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
-    auto curve = getSelectedCurve();
-    if (!curve || !m_viewportManager ||
-        pointIndex < 0 || pointIndex >= static_cast<int>(curve->getPointCount())) {
-        return false;
-    }
+    if (!m_viewportManager || pointIndex < 0) return false;
+
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return false;
 
     QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
 
-    const auto& points = curve->getPoints();
-    auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
-    curve->movePoint(pointIndex, newPoint);
+    // Obsługa InterpolatedCurve
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+        if (pointIndex >= static_cast<int>(curve->getPointCount())) return false;
+
+        const auto& points = curve->getPoints();
+        auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
+        curve->movePoint(pointIndex, newPoint);
+    }
+    // Obsługa BezierCurve
+    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        if (pointIndex >= static_cast<int>(bezierCurve->getControlPointCount())) return false;
+
+        const auto& points = bezierCurve->getControlPoints();
+        auto newPoint = Point(worldPos.x(), worldPos.y(), points[pointIndex].z());
+        bezierCurve->moveControlPoint(pointIndex, newPoint);
+    }
+    else {
+        return false;
+    }
 
     emit controlPointMoved(pointIndex);
-
     update();
     return true;
 }
 
 void Canvas::selectControlPoint(const int pointIndex) {
-    const auto curve = getSelectedCurve();
-    if (!curve) return;
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return;
 
-    if (pointIndex >= 0 && pointIndex < static_cast<int>(curve->getPointCount())) {
+    int maxPointCount = 0;
+
+    // Sprawdź InterpolatedCurve
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+        maxPointCount = static_cast<int>(curve->getPointCount());
+    }
+    // Sprawdź BezierCurve
+    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        maxPointCount = static_cast<int>(bezierCurve->getControlPointCount());
+    }
+    else {
+        return;
+    }
+
+    if (pointIndex >= 0 && pointIndex < maxPointCount) {
         m_selectedControlPointIndex = pointIndex;
         emit controlPointSelected(pointIndex);
     } else {
@@ -320,13 +374,25 @@ void Canvas::paintEvent(QPaintEvent* event)
 }
 
 void Canvas::drawControlPoints() {
-    const auto curve = getSelectedCurve();
-    if (!curve || !m_renderer) return;
+    if (!m_renderer) return;
 
-    const auto& points = curve->getPoints();
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return;
 
-    m_renderer->renderControlPoints(points, m_selectedControlPointIndex,m_isDraggingPoint ? m_selectedControlPointIndex : -1);
+    // Obsługa InterpolatedCurve
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+        const auto& points = curve->getPoints();
+        m_renderer->renderControlPoints(points, m_selectedControlPointIndex,
+                                      m_isDraggingPoint ? m_selectedControlPointIndex : -1);
+    }
+    // Obsługa BezierCurve
+    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        const auto& points = bezierCurve->getControlPoints();
+        m_renderer->renderControlPoints(points, m_selectedControlPointIndex,
+                                      m_isDraggingPoint ? m_selectedControlPointIndex : -1);
+    }
 }
+
 
 void Canvas::resizeEvent(QResizeEvent* event)
 {
@@ -449,20 +515,65 @@ void Canvas::keyPressEvent(QKeyEvent* event)
         finishEditing();
     }
     else if (event->key() == Qt::Key_Delete && m_selectedControlPointIndex >= 0) {
-        auto curve = getSelectedCurve();
-        if (curve && m_selectedControlPointIndex >= 0 &&
-            m_selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
+        auto selectedObj = selectedObject();
+        if (!selectedObj) return;
 
-            if (curve->getPointCount() > 2) {
-                curve->removePoint(m_selectedControlPointIndex);
-                m_selectedControlPointIndex = -1;
-                update();
-            } else {
-                QMessageBox::warning(this, "Usuwanie punktu",
-                    "Krzywa musi mieć co najmniej 2 punkty.");
+        bool deleted = false;
+
+        // Obsługa InterpolatedCurve
+        if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+            if (m_selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
+                if (curve->getPointCount() > 2) {
+                    curve->removePoint(m_selectedControlPointIndex);
+                    deleted = true;
+                } else {
+                    QMessageBox::warning(this, "Usuwanie punktu",
+                        "Krzywa musi mieć co najmniej 2 punkty.");
+                }
             }
+        }
+        // Obsługa BezierCurve
+        else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+            if (m_selectedControlPointIndex < static_cast<int>(bezierCurve->getControlPointCount())) {
+                if (bezierCurve->getControlPointCount() > 2) {
+                    bezierCurve->removeControlPoint(m_selectedControlPointIndex);
+                    deleted = true;
+                } else {
+                    QMessageBox::warning(this, "Usuwanie punktu",
+                        "Krzywa Béziera musi mieć co najmniej 2 punkty kontrolne.");
+                }
+            }
+        }
+
+        if (deleted) {
+            m_selectedControlPointIndex = -1;
+            update();
         }
     }
 
     QWidget::keyPressEvent(event);
+}
+
+std::shared_ptr<BezierCurve> Canvas::getSelectedBezierCurve() const {
+    const auto selectedObj = selectedObject();
+    if (!selectedObj) return nullptr;
+
+    return std::dynamic_pointer_cast<BezierCurve>(selectedObj);
+}
+
+bool Canvas::hasSelectedCurveWithControlPoints() const {
+    auto selectedObj = selectedObject();
+    if (!selectedObj) return false;
+
+    // Sprawdź InterpolatedCurve
+    if (std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
+        return true;
+    }
+
+    // Sprawdź BezierCurve
+    if (std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        return true;
+    }
+
+    return false;
 }

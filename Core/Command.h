@@ -9,6 +9,7 @@
 #include "../Geometry/GeometricObject.h"
 #include "../Geometry/Point.h"
 #include "../Geometry/InterpolatedCurve.h"
+#include "../Geometry/BezierCurve.h"
 #include "CurveCommand.h"
 
 // Command to add a geometric object to the scene
@@ -148,6 +149,76 @@ public:
 private:
     std::vector<Point> m_oldPoints;
     std::vector<Point> m_newPoints;
+};
+
+// Komenda do dodawania krzywej Béziera
+class AddBezierCurveCommand : public AbstractCommand {
+public:
+    explicit AddBezierCurveCommand(std::shared_ptr<BezierCurve> curve);
+    ~AddBezierCurveCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<BezierCurve> m_curve;
+    int m_curveId{-1};
+};
+
+// Komendy dla edycji punktów kontrolnych krzywej Béziera
+class BezierCurveCommand : public AbstractCommand {
+protected:
+    std::shared_ptr<BezierCurve> m_curve;
+
+public:
+    explicit BezierCurveCommand(std::shared_ptr<BezierCurve> curve) : m_curve(curve) {}
+    virtual ~BezierCurveCommand() = default;
+
+    bool redo() override {
+        return execute();
+    }
+};
+
+class AddBezierControlPointCommand : public BezierCurveCommand {
+public:
+    AddBezierControlPointCommand(std::shared_ptr<BezierCurve> curve, const Point& point, int index = -1);
+    ~AddBezierControlPointCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+
+private:
+    Point m_point;
+    int m_index;
+    int m_addedIndex;
+};
+
+class MoveBezierControlPointCommand : public BezierCurveCommand {
+public:
+    MoveBezierControlPointCommand(std::shared_ptr<BezierCurve> curve, int pointIndex, const Point& newPosition);
+    ~MoveBezierControlPointCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+
+private:
+    int m_pointIndex;
+    Point m_oldPosition;
+    Point m_newPosition;
+};
+
+class DeleteBezierControlPointCommand : public BezierCurveCommand {
+public:
+    DeleteBezierControlPointCommand(std::shared_ptr<BezierCurve> curve, int pointIndex);
+    ~DeleteBezierControlPointCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+
+private:
+    int m_pointIndex;
+    Point m_deletedPoint;
 };
 
 #endif // COMMAND_H

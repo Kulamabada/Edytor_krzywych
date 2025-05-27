@@ -90,4 +90,9 @@ private:
     static double crossProduct(const Point& O, const Point& A, const Point& B) ;
     static double polarAngle(const Point& pivot, const Point& point) ;
     static double distanceSquared(const Point& a, const Point& b) ;
+
+    void renderBezierControlPolygon(const std::vector<Point>& points,
+                              const QColor& color,
+                              double width,
+                              Qt::PenStyle style);
 };

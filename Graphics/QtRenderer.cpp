@@ -1,6 +1,7 @@
 #include "QtRenderer.h"
 #include "../Geometry/InterpolatedCurve.h"
 #include "../Geometry/ImageObject.h"
+#include "../Geometry/BezierCurve.h"
 
 QtRenderer::QtRenderer() = default;
 
@@ -49,40 +50,72 @@ void QtRenderer::renderPoint(const Point& point)
     m_painter->drawEllipse(QPointF(x, y), m_pointSize, m_pointSize);
 }
 
-void QtRenderer::renderCurve(const Curve& curve)
-{
-    if (!m_painter || !m_viewportManager)
-        return;
+void QtRenderer::renderCurve(const Curve& curve) {
+    if (!m_painter || !m_viewportManager) return;
 
-    const auto interpolatedCurve = dynamic_cast<const InterpolatedCurve*>(&curve);
-    if (!interpolatedCurve) return;
+    if (const auto interpolatedCurve = dynamic_cast<const InterpolatedCurve*>(&curve)) {
 
-    if (interpolatedCurve->getDrawInterpolatedCurve()) {
-        QColor color = interpolatedCurve->getColor();
-        double width = interpolatedCurve->getLineWidth();
-        Qt::PenStyle style = interpolatedCurve->getLineStyle();
+        if (interpolatedCurve->getDrawInterpolatedCurve()) {
+            QColor color = interpolatedCurve->getColor();
+            double width = interpolatedCurve->getLineWidth();
+            Qt::PenStyle style = interpolatedCurve->getLineStyle();
+
+            const QPen pen(color, width, style);
+            m_painter->setPen(pen);
+            m_painter->setBrush(Qt::NoBrush);
+
+            constexpr int numSegments = 5000;
+            QPolygonF points;
+
+            for (int i = 0; i <= numSegments; ++i) {
+                double t = static_cast<double>(i) / numSegments;
+                Point p = curve.getPointAt(t);
+                points.append(QPointF(p.x(), p.y()));
+            }
+
+            m_painter->drawPolyline(points);
+        }
+
+        if (interpolatedCurve->getDrawPolyline())
+            renderPolyline(interpolatedCurve->getPoints());
+
+        if (interpolatedCurve->getDrawConvexHull())
+            renderConvexHull(interpolatedCurve->getPoints());
+    }
+
+
+    const auto bezierCurve = dynamic_cast<const BezierCurve*>(&curve);
+    if (bezierCurve) {
+        // Renderowanie krzywej Béziera
+        QColor color = bezierCurve->getColor();
+        double width = bezierCurve->getLineWidth();
+        Qt::PenStyle style = bezierCurve->getLineStyle();
 
         const QPen pen(color, width, style);
         m_painter->setPen(pen);
         m_painter->setBrush(Qt::NoBrush);
 
-        constexpr int numSegments = 5000;
-        QPolygonF points;
+        if (bezierCurve->getControlPointCount() >= 2) {
+            constexpr int numSegments = 100;
+            QPolygonF points;
 
-        for (int i = 0; i <= numSegments; ++i) {
-            double t = static_cast<double>(i) / numSegments;
-            Point p = curve.getPointAt(t);
-            points.append(QPointF(p.x(), p.y()));
+            for (int i = 0; i <= numSegments; ++i) {
+                double t = static_cast<double>(i) / numSegments;
+                Point p = curve.getPointAt(t);
+                points.append(QPointF(p.x(), p.y()));
+            }
+
+            m_painter->drawPolyline(points);
         }
 
-        m_painter->drawPolyline(points);
+        // Renderowanie wielokąta kontrolnego jeśli włączone
+        if (bezierCurve->getShowControlPolygon()) {
+            renderBezierControlPolygon(bezierCurve->getControlPoints(),
+                                     bezierCurve->getControlPolygonColor(),
+                                     bezierCurve->getControlPolygonWidth(),
+                                     bezierCurve->getControlPolygonStyle());
+        }
     }
-
-    if (interpolatedCurve->getDrawPolyline())
-        renderPolyline(interpolatedCurve->getPoints());
-
-    if (interpolatedCurve->getDrawConvexHull())
-        renderConvexHull(interpolatedCurve->getPoints());
 }
 
 void QtRenderer::renderObject(const GeometricObject& object)
@@ -480,7 +513,6 @@ void QtRenderer::renderConvexHull(const std::vector<Point>& points)
     m_painter->drawPolyline(polygon);
 }
 
-
 void QtRenderer::setPolylineStyle(const QColor& color, float width, Qt::PenStyle style)
 {
     m_polylineColor = color;
@@ -559,4 +591,23 @@ double QtRenderer::distanceSquared(const Point& a, const Point& b)
 {
     const double dx = a.x() - b.x(), dy = a.y() - b.y();
     return dx * dx + dy * dy;
+}
+
+void QtRenderer::renderBezierControlPolygon(const std::vector<Point>& points,
+                                          const QColor& color,
+                                          double width,
+                                          Qt::PenStyle style) {
+    if (!m_painter || !m_viewportManager || points.size() < 2)
+        return;
+
+    QPen pen(color, width, style);
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
+
+    QPolygonF polygon;
+    for (const auto& point : points) {
+        polygon << QPointF(point.x(), point.y());
+    }
+
+    m_painter->drawPolyline(polygon);
 }

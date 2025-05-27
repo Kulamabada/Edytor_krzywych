@@ -105,7 +105,7 @@ void MainWindow::createMenus() {
     m_oifsAction = m_interpolatedCurvesMenu->addAction("OIFS3");
     m_lagrangeAction = m_interpolatedCurvesMenu->addAction("Lagrange");
     m_barycentricAction = m_interpolatedCurvesMenu->addAction("Barycentric");
-    m_parametricAction = m_curvesMenu->addAction("Krzywa Beziera");
+    m_bezierAction = m_curvesMenu->addAction("Krzywa Beziera");
 
     m_addImageAction = m_imageMenu->addAction("Dodaj obraz...");
     m_editImageAction = m_imageMenu->addAction("Edytuj narożniki obrazu");
@@ -132,7 +132,7 @@ void MainWindow::createToolbars() {
     m_interpolatedButton->setMenu(m_interpolatedCurvesMenu);
     m_mainToolBar->addWidget(m_interpolatedButton);
 
-    m_mainToolBar->addAction(m_parametricAction);
+    m_mainToolBar->addAction(m_bezierAction);
     m_mainToolBar->addSeparator();
     m_mainToolBar->addAction(m_zoomInAction);
     m_mainToolBar->addAction(m_zoomOutAction);
@@ -271,7 +271,23 @@ void MainWindow::updateObjectsTree() {
                     .arg(QString::number(p.x(), 'f', 2),
                          QString::number(p.y(), 'f', 2)));
             }
-        } else {
+        }
+        else if (const auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(obj)) {
+            item->setText(1, "Krzywa Béziera");
+
+            const auto& points = bezierCurve->getControlPoints();
+            for (size_t i = 0; i < points.size(); ++i) {
+                auto* pointItem = new QTreeWidgetItem(item);
+                const Point& p = points[i];
+                pointItem->setText(0, QString("Punkt %1").arg(std::to_string(i)));
+                pointItem->setText(1, QString("(%1, %2)")
+                    .arg(QString::number(p.x(), 'f', 2), QString::number(p.y(), 'f', 2)));
+
+                pointItem->setData(0, Qt::UserRole, QVariant::fromValue(static_cast<int>(i)));
+                pointItem->setData(0, Qt::UserRole + 1, QVariant::fromValue(index));
+            }
+        }
+        else {
             item->setText(1, "Inny");
         }
 
@@ -502,6 +518,61 @@ void MainWindow::updatePropertiesPanel() {
 
         m_propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: %1")
             .arg(QString::number(curve->getLength(), 'f', 2))));
+    }
+    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObject)) {
+        m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej Béziera</b>"));
+
+        // Informacje o krzywej
+        m_propertiesLayout->addWidget(new QLabel(QString("Liczba punktów kontrolnych: %1")
+                                                .arg(std::to_string(bezierCurve->getControlPointCount()))));
+        m_propertiesLayout->addWidget(new QLabel(QString("Stopień krzywej: %1")
+                                                .arg(std::to_string(bezierCurve->getDegree()))));
+
+        // Checkbox dla wielokąta kontrolnego
+        auto* showPolygonCheckBox = new QCheckBox("Pokaż linie pomocnicze");
+        showPolygonCheckBox->setChecked(bezierCurve->getShowControlPolygon());
+        m_propertiesLayout->addWidget(showPolygonCheckBox);
+
+        connect(showPolygonCheckBox, &QCheckBox::toggled, [this, bezierCurve](bool checked) {
+            bezierCurve->setShowControlPolygon(checked);
+            m_canvas->refresh();
+            statusBar()->showMessage(checked ? "Włączono linie pomocnicze" : "Wyłączono linie pomocnicze");
+        });
+
+        // Kolor krzywej
+        m_propertiesLayout->addWidget(new QLabel("Kolor krzywej:"));
+        QPushButton* colorButton = new QPushButton();
+        colorButton->setFixedSize(80, 25);
+        QColor currentColor = bezierCurve->getColor();
+        colorButton->setStyleSheet(QString("background-color: %1;").arg(currentColor.name()));
+        m_propertiesLayout->addWidget(colorButton);
+
+        connect(colorButton, &QPushButton::clicked, [this, bezierCurve, colorButton]() {
+            QColor color = QColorDialog::getColor(bezierCurve->getColor(), nullptr, "Wybierz kolor krzywej");
+            if (color.isValid()) {
+                bezierCurve->setColor(color);
+                colorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+                m_canvas->refresh();
+                statusBar()->showMessage("Zmieniono kolor krzywej");
+            }
+        });
+
+        // Grubość linii
+        m_propertiesLayout->addWidget(new QLabel("Grubość linii:"));
+        auto* widthSpinBox = new QDoubleSpinBox();
+        widthSpinBox->setRange(0.1, 10.0);
+        widthSpinBox->setSingleStep(0.1);
+        widthSpinBox->setValue(bezierCurve->getLineWidth());
+        m_propertiesLayout->addWidget(widthSpinBox);
+
+        connect(widthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                [this, bezierCurve](double value) {
+            bezierCurve->setLineWidth(value);
+            m_canvas->refresh();
+            statusBar()->showMessage(QString("Zmieniono grubość linii na %1").arg(std::to_string(value)));
+        });
+
+        return;
     }
     else {
         m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt"));

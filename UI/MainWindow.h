@@ -99,7 +99,7 @@ private:
     QAction* m_oifsAction;
     QAction* m_lagrangeAction;
     QAction* m_barycentricAction;
-    QAction* m_parametricAction;
+    QAction* m_bezierAction;
     QAction* m_addImageAction;
     QAction* m_editImageAction;
     QAction* m_lockImageAction;

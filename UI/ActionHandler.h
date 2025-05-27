@@ -12,30 +12,37 @@ class ActionHandler : public QObject {
 
 public:
     explicit ActionHandler(MainWindow& mainWindow);
-    ~ActionHandler() = default;
+    ~ActionHandler() override = default;
 
-    public slots:
-        void onNewAction();
+public slots:
+    void onNewAction();
     void onOpenAction();
     void onSaveAction();
     void onSaveAsAction();
+
     void onExitAction();
     void onUndoAction();
     void onRedoAction();
     void onDeleteAction();
+
     void onSelectModeAction() const;
     void onAddPointModeAction();
     void onMovePointModeAction();
     void onDeletePointAction();
     void onFinishEditingAction();
+
     void onZoomInAction();
     void onZoomOutAction();
     void onResetViewAction();
     void onFitContentAction();
+
     void onNifsAction();
     void onOifsAction();
     void onLagrangeAction();
     void onBarycentricAction();
+
+    void onBezierAction();
+
     void onAboutAction();
 
 private:
