@@ -1,7 +1,5 @@
-#ifndef IRENDERER_H
-#define IRENDERER_H
+#pragma once
 
-#include <memory>
 #include <QColor>
 #include <qimage.h>
 #include <Qt>
@@ -52,5 +50,3 @@ public:
     virtual void setPolylineStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) = 0;
     virtual void setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) = 0;
 };
-
-#endif

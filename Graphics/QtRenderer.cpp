@@ -1,7 +1,4 @@
 #include "QtRenderer.h"
-#include "../Geometry/InterpolatedCurve.h"
-#include "../Geometry/ImageObject.h"
-#include "../Geometry/BezierCurve.h"
 
 QtRenderer::QtRenderer() = default;
 
@@ -72,21 +69,17 @@ void QtRenderer::renderCurve(const Curve& curve) {
                 Point p = curve.getPointAt(t);
                 points.append(QPointF(p.x(), p.y()));
             }
-
             m_painter->drawPolyline(points);
         }
 
         if (interpolatedCurve->getDrawPolyline())
-            renderPolyline(interpolatedCurve->getPoints());
+            renderPolyline(interpolatedCurve->getControlPoints());
 
         if (interpolatedCurve->getDrawConvexHull())
-            renderConvexHull(interpolatedCurve->getPoints());
+            renderConvexHull(interpolatedCurve->getControlPoints());
     }
 
-
-    const auto bezierCurve = dynamic_cast<const BezierCurve*>(&curve);
-    if (bezierCurve) {
-        // Renderowanie krzywej Béziera
+    if (const auto bezierCurve = dynamic_cast<const BezierCurve*>(&curve)) {
         QColor color = bezierCurve->getColor();
         double width = bezierCurve->getLineWidth();
         Qt::PenStyle style = bezierCurve->getLineStyle();
@@ -108,13 +101,11 @@ void QtRenderer::renderCurve(const Curve& curve) {
             m_painter->drawPolyline(points);
         }
 
-        // Renderowanie wielokąta kontrolnego jeśli włączone
-        if (bezierCurve->getShowControlPolygon()) {
+        if (bezierCurve->getShowControlPolygon())
             renderBezierControlPolygon(bezierCurve->getControlPoints(),
                                      bezierCurve->getControlPolygonColor(),
                                      bezierCurve->getControlPolygonWidth(),
                                      bezierCurve->getControlPolygonStyle());
-        }
     }
 }
 
@@ -153,7 +144,7 @@ void QtRenderer::renderGrid(double gridSize) {
         m_painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
 }
 
-void QtRenderer::renderText(const QPointF& position, const QString& text) {
+void QtRenderer::renderText(const QPointF& position, const QString& text) const {
     if (!m_painter) return;
     m_painter->save();
     const QTransform current = m_painter->transform();

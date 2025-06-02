@@ -1,6 +1,4 @@
 #include "ViewportManager.h"
-#include <algorithm>
-#include <cmath>
 
 // Stałe domyślne
 constexpr double DEFAULT_MIN_ZOOM = 0.1;

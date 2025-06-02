@@ -1,7 +1,5 @@
 #pragma once
 
-#include <QPointF>
-#include <QRectF>
 #include <QTransform>
 
 class ViewportManager {

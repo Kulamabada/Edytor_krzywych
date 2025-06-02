@@ -2,7 +2,8 @@
 
 #include "GeometricObject.h"
 #include <vector>
-#include <memory>
+#include "Point.h"
+#include <QColor>
 
 // Forward declarations
 class Point;
@@ -32,5 +33,4 @@ public:
 
     // Override from GeometricObject
     void transform(const TransformMatrix& matrix) override = 0;
-
 };

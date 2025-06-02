@@ -1,51 +1,46 @@
 #include "InterpolatedCurve.h"
-#include "Point.h"
-#include "../Math/IMathProvider.h"
-#include <cmath>
-#include <limits>
-#include <algorithm>
 
 InterpolatedCurve::InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
                                     InterpolationType type)
     : type(type),
       mathProvider(std::move(mathProvider)){}
 
-void InterpolatedCurve::addPoint(const Point& point) {
+void InterpolatedCurve::addControlPoint(const Point& point) {
     points.push_back(point);
     needsRebuild = true;
 }
 
-void InterpolatedCurve::insertPoint(size_t index, const Point& point) {
+void InterpolatedCurve::insertControlPoint(const size_t index, const Point& point) {
     if (index <= points.size()) {
         points.insert(points.begin() + index, point);
         needsRebuild = true;
     }
 }
 
-void InterpolatedCurve::removePoint(size_t index) {
+void InterpolatedCurve::removeControlPoint(const size_t index) {
     if (index < points.size()) {
         points.erase(points.begin() + index);
         needsRebuild = true;
     }
 }
 
-void InterpolatedCurve::setPoints(const std::vector<Point>& newPoints) {
+void InterpolatedCurve::setControlPoints(const std::vector<Point>& newPoints) {
     points = newPoints;
     needsRebuild = true;
 }
 
-void InterpolatedCurve::movePoint(size_t index, const Point& newPosition) {
+void InterpolatedCurve::moveControlPoint(size_t index, const Point& newPosition) {
     if (index < points.size()) {
         points[index] = newPosition;
         needsRebuild = true;
     }
 }
 
-const std::vector<Point>& InterpolatedCurve::getPoints() const {
+const std::vector<Point>& InterpolatedCurve::getControlPoints() const {
     return points;
 }
 
-size_t InterpolatedCurve::getPointCount() const {
+size_t InterpolatedCurve::getControlPointCount() const {
     return points.size();
 }
 
@@ -304,16 +299,16 @@ Point InterpolatedCurve::getPointAt(double t) const {
             y += points[i].y() * w;
             sumW += w;
         }
-        return Point(x / sumW, y / sumW, 0.0);
+        return {x / sumW, y / sumW, 0.0};
     }
 
-    size_t nextIndex = (segmentIndex + 1) % points.size();
-    double oneMinusT = 1.0 - localT;
+    const size_t nextIndex = (segmentIndex + 1) % points.size();
+    const double oneMinusT = 1.0 - localT;
     double x = oneMinusT * points[segmentIndex].x() + localT * points[nextIndex].x();
     double y = oneMinusT * points[segmentIndex].y() + localT * points[nextIndex].y();
     double z = oneMinusT * points[segmentIndex].z() + localT * points[nextIndex].z();
 
-    return Point(x, y, z);
+    return {x, y, z};
 }
 
 
@@ -334,15 +329,15 @@ double InterpolatedCurve::getLength() const {
 }
 
 void InterpolatedCurve::transform(const TransformMatrix& matrix) {
-    for (auto& point : points) {
+    for (auto& point : points)
         point.transform(matrix);
-    }
+
     needsRebuild = true;
 }
 
 std::unique_ptr<Curve> InterpolatedCurve::clone() const {
     auto copy = std::make_unique<InterpolatedCurve>(mathProvider, type);
-    copy->setPoints(points);
+    copy->setControlPoints(points);
     return copy;
 }
 
@@ -350,9 +345,9 @@ Vector InterpolatedCurve::getPosition() const {
     if (points.empty()) return Vector::Zero();
 
     Vector sum = Vector::Zero();
-    for (const auto& p : points) {
+    for (const auto& p : points)
         sum += Vector(p.x(), p.y(), p.z());
-    }
+
     return sum / static_cast<double>(points.size());
 }
 

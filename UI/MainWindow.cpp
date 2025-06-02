@@ -1,21 +1,5 @@
 #include "MainWindow.h"
 #include "ActionHandler.h"
-#include "../Math/EigenMathAdapter.h"
-#include "../Graphics/QtRenderer.h"
-#include "../Geometry/ImageObject.h"
-#include <QFileDialog>
-#include <QMessageBox>
-#include <QKeySequence>
-#include <QToolButton>
-#include <QComboBox>
-#include <QPushButton>
-#include <QColorDialog>
-#include <QDoubleSpinBox>
-#include <QCheckBox>
-#include <QApplication>
-#include <QStatusBar>
-#include <QTimer>
-
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -247,7 +231,7 @@ void MainWindow::updateObjectsTree() {
         if (const auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(obj)) {
             item->setText(1, "Krzywa");
 
-            const auto& points = curve->getPoints();
+            const auto& points = curve->getControlPoints();
             for (size_t i = 0; i < points.size(); ++i) {
                 auto* pointItem = new QTreeWidgetItem(item);
                 const Point& p = points[i];

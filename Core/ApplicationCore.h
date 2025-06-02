@@ -1,7 +1,5 @@
-#ifndef APPLICATIONCORE_H
-#define APPLICATIONCORE_H
+#pragma once
 
-#include <memory>
 #include "CommandManager.h"
 
 class ApplicationCore {
@@ -23,5 +21,3 @@ private:
     bool m_initialized{false};
     std::unique_ptr<CommandManager> m_commandManager;
 };
-
-#endif // APPLICATIONCORE_H

@@ -2,7 +2,6 @@
 
 #include "AbstractCommand.h"
 #include "../Geometry/InterpolatedCurve.h"
-#include <memory>
 
 class CurveCommand : public AbstractCommand {
 protected:

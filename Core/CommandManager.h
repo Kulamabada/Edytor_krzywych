@@ -1,7 +1,5 @@
-#ifndef COMMANDMANAGER_H
-#define COMMANDMANAGER_H
+#pragma once
 
-#include <memory>
 #include <vector>
 #include "AbstractCommand.h"
 
@@ -28,5 +26,3 @@ private:
     std::vector<std::unique_ptr<AbstractCommand>> m_undoStack;
     std::vector<std::unique_ptr<AbstractCommand>> m_redoStack;
 };
-
-#endif

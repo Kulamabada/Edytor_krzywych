@@ -1,11 +1,14 @@
 #pragma once
 
-#include <QObject>
-#include <memory>
 #include "../Geometry/InterpolatedCurve.h"
 
+#include "../Core/CommandManager.h"
+#include <QMessageBox>
+#include <QFileDialog>
+#include <QKeyEvent>
+#include <QStatusBar>
+
 class MainWindow;
-class QAction;
 
 class ActionHandler : public QObject {
     Q_OBJECT

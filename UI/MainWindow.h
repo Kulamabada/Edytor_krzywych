@@ -11,10 +11,22 @@
 #include <QToolButton>
 #include <QComboBox>
 #include <QLabel>
-#include <memory>
 
 #include "../Graphics/Canvas.h"
 #include "../Core/CommandManager.h"
+
+#include "../Math/EigenMathAdapter.h"
+#include "../Graphics/QtRenderer.h"
+#include "../Geometry/ImageObject.h"
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QKeySequence>
+#include <QPushButton>
+#include <QColorDialog>
+#include <QDoubleSpinBox>
+#include <QCheckBox>
+#include <QApplication>
+#include <QTimer>
 
 class ActionHandler;
 

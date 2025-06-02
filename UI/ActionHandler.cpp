@@ -1,11 +1,5 @@
 #include "ActionHandler.h"
 #include "MainWindow.h"
-#include "../Core/CommandManager.h"
-#include <QMessageBox>
-#include <QFileDialog>
-#include <QApplication>
-#include <QKeyEvent>
-#include <QStatusBar>
 
 ActionHandler::ActionHandler(MainWindow& mainWindow)
     : QObject(&mainWindow)
@@ -198,9 +192,9 @@ void ActionHandler::createInterpolatedCurve(InterpolatedCurve::InterpolationType
     curve->setLineWidth(1.0);
     curve->setLineStyle(Qt::SolidLine);
 
-    curve->addPoint(Point(0, 0));
-    curve->addPoint(Point(50, 100));
-    curve->addPoint(Point(100, 0));
+    curve->addControlPoint(Point(0, 0));
+    curve->addControlPoint(Point(50, 100));
+    curve->addControlPoint(Point(100, 0));
     m_mainWindow.getCanvas()->addObject(curve);
     m_mainWindow.getCanvas()->selectObject(curve);
     m_mainWindow.getCanvas()->refresh();

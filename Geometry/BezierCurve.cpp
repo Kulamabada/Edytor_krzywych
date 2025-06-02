@@ -1,7 +1,4 @@
 #include "BezierCurve.h"
-#include "TransformMatrix.h"
-#include <cmath>
-#include <algorithm>
 
 BezierCurve::BezierCurve() {
 }
@@ -11,15 +8,13 @@ void BezierCurve::addControlPoint(const Point& point) {
 }
 
 void BezierCurve::insertControlPoint(size_t index, const Point& point) {
-    if (index <= m_controlPoints.size()) {
+    if (index <= m_controlPoints.size())
         m_controlPoints.insert(m_controlPoints.begin() + index, point);
-    }
 }
 
 void BezierCurve::removeControlPoint(size_t index) {
-    if (index < m_controlPoints.size()) {
+    if (index < m_controlPoints.size())
         m_controlPoints.erase(m_controlPoints.begin() + index);
-    }
 }
 
 void BezierCurve::setControlPoints(const std::vector<Point>& points) {
@@ -27,9 +22,8 @@ void BezierCurve::setControlPoints(const std::vector<Point>& points) {
 }
 
 void BezierCurve::moveControlPoint(size_t index, const Point& newPosition) {
-    if (index < m_controlPoints.size()) {
+    if (index < m_controlPoints.size())
         m_controlPoints[index] = newPosition;
-    }
 }
 
 const std::vector<Point>& BezierCurve::getControlPoints() const {
@@ -44,14 +38,12 @@ int BezierCurve::getDegree() const {
     return static_cast<int>(m_controlPoints.size()) - 1;
 }
 
-Point BezierCurve::deCasteljau(double t) const {
-    if (m_controlPoints.empty()) {
+Point BezierCurve::deCasteljau(const double t) const {
+    if (m_controlPoints.empty())
         return Point(0, 0, 0);
-    }
 
-    if (m_controlPoints.size() == 1) {
+    if (m_controlPoints.size() == 1)
         return m_controlPoints[0];
-    }
 
     // Kopiujemy punkty kontrolne do tymczasowej tablicy
     std::vector<Point> temp = m_controlPoints;
@@ -70,9 +62,8 @@ Point BezierCurve::deCasteljau(double t) const {
 }
 
 Vector BezierCurve::deCasteljauDerivative(double t) const {
-    if (m_controlPoints.size() < 2) {
+    if (m_controlPoints.size() < 2)
         return Vector::Zero();
-    }
 
     // Tworzymy krzywą różnicową (derivative curve)
     std::vector<Point> derivativePoints;
@@ -86,18 +77,16 @@ Vector BezierCurve::deCasteljauDerivative(double t) const {
     }
 
     // Algorytm de Casteljau dla krzywej pochodnej
-    for (size_t level = 1; level < derivativePoints.size(); ++level) {
+    for (size_t level = 1; level < derivativePoints.size(); ++level)
         for (size_t i = 0; i < derivativePoints.size() - level; ++i) {
             double x = (1.0 - t) * derivativePoints[i].x() + t * derivativePoints[i + 1].x();
             double y = (1.0 - t) * derivativePoints[i].y() + t * derivativePoints[i + 1].y();
             double z = (1.0 - t) * derivativePoints[i].z() + t * derivativePoints[i + 1].z();
             derivativePoints[i] = Point(x, y, z);
         }
-    }
 
-    if (derivativePoints.empty()) {
+    if (derivativePoints.empty())
         return Vector::Zero();
-    }
 
     return Vector(derivativePoints[0].x(), derivativePoints[0].y(), derivativePoints[0].z());
 }
@@ -113,9 +102,8 @@ Vector BezierCurve::getTangentAt(double t) const {
 }
 
 double BezierCurve::getLength() const {
-    if (m_controlPoints.size() < 2) {
+    if (m_controlPoints.size() < 2)
         return 0.0;
-    }
 
     // Przybliżenie długości przez próbkowanie
     constexpr int numSamples = 1000;
@@ -135,7 +123,6 @@ double BezierCurve::getLength() const {
 Vector BezierCurve::getPosition() const {
     if (m_controlPoints.empty())
         return Vector::Zero();
-
 
     Vector sum = Vector::Zero();
     for (const auto& point : m_controlPoints)

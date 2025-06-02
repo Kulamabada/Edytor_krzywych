@@ -1,10 +1,6 @@
 #pragma once
 
 #include "Curve.h"
-#include "Point.h"
-#include <vector>
-#include <QColor>
-#include <Qt>
 
 class BezierCurve final : public Curve {
 public:

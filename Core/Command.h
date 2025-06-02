@@ -1,16 +1,12 @@
-#ifndef COMMAND_H
-#define COMMAND_H
+#pragma once
 
-#include <memory>
 #include <string>
-#include <QColor>
-#include <Eigen/Dense>
 #include "AbstractCommand.h"
-#include "../Geometry/GeometricObject.h"
-#include "../Geometry/Point.h"
-#include "../Geometry/InterpolatedCurve.h"
 #include "../Geometry/BezierCurve.h"
 #include "CurveCommand.h"
+#include <algorithm>
+#include <cassert>
+#include <ranges>
 
 // Command to add a geometric object to the scene
 class AddObjectCommand : public AbstractCommand {
@@ -220,5 +216,3 @@ private:
     int m_pointIndex;
     Point m_deletedPoint;
 };
-
-#endif // COMMAND_H

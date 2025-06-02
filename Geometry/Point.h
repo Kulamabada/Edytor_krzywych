@@ -1,4 +1,3 @@
-// Plik: Geometry\Point.h
 #pragma once
 
 #include "GeometricObject.h"

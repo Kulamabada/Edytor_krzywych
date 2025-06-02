@@ -5,9 +5,6 @@
 #include <vector>
 #include "ViewportManager.h"
 #include "IRenderer.h"
-#include "../Geometry/GeometricObject.h"
-#include "../Geometry/InterpolatedCurve.h"
-#include "../Geometry/Point.h"
 #include <QPainter>
 #include <QPaintEvent>
 #include <QMouseEvent>
@@ -17,6 +14,12 @@
 
 #include "../Core/ApplicationCore.h"
 #include "../Core/Command.h"
+
+#include <utility>
+#include <QMessageBox>
+#include "../Geometry/ImageObject.h"
+#include "../Geometry/BezierCurve.h"
+#include "../Geometry/InterpolatedCurve.h"
 
 class Canvas : public QWidget {
     Q_OBJECT

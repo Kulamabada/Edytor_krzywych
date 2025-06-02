@@ -1,13 +1,7 @@
 #pragma once
 
 #include "Curve.h"
-#include <vector>
-#include <memory>
-#include <Eigen/Dense>
-#include <QColor>
-
-class IMathProvider;
-class Point;
+#include "../Math/IMathProvider.h"
 
 class InterpolatedCurve final : public Curve {
 public:
@@ -23,18 +17,8 @@ public:
         Chebyshev
     };
 
-    explicit InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
-                               InterpolationType type);
+    explicit InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider, InterpolationType type);
     ~InterpolatedCurve() override = default;
-
-    // deprecated, should be deleted and renamed
-    void addPoint(const Point& point);
-    void insertPoint(size_t index, const Point& point);
-    void removePoint(size_t index);
-    void setPoints(const std::vector<Point>& points);
-    void movePoint(size_t index, const Point& newPosition);
-    const std::vector<Point>& getPoints() const;
-    size_t getPointCount() const;
 
     void setInterpolationType(InterpolationType type);
     InterpolationType getInterpolationType() const;
@@ -45,13 +29,13 @@ public:
     Vector getTangentAt(double t) const override;
 
     bool hasControlPoints() const override { return true; }
-    void addControlPoint(const Point& point) override { addPoint(point); }
-    void insertControlPoint(size_t index, const Point& point) override { insertPoint(index, point); }
-    void removeControlPoint(size_t index) override { removePoint(index); }
-    void setControlPoints(const std::vector<Point>& points) override { setPoints(points); }
-    void moveControlPoint(size_t index, const Point& newPosition) override { movePoint(index, newPosition); }
-    const std::vector<Point>& getControlPoints() const override { return getPoints(); }
-    size_t getControlPointCount() const override { return getPointCount(); }
+    void addControlPoint(const Point& point) override;
+    void insertControlPoint(size_t index, const Point& point) override;
+    void removeControlPoint(size_t index) override;
+    void setControlPoints(const std::vector<Point>& points) override;
+    void moveControlPoint(size_t index, const Point& newPosition) override;
+    const std::vector<Point>& getControlPoints() const override;
+    size_t getControlPointCount() const override;
 
     // GeometricObject
     void transform(const TransformMatrix& matrix) override;

@@ -1,21 +1,18 @@
 #pragma once
 
 #include "IRenderer.h"
-#include <QColor>
-#include <Qt>
-#include <memory>
 #include "ViewportManager.h"
-#include "../Geometry/GeometricObject.h"
-#include "../Geometry/Point.h"
-#include "../Geometry/Curve.h"
 #include <QPainter>
 #include <QPen>
 #include <QBrush>
 #include <QPointF>
 #include <QTransform>
 #include <vector>
-#include <cmath>
 #include <QDebug>
+
+#include "../Geometry/InterpolatedCurve.h"
+#include "../Geometry/ImageObject.h"
+#include "../Geometry/BezierCurve.h"
 
 class QtRenderer : public IRenderer {
 public:
@@ -28,7 +25,7 @@ public:
     void renderCurve(const Curve& curve) override;
     void renderObject(const GeometricObject& object) override;
     void renderGrid(double gridSize) override;
-    void renderText(const QPointF &position, const QString &text);
+    void renderText(const QPointF &position, const QString &text) const;
     void renderAxes() override;
     void renderAxisTicks();
     void renderSelectionMarker(const QPointF& position) override;

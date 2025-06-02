@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <Eigen/Dense>
+
 using Vector = Eigen::Vector3d;
 class TransformMatrix;
 

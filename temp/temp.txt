@@ -1,4 +1,4 @@
-// Plik wygenerowany automatycznie 2025-05-27 21:55:25
+// Plik wygenerowany automatycznie 2025-06-02 23:31:34
 // Zawiera 35 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
@@ -65,10 +65,8 @@ CommandManager& ApplicationCore::getCommandManager() {
 
 //===== START FILE: Core\ApplicationCore.h =====//
 
-#ifndef APPLICATIONCORE_H
-#define APPLICATIONCORE_H
+#pragma once
 
-#include <memory>
 #include "CommandManager.h"
 
 class ApplicationCore {
@@ -91,16 +89,11 @@ private:
     std::unique_ptr<CommandManager> m_commandManager;
 };
 
-#endif // APPLICATIONCORE_H
-
 //===== END FILE: Core\ApplicationCore.h =====//
 
 //===== START FILE: Core\Command.cpp =====//
 
 #include "Command.h"
-#include <algorithm>
-#include <cassert>
-#include <ranges>
 
 namespace {
     int addObjectToScene(std::shared_ptr<GeometricObject> object);
@@ -264,11 +257,11 @@ bool AddControlPointCommand::execute() {
     if (!m_curve)
         return false;
 
-    if (m_index < 0 || m_index > static_cast<int>(m_curve->getPointCount())) {
-        m_curve->addPoint(m_point);
-        m_addedIndex = static_cast<int>(m_curve->getPointCount()) - 1;
+    if (m_index < 0 || m_index > static_cast<int>(m_curve->getControlPointCount())) {
+        m_curve->addControlPoint(m_point);
+        m_addedIndex = static_cast<int>(m_curve->getControlPointCount()) - 1;
     } else {
-        m_curve->insertPoint(m_index, m_point);
+        m_curve->insertControlPoint(m_index, m_point);
         m_addedIndex = m_index;
     }
 
@@ -277,11 +270,11 @@ bool AddControlPointCommand::execute() {
 
 bool AddControlPointCommand::undo() {
     if (!m_curve || m_addedIndex < 0 ||
-        m_addedIndex >= static_cast<int>(m_curve->getPointCount())) {
+        m_addedIndex >= static_cast<int>(m_curve->getControlPointCount())) {
         return false;
     }
 
-    m_curve->removePoint(m_addedIndex);
+    m_curve->removeControlPoint(m_addedIndex);
     return true;
 }
 
@@ -290,29 +283,29 @@ MoveControlPointCommand::MoveControlPointCommand(std::shared_ptr<InterpolatedCur
                                                const Point& newPosition)
     : CurveCommand(curve), m_pointIndex(pointIndex), m_newPosition(newPosition) {
 
-    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getPointCount())) {
-        const auto& points = m_curve->getPoints();
+    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
+        const auto& points = m_curve->getControlPoints();
         m_oldPosition = points[m_pointIndex];
     }
 }
 
 bool MoveControlPointCommand::execute() {
     if (!m_curve || m_pointIndex < 0 ||
-        m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
         return false;
     }
 
-    m_curve->movePoint(m_pointIndex, m_newPosition);
+    m_curve->moveControlPoint(m_pointIndex, m_newPosition);
     return true;
 }
 
 bool MoveControlPointCommand::undo() {
     if (!m_curve || m_pointIndex < 0 ||
-        m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
         return false;
     }
 
-    m_curve->movePoint(m_pointIndex, m_oldPosition);
+    m_curve->moveControlPoint(m_pointIndex, m_oldPosition);
     return true;
 }
 
@@ -320,22 +313,22 @@ DeleteControlPointCommand::DeleteControlPointCommand(std::shared_ptr<Interpolate
                                                   int pointIndex)
     : CurveCommand(curve), m_pointIndex(pointIndex) {
 
-    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getPointCount())) {
-        const auto& points = m_curve->getPoints();
+    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
+        const auto& points = m_curve->getControlPoints();
         m_deletedPoint = points[m_pointIndex];
     }
 }
 
 bool DeleteControlPointCommand::execute() {
     if (!m_curve || m_pointIndex < 0 ||
-        m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
         return false;
     }
 
-    if (m_curve->getPointCount() < 3)
+    if (m_curve->getControlPointCount() < 3)
         return false;
 
-    m_curve->removePoint(m_pointIndex);
+    m_curve->removeControlPoint(m_pointIndex);
     return true;
 }
 
@@ -343,10 +336,10 @@ bool DeleteControlPointCommand::undo() {
     if (!m_curve)
         return false;
 
-    if (m_pointIndex >= static_cast<int>(m_curve->getPointCount()))
-        m_curve->addPoint(m_deletedPoint);
+    if (m_pointIndex >= static_cast<int>(m_curve->getControlPointCount()))
+        m_curve->addControlPoint(m_deletedPoint);
     else
-        m_curve->insertPoint(m_pointIndex, m_deletedPoint);
+        m_curve->insertControlPoint(m_pointIndex, m_deletedPoint);
 
     return true;
 }
@@ -355,7 +348,7 @@ BatchControlPointsCommand::BatchControlPointsCommand(std::shared_ptr<Interpolate
                                                    const std::vector<Point>& newPoints)
     : CurveCommand(curve), m_newPoints(newPoints) {
     if (m_curve)
-        m_oldPoints = m_curve->getPoints();
+        m_oldPoints = m_curve->getControlPoints();
 }
 
 bool BatchControlPointsCommand::execute() {
@@ -365,7 +358,7 @@ bool BatchControlPointsCommand::execute() {
     if (m_newPoints.size() < 2)
         return false;
 
-    m_curve->setPoints(m_newPoints);
+    m_curve->setControlPoints(m_newPoints);
     return true;
 }
 
@@ -373,7 +366,7 @@ bool BatchControlPointsCommand::undo() {
     if (!m_curve)
         return false;
 
-    m_curve->setPoints(m_oldPoints);
+    m_curve->setControlPoints(m_oldPoints);
     return true;
 }
 
@@ -532,19 +525,15 @@ bool DeleteBezierControlPointCommand::undo() {
 
 //===== START FILE: Core\Command.h =====//
 
-#ifndef COMMAND_H
-#define COMMAND_H
+#pragma once
 
-#include <memory>
 #include <string>
-#include <QColor>
-#include <Eigen/Dense>
 #include "AbstractCommand.h"
-#include "../Geometry/GeometricObject.h"
-#include "../Geometry/Point.h"
-#include "../Geometry/InterpolatedCurve.h"
 #include "../Geometry/BezierCurve.h"
 #include "CurveCommand.h"
+#include <algorithm>
+#include <cassert>
+#include <ranges>
 
 // Command to add a geometric object to the scene
 class AddObjectCommand : public AbstractCommand {
@@ -755,8 +744,6 @@ private:
     Point m_deletedPoint;
 };
 
-#endif // COMMAND_H
-
 //===== END FILE: Core\Command.h =====//
 
 //===== START FILE: Core\CommandManager.cpp =====//
@@ -830,10 +817,8 @@ int CommandManager::redoStackSize() const {
 
 //===== START FILE: Core\CommandManager.h =====//
 
-#ifndef COMMANDMANAGER_H
-#define COMMANDMANAGER_H
+#pragma once
 
-#include <memory>
 #include <vector>
 #include "AbstractCommand.h"
 
@@ -861,8 +846,6 @@ private:
     std::vector<std::unique_ptr<AbstractCommand>> m_redoStack;
 };
 
-#endif
-
 //===== END FILE: Core\CommandManager.h =====//
 
 //===== START FILE: Core\CurveCommand.h =====//
@@ -871,7 +854,6 @@ private:
 
 #include "AbstractCommand.h"
 #include "../Geometry/InterpolatedCurve.h"
-#include <memory>
 
 class CurveCommand : public AbstractCommand {
 protected:
@@ -891,9 +873,6 @@ public:
 //===== START FILE: Geometry\BezierCurve.cpp =====//
 
 #include "BezierCurve.h"
-#include "TransformMatrix.h"
-#include <cmath>
-#include <algorithm>
 
 BezierCurve::BezierCurve() {
 }
@@ -903,15 +882,13 @@ void BezierCurve::addControlPoint(const Point& point) {
 }
 
 void BezierCurve::insertControlPoint(size_t index, const Point& point) {
-    if (index <= m_controlPoints.size()) {
+    if (index <= m_controlPoints.size())
         m_controlPoints.insert(m_controlPoints.begin() + index, point);
-    }
 }
 
 void BezierCurve::removeControlPoint(size_t index) {
-    if (index < m_controlPoints.size()) {
+    if (index < m_controlPoints.size())
         m_controlPoints.erase(m_controlPoints.begin() + index);
-    }
 }
 
 void BezierCurve::setControlPoints(const std::vector<Point>& points) {
@@ -919,9 +896,8 @@ void BezierCurve::setControlPoints(const std::vector<Point>& points) {
 }
 
 void BezierCurve::moveControlPoint(size_t index, const Point& newPosition) {
-    if (index < m_controlPoints.size()) {
+    if (index < m_controlPoints.size())
         m_controlPoints[index] = newPosition;
-    }
 }
 
 const std::vector<Point>& BezierCurve::getControlPoints() const {
@@ -936,14 +912,12 @@ int BezierCurve::getDegree() const {
     return static_cast<int>(m_controlPoints.size()) - 1;
 }
 
-Point BezierCurve::deCasteljau(double t) const {
-    if (m_controlPoints.empty()) {
+Point BezierCurve::deCasteljau(const double t) const {
+    if (m_controlPoints.empty())
         return Point(0, 0, 0);
-    }
 
-    if (m_controlPoints.size() == 1) {
+    if (m_controlPoints.size() == 1)
         return m_controlPoints[0];
-    }
 
     // Kopiujemy punkty kontrolne do tymczasowej tablicy
     std::vector<Point> temp = m_controlPoints;
@@ -962,9 +936,8 @@ Point BezierCurve::deCasteljau(double t) const {
 }
 
 Vector BezierCurve::deCasteljauDerivative(double t) const {
-    if (m_controlPoints.size() < 2) {
+    if (m_controlPoints.size() < 2)
         return Vector::Zero();
-    }
 
     // Tworzymy krzywą różnicową (derivative curve)
     std::vector<Point> derivativePoints;
@@ -978,18 +951,16 @@ Vector BezierCurve::deCasteljauDerivative(double t) const {
     }
 
     // Algorytm de Casteljau dla krzywej pochodnej
-    for (size_t level = 1; level < derivativePoints.size(); ++level) {
+    for (size_t level = 1; level < derivativePoints.size(); ++level)
         for (size_t i = 0; i < derivativePoints.size() - level; ++i) {
             double x = (1.0 - t) * derivativePoints[i].x() + t * derivativePoints[i + 1].x();
             double y = (1.0 - t) * derivativePoints[i].y() + t * derivativePoints[i + 1].y();
             double z = (1.0 - t) * derivativePoints[i].z() + t * derivativePoints[i + 1].z();
             derivativePoints[i] = Point(x, y, z);
         }
-    }
 
-    if (derivativePoints.empty()) {
+    if (derivativePoints.empty())
         return Vector::Zero();
-    }
 
     return Vector(derivativePoints[0].x(), derivativePoints[0].y(), derivativePoints[0].z());
 }
@@ -1005,9 +976,8 @@ Vector BezierCurve::getTangentAt(double t) const {
 }
 
 double BezierCurve::getLength() const {
-    if (m_controlPoints.size() < 2) {
+    if (m_controlPoints.size() < 2)
         return 0.0;
-    }
 
     // Przybliżenie długości przez próbkowanie
     constexpr int numSamples = 1000;
@@ -1027,7 +997,6 @@ double BezierCurve::getLength() const {
 Vector BezierCurve::getPosition() const {
     if (m_controlPoints.empty())
         return Vector::Zero();
-
 
     Vector sum = Vector::Zero();
     for (const auto& point : m_controlPoints)
@@ -1075,10 +1044,6 @@ std::unique_ptr<Curve> BezierCurve::clone() const {
 #pragma once
 
 #include "Curve.h"
-#include "Point.h"
-#include <vector>
-#include <QColor>
-#include <Qt>
 
 class BezierCurve final : public Curve {
 public:
@@ -1152,7 +1117,8 @@ private:
 
 #include "GeometricObject.h"
 #include <vector>
-#include <memory>
+#include "Point.h"
+#include <QColor>
 
 // Forward declarations
 class Point;
@@ -1182,7 +1148,6 @@ public:
 
     // Override from GeometricObject
     void transform(const TransformMatrix& matrix) override = 0;
-
 };
 
 //===== END FILE: Geometry\Curve.h =====//
@@ -1193,6 +1158,7 @@ public:
 
 #include <memory>
 #include <Eigen/Dense>
+
 using Vector = Eigen::Vector3d;
 class TransformMatrix;
 
@@ -1275,10 +1241,8 @@ void ImageObject::transform(const TransformMatrix& matrix) {
 
 #pragma once
 
-#include "GeometricObject.h"
 #include "Point.h"
 #include <QImage>
-#include <array>
 
 class ImageObject final : public GeometricObject {
 public:
@@ -1314,53 +1278,48 @@ private:
 //===== START FILE: Geometry\InterpolatedCurve.cpp =====//
 
 #include "InterpolatedCurve.h"
-#include "Point.h"
-#include "../Math/IMathProvider.h"
-#include <cmath>
-#include <limits>
-#include <algorithm>
 
 InterpolatedCurve::InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
                                     InterpolationType type)
     : type(type),
       mathProvider(std::move(mathProvider)){}
 
-void InterpolatedCurve::addPoint(const Point& point) {
+void InterpolatedCurve::addControlPoint(const Point& point) {
     points.push_back(point);
     needsRebuild = true;
 }
 
-void InterpolatedCurve::insertPoint(size_t index, const Point& point) {
+void InterpolatedCurve::insertControlPoint(const size_t index, const Point& point) {
     if (index <= points.size()) {
         points.insert(points.begin() + index, point);
         needsRebuild = true;
     }
 }
 
-void InterpolatedCurve::removePoint(size_t index) {
+void InterpolatedCurve::removeControlPoint(const size_t index) {
     if (index < points.size()) {
         points.erase(points.begin() + index);
         needsRebuild = true;
     }
 }
 
-void InterpolatedCurve::setPoints(const std::vector<Point>& newPoints) {
+void InterpolatedCurve::setControlPoints(const std::vector<Point>& newPoints) {
     points = newPoints;
     needsRebuild = true;
 }
 
-void InterpolatedCurve::movePoint(size_t index, const Point& newPosition) {
+void InterpolatedCurve::moveControlPoint(size_t index, const Point& newPosition) {
     if (index < points.size()) {
         points[index] = newPosition;
         needsRebuild = true;
     }
 }
 
-const std::vector<Point>& InterpolatedCurve::getPoints() const {
+const std::vector<Point>& InterpolatedCurve::getControlPoints() const {
     return points;
 }
 
-size_t InterpolatedCurve::getPointCount() const {
+size_t InterpolatedCurve::getControlPointCount() const {
     return points.size();
 }
 
@@ -1619,16 +1578,16 @@ Point InterpolatedCurve::getPointAt(double t) const {
             y += points[i].y() * w;
             sumW += w;
         }
-        return Point(x / sumW, y / sumW, 0.0);
+        return {x / sumW, y / sumW, 0.0};
     }
 
-    size_t nextIndex = (segmentIndex + 1) % points.size();
-    double oneMinusT = 1.0 - localT;
+    const size_t nextIndex = (segmentIndex + 1) % points.size();
+    const double oneMinusT = 1.0 - localT;
     double x = oneMinusT * points[segmentIndex].x() + localT * points[nextIndex].x();
     double y = oneMinusT * points[segmentIndex].y() + localT * points[nextIndex].y();
     double z = oneMinusT * points[segmentIndex].z() + localT * points[nextIndex].z();
 
-    return Point(x, y, z);
+    return {x, y, z};
 }
 
 
@@ -1649,15 +1608,15 @@ double InterpolatedCurve::getLength() const {
 }
 
 void InterpolatedCurve::transform(const TransformMatrix& matrix) {
-    for (auto& point : points) {
+    for (auto& point : points)
         point.transform(matrix);
-    }
+
     needsRebuild = true;
 }
 
 std::unique_ptr<Curve> InterpolatedCurve::clone() const {
     auto copy = std::make_unique<InterpolatedCurve>(mathProvider, type);
-    copy->setPoints(points);
+    copy->setControlPoints(points);
     return copy;
 }
 
@@ -1665,9 +1624,9 @@ Vector InterpolatedCurve::getPosition() const {
     if (points.empty()) return Vector::Zero();
 
     Vector sum = Vector::Zero();
-    for (const auto& p : points) {
+    for (const auto& p : points)
         sum += Vector(p.x(), p.y(), p.z());
-    }
+
     return sum / static_cast<double>(points.size());
 }
 
@@ -1690,13 +1649,7 @@ void InterpolatedCurve::setPosition(const Eigen::Vector3d& position) {
 #pragma once
 
 #include "Curve.h"
-#include <vector>
-#include <memory>
-#include <Eigen/Dense>
-#include <QColor>
-
-class IMathProvider;
-class Point;
+#include "../Math/IMathProvider.h"
 
 class InterpolatedCurve final : public Curve {
 public:
@@ -1712,18 +1665,8 @@ public:
         Chebyshev
     };
 
-    explicit InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
-                               InterpolationType type);
+    explicit InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider, InterpolationType type);
     ~InterpolatedCurve() override = default;
-
-    // deprecated, should be deleted and renamed
-    void addPoint(const Point& point);
-    void insertPoint(size_t index, const Point& point);
-    void removePoint(size_t index);
-    void setPoints(const std::vector<Point>& points);
-    void movePoint(size_t index, const Point& newPosition);
-    const std::vector<Point>& getPoints() const;
-    size_t getPointCount() const;
 
     void setInterpolationType(InterpolationType type);
     InterpolationType getInterpolationType() const;
@@ -1734,13 +1677,13 @@ public:
     Vector getTangentAt(double t) const override;
 
     bool hasControlPoints() const override { return true; }
-    void addControlPoint(const Point& point) override { addPoint(point); }
-    void insertControlPoint(size_t index, const Point& point) override { insertPoint(index, point); }
-    void removeControlPoint(size_t index) override { removePoint(index); }
-    void setControlPoints(const std::vector<Point>& points) override { setPoints(points); }
-    void moveControlPoint(size_t index, const Point& newPosition) override { movePoint(index, newPosition); }
-    const std::vector<Point>& getControlPoints() const override { return getPoints(); }
-    size_t getControlPointCount() const override { return getPointCount(); }
+    void addControlPoint(const Point& point) override;
+    void insertControlPoint(size_t index, const Point& point) override;
+    void removeControlPoint(size_t index) override;
+    void setControlPoints(const std::vector<Point>& points) override;
+    void moveControlPoint(size_t index, const Point& newPosition) override;
+    const std::vector<Point>& getControlPoints() const override;
+    size_t getControlPointCount() const override;
 
     // GeometricObject
     void transform(const TransformMatrix& matrix) override;
@@ -1825,7 +1768,6 @@ private:
 #include "Point.h"
 #include "TransformMatrix.h"
 #include <cmath>
-#include <Eigen/Dense>
 
 double Point::distanceTo(const Point& other) const {
     const double dx = other.x() - x();
@@ -1835,20 +1777,18 @@ double Point::distanceTo(const Point& other) const {
 }
 
 Point Point::midPoint(const Point& other) const {
-    return Point(
+    return {
         (x() + other.x()) / 2.0,
         (y() + other.y()) / 2.0,
         (z() + other.z()) / 2.0
-    );
+    };
 }
 
 void Point::transform(const TransformMatrix& matrix) {
     Eigen::Vector4d homogeneousPoint;
     homogeneousPoint << x(), y(), z(), 1.0;
 
-    Eigen::Vector4d transformedPoint = matrix.getMatrix() * homogeneousPoint;
-
-    if (std::abs(transformedPoint(3)) > 1e-10) {
+    if (Eigen::Vector4d transformedPoint = matrix.getMatrix() * homogeneousPoint; std::abs(transformedPoint(3)) > 1e-10) {
         setX(transformedPoint(0) / transformedPoint(3));
         setY(transformedPoint(1) / transformedPoint(3));
         setZ(transformedPoint(2) / transformedPoint(3));
@@ -1859,7 +1799,6 @@ void Point::transform(const TransformMatrix& matrix) {
 
 //===== START FILE: Geometry\Point.h =====//
 
-// Plik: Geometry\Point.h
 #pragma once
 
 #include "GeometricObject.h"
@@ -1963,10 +1902,6 @@ private:
 //===== START FILE: Graphics\Canvas.cpp =====//
 
 #include "Canvas.h"
-#include <utility>
-#include <QMessageBox>
-#include "../Geometry/ImageObject.h"
-#include "../Geometry/BezierCurve.h"
 
 Canvas::Canvas(QWidget* parent): QWidget(parent)
 {
@@ -2193,16 +2128,29 @@ bool Canvas::addControlPoint(const QPointF& screenPos) {
         if (!curve->hasControlPoints()) return false;
 
         const QPointF worldPos = m_viewportManager->screenToWorld(screenPos);
-        curve->addControlPoint(Point(worldPos.x(), worldPos.y()));
+        const Point newPoint(worldPos.x(), worldPos.y());
 
-        int newPointIndex = static_cast<int>(curve->getControlPointCount()) - 1;
-        selectControlPoint(newPointIndex);
-        emit controlPointAdded(newPointIndex);
+        int insertIndex;
+
+        // Jeśli jest zaznaczony punkt kontrolny, wstaw nowy punkt po nim
+        if (m_selectedControlPointIndex >= 0 &&
+            m_selectedControlPointIndex < static_cast<int>(curve->getControlPointCount())) {
+            insertIndex = m_selectedControlPointIndex + 1;
+            curve->insertControlPoint(insertIndex, newPoint);
+            } else {
+                // Jeśli nie ma zaznaczonego punktu, dodaj na końcu
+                curve->addControlPoint(newPoint);
+                insertIndex = static_cast<int>(curve->getControlPointCount()) - 1;
+            }
+
+        selectControlPoint(insertIndex);
+        emit controlPointAdded(insertIndex);
         update();
         return true;
     }
     return false;
 }
+
 
 bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
     if (!m_viewportManager || pointIndex < 0) return false;
@@ -2234,7 +2182,7 @@ void Canvas::selectControlPoint(const int pointIndex) {
 
     // Sprawdź InterpolatedCurve
     if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-        maxPointCount = static_cast<int>(curve->getPointCount());
+        maxPointCount = static_cast<int>(curve->getControlPointCount());
     }
     // Sprawdź BezierCurve
     else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
@@ -2453,9 +2401,9 @@ void Canvas::keyPressEvent(QKeyEvent* event)
 
         // Obsługa InterpolatedCurve
         if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-            if (m_selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
-                if (curve->getPointCount() > 2) {
-                    curve->removePoint(m_selectedControlPointIndex);
+            if (m_selectedControlPointIndex < static_cast<int>(curve->getControlPointCount())) {
+                if (curve->getControlPointCount() > 2) {
+                    curve->removeControlPoint(m_selectedControlPointIndex);
                     deleted = true;
                 } else {
                     QMessageBox::warning(this, "Usuwanie punktu",
@@ -2540,9 +2488,6 @@ std::shared_ptr<GeometricObject> Canvas::hitTestObject(const QPointF& pos, doubl
 #include <vector>
 #include "ViewportManager.h"
 #include "IRenderer.h"
-#include "../Geometry/GeometricObject.h"
-#include "../Geometry/InterpolatedCurve.h"
-#include "../Geometry/Point.h"
 #include <QPainter>
 #include <QPaintEvent>
 #include <QMouseEvent>
@@ -2552,6 +2497,12 @@ std::shared_ptr<GeometricObject> Canvas::hitTestObject(const QPointF& pos, doubl
 
 #include "../Core/ApplicationCore.h"
 #include "../Core/Command.h"
+
+#include <utility>
+#include <QMessageBox>
+#include "../Geometry/ImageObject.h"
+#include "../Geometry/BezierCurve.h"
+#include "../Geometry/InterpolatedCurve.h"
 
 class Canvas : public QWidget {
     Q_OBJECT
@@ -2646,10 +2597,8 @@ private:
 
 //===== START FILE: Graphics\IRenderer.h =====//
 
-#ifndef IRENDERER_H
-#define IRENDERER_H
+#pragma once
 
-#include <memory>
 #include <QColor>
 #include <qimage.h>
 #include <Qt>
@@ -2701,16 +2650,11 @@ public:
     virtual void setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) = 0;
 };
 
-#endif
-
 //===== END FILE: Graphics\IRenderer.h =====//
 
 //===== START FILE: Graphics\QtRenderer.cpp =====//
 
 #include "QtRenderer.h"
-#include "../Geometry/InterpolatedCurve.h"
-#include "../Geometry/ImageObject.h"
-#include "../Geometry/BezierCurve.h"
 
 QtRenderer::QtRenderer() = default;
 
@@ -2781,21 +2725,17 @@ void QtRenderer::renderCurve(const Curve& curve) {
                 Point p = curve.getPointAt(t);
                 points.append(QPointF(p.x(), p.y()));
             }
-
             m_painter->drawPolyline(points);
         }
 
         if (interpolatedCurve->getDrawPolyline())
-            renderPolyline(interpolatedCurve->getPoints());
+            renderPolyline(interpolatedCurve->getControlPoints());
 
         if (interpolatedCurve->getDrawConvexHull())
-            renderConvexHull(interpolatedCurve->getPoints());
+            renderConvexHull(interpolatedCurve->getControlPoints());
     }
 
-
-    const auto bezierCurve = dynamic_cast<const BezierCurve*>(&curve);
-    if (bezierCurve) {
-        // Renderowanie krzywej Béziera
+    if (const auto bezierCurve = dynamic_cast<const BezierCurve*>(&curve)) {
         QColor color = bezierCurve->getColor();
         double width = bezierCurve->getLineWidth();
         Qt::PenStyle style = bezierCurve->getLineStyle();
@@ -2817,13 +2757,11 @@ void QtRenderer::renderCurve(const Curve& curve) {
             m_painter->drawPolyline(points);
         }
 
-        // Renderowanie wielokąta kontrolnego jeśli włączone
-        if (bezierCurve->getShowControlPolygon()) {
+        if (bezierCurve->getShowControlPolygon())
             renderBezierControlPolygon(bezierCurve->getControlPoints(),
                                      bezierCurve->getControlPolygonColor(),
                                      bezierCurve->getControlPolygonWidth(),
                                      bezierCurve->getControlPolygonStyle());
-        }
     }
 }
 
@@ -2841,35 +2779,33 @@ void QtRenderer::renderObject(const GeometricObject& object)
 void QtRenderer::renderGrid(double gridSize) {
     if (!m_drawGrid || !m_painter) return;
 
-    QRectF visibleRect = m_viewportManager->visibleWorldRect();
+    const QRectF visibleRect = m_viewportManager->visibleWorldRect();
 
-    QPen smallPen(QColor(230, 230, 230), 0.5, Qt::DotLine);
+    const QPen smallPen(QColor(230, 230, 230), 0.5, Qt::DotLine);
     m_painter->setPen(smallPen);
 
-    for (double x = std::floor(visibleRect.left()); x <= visibleRect.right(); x += 1.0) {
+    for (double x = std::floor(visibleRect.left()); x <= visibleRect.right(); x += 1.0)
         m_painter->drawLine(QPointF(x, visibleRect.top()), QPointF(x, visibleRect.bottom()));
-    }
-    for (double y = std::floor(visibleRect.top()); y <= visibleRect.bottom(); y += 1.0) {
-        m_painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
-    }
 
-    QPen mainPen(QColor(200, 200, 200), 1.0, Qt::SolidLine);
+    for (double y = std::floor(visibleRect.top()); y <= visibleRect.bottom(); y += 1.0)
+        m_painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
+
+    const QPen mainPen(QColor(200, 200, 200), 1.0, Qt::SolidLine);
     m_painter->setPen(mainPen);
 
-    for (double x = std::floor(visibleRect.left() / 5) * 5; x <= visibleRect.right(); x += 5.0) {
+    for (double x = std::floor(visibleRect.left() / 5) * 5; x <= visibleRect.right(); x += 5.0)
         m_painter->drawLine(QPointF(x, visibleRect.top()), QPointF(x, visibleRect.bottom()));
-    }
-    for (double y = std::floor(visibleRect.top() / 5) * 5; y <= visibleRect.bottom(); y += 5.0) {
+
+    for (double y = std::floor(visibleRect.top() / 5) * 5; y <= visibleRect.bottom(); y += 5.0)
         m_painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
-    }
 }
 
-void QtRenderer::renderText(const QPointF& position, const QString& text) {
+void QtRenderer::renderText(const QPointF& position, const QString& text) const {
     if (!m_painter) return;
     m_painter->save();
-    QTransform current = m_painter->transform();
+    const QTransform current = m_painter->transform();
     m_painter->resetTransform();
-    QPointF screenPos = current.map(position);
+    const QPointF screenPos = current.map(position);
     m_painter->drawText(screenPos, text);
     m_painter->restore();
 }
@@ -2878,15 +2814,15 @@ void QtRenderer::renderAxes()
 {
     if (!m_drawAxes || !m_painter || !m_viewportManager) return;
 
-    QPen pen(m_axesColor, m_axesWidth, Qt::SolidLine);
+    const QPen pen(m_axesColor, m_axesWidth, Qt::SolidLine);
     m_painter->setPen(pen);
 
-    QRectF visibleRect = m_viewportManager->visibleWorldRect();
+    const QRectF visibleRect = m_viewportManager->visibleWorldRect();
 
     m_painter->drawLine(QPointF(visibleRect.left(), 0), QPointF(visibleRect.right(), 0));
     m_painter->drawLine(QPointF(0, visibleRect.top()), QPointF(0, visibleRect.bottom()));
 
-    double arrowSize = 7.0 / m_viewportManager->zoomFactor();
+    const double arrowSize = 7.0 / m_viewportManager->zoomFactor();
 
     QPolygonF arrowX;
     arrowX << QPointF(visibleRect.right(), 0)
@@ -2910,19 +2846,17 @@ void QtRenderer::renderAxes()
 void QtRenderer::renderAxisTicks() {
     if (!m_painter || !m_viewportManager || !m_painter->isActive()) return;
 
-    QRectF visibleRect = m_viewportManager->visibleWorldRect();
-    double zoomFactor = m_viewportManager->zoomFactor();
+    const QRectF visibleRect = m_viewportManager->visibleWorldRect();
+    const double zoomFactor = m_viewportManager->zoomFactor();
 
-    double viewportWidth = visibleRect.width();
-    double viewportHeight = visibleRect.height();
+    const double viewportWidth = visibleRect.width(), viewportHeight = visibleRect.height();
 
-    double desiredTickCount = 16.0;
-    double optimalSpacingX = viewportWidth / desiredTickCount;
-    double optimalSpacingY = viewportHeight / desiredTickCount;
+    constexpr double desiredTickCount = 16.0;
+    const double optimalSpacingX = viewportWidth / desiredTickCount, optimalSpacingY = viewportHeight / desiredTickCount;
 
     auto findNiceSpacing = [](double optimalSpacing) -> double {
-        double magnitude = pow(10, floor(log10(optimalSpacing)));
-        double normalized = optimalSpacing / magnitude;
+        const double magnitude = pow(10, floor(log10(optimalSpacing)));
+        const double normalized = optimalSpacing / magnitude;
 
         if (normalized < 1.2) return 1.0 * magnitude;
         if (normalized < 2.5) return 2.0 * magnitude;
@@ -2930,23 +2864,21 @@ void QtRenderer::renderAxisTicks() {
         return 10.0 * magnitude;
     };
 
-    double tickSpacingX = findNiceSpacing(optimalSpacingX);
-    double tickSpacingY = findNiceSpacing(optimalSpacingY);
+    const double tickSpacingX = findNiceSpacing(optimalSpacingX), tickSpacingY = findNiceSpacing(optimalSpacingY);
 
-    double xMin = floor(visibleRect.left() / tickSpacingX) * tickSpacingX;
-    double xMax = ceil(visibleRect.right() / tickSpacingX) * tickSpacingX;
-    double yMin = floor(visibleRect.top() / tickSpacingY) * tickSpacingY;
-    double yMax = ceil(visibleRect.bottom() / tickSpacingY) * tickSpacingY;
+    const double xMin = floor(visibleRect.left() / tickSpacingX) * tickSpacingX;
+    const double xMax = ceil(visibleRect.right() / tickSpacingX) * tickSpacingX;
+    const double yMin = floor(visibleRect.top() / tickSpacingY) * tickSpacingY;
+    const double yMax = ceil(visibleRect.bottom() / tickSpacingY) * tickSpacingY;
 
-    double tickLength = 5.0 / zoomFactor;
+    const double tickLength = 5.0 / zoomFactor;
 
-    auto determinePrecision = [](double spacing) -> int {
+    auto determinePrecision = [](const double spacing) -> int {
         if (spacing >= 1.0) return 0;
         return std::min(6, static_cast<int>(std::ceil(std::abs(std::log10(spacing)))));
     };
 
-    int xPrecision = determinePrecision(tickSpacingX);
-    int yPrecision = determinePrecision(tickSpacingY);
+    const int xPrecision = determinePrecision(tickSpacingX), yPrecision = determinePrecision(tickSpacingY);
 
     for (double x = xMin; x <= xMax; x += tickSpacingX) {
         if (std::abs(x) < 1e-6) continue;
@@ -3002,9 +2934,8 @@ void QtRenderer::renderSelectionMarker(const QPointF& position)
 
 void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bool isActive)
 {
-    if (!m_painter || !m_painter->isActive()) {
+    if (!m_painter || !m_painter->isActive())
         return;
-    }
 
     m_painter->save();
     m_painter->resetTransform();
@@ -3071,7 +3002,6 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
     if (draggingIndex >= 0 && draggingIndex < static_cast<int>(points.size()) && draggingIndex != selectedIndex)
         renderControlPoint(screenPositions[draggingIndex], false, true);
 
-
     m_painter->save();
     m_painter->resetTransform();
     QPen textPen(Qt::black);
@@ -3088,7 +3018,7 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         QPointF textPos = screenPositions[i] + QPointF(m_controlPointSize + 2,
                                                   m_controlPointSize / 2.0);
 
-        QRectF bgRect = QRectF(textPos.x() - 1, textPos.y() - textRect.height(),
+        auto bgRect = QRectF(textPos.x() - 1, textPos.y() - textRect.height(),
                               textRect.width() + 2, textRect.height() + 2);
         m_painter->fillRect(bgRect, QColor(255, 255, 255, 180));
 
@@ -3106,7 +3036,7 @@ void QtRenderer::renderControlPolygon(const std::vector<Point>& points)
     m_painter->save();
     m_painter->resetTransform();
 
-    QPen pen(m_controlPolygonColor, m_controlPolygonWidth, m_controlPolygonStyle);
+    const QPen pen(m_controlPolygonColor, m_controlPolygonWidth, m_controlPolygonStyle);
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 
@@ -3121,40 +3051,40 @@ void QtRenderer::renderControlPolygon(const std::vector<Point>& points)
     m_painter->restore();
 }
 
-void QtRenderer::setPointStyle(const QColor& color, float size)
+void QtRenderer::setPointStyle(const QColor& color, const float size)
 {
     m_pointColor = color;
     m_pointSize = size;
 }
 
-void QtRenderer::setCurveStyle(const QColor& color, float width, Qt::PenStyle style)
+void QtRenderer::setCurveStyle(const QColor& color, const float width, const Qt::PenStyle style)
 {
     m_curveColor = color;
     m_curveWidth = width;
     m_curveStyle = style;
 }
 
-void QtRenderer::setSelectionStyle(const QColor& color, float size)
+void QtRenderer::setSelectionStyle(const QColor& color, const float size)
 {
     m_selectionColor = color;
     m_selectionSize = size;
 }
 
-void QtRenderer::setGridStyle(const QColor& color, float width, Qt::PenStyle style)
+void QtRenderer::setGridStyle(const QColor& color, const float width, const Qt::PenStyle style)
 {
     m_gridColor = color;
     m_gridWidth = width;
     m_gridStyle = style;
 }
 
-void QtRenderer::setAxesStyle(const QColor& color, float width)
+void QtRenderer::setAxesStyle(const QColor& color, const float width)
 {
     m_axesColor = color;
     m_axesWidth = width;
 }
 
 void QtRenderer::setControlPointStyle(const QColor& normalColor, const QColor& selectedColor,
-                                const QColor& activeColor, float size)
+                                const QColor& activeColor, const float size)
 {
     m_controlPointNormalColor = normalColor;
     m_controlPointSelectedColor = selectedColor;
@@ -3162,24 +3092,24 @@ void QtRenderer::setControlPointStyle(const QColor& normalColor, const QColor& s
     m_controlPointSize = size;
 }
 
-void QtRenderer::setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style)
+void QtRenderer::setControlPolygonStyle(const QColor& color, const float width, const Qt::PenStyle style)
 {
     m_controlPolygonColor = color;
     m_controlPolygonWidth = width;
     m_controlPolygonStyle = style;
 }
 
-void QtRenderer::setDrawGrid(bool draw)
+void QtRenderer::setDrawGrid(const bool draw)
 {
     m_drawGrid = draw;
 }
 
-void QtRenderer::setDrawAxes(bool draw)
+void QtRenderer::setDrawAxes(const bool draw)
 {
     m_drawAxes = draw;
 }
 
-void QtRenderer::setDrawControlPolygon(bool draw)
+void QtRenderer::setDrawControlPolygon(const bool draw)
 {
     m_drawControlPolygon = draw;
 }
@@ -3302,21 +3232,18 @@ double QtRenderer::distanceSquared(const Point& a, const Point& b)
     return dx * dx + dy * dy;
 }
 
-void QtRenderer::renderBezierControlPolygon(const std::vector<Point>& points,
-                                          const QColor& color,
-                                          double width,
-                                          Qt::PenStyle style) {
-    if (!m_painter || !m_viewportManager || points.size() < 2)
-        return;
+void QtRenderer::renderBezierControlPolygon(const std::vector<Point>& points, const QColor& color,
+                                          const double width, const Qt::PenStyle style)
+{
+    if (!m_painter || !m_viewportManager || points.size() < 2) return;
 
-    QPen pen(color, width, style);
+    const QPen pen(color, width, style);
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 
     QPolygonF polygon;
-    for (const auto& point : points) {
+    for (const auto& point : points)
         polygon << QPointF(point.x(), point.y());
-    }
 
     m_painter->drawPolyline(polygon);
 }
@@ -3328,21 +3255,18 @@ void QtRenderer::renderBezierControlPolygon(const std::vector<Point>& points,
 #pragma once
 
 #include "IRenderer.h"
-#include <QColor>
-#include <Qt>
-#include <memory>
 #include "ViewportManager.h"
-#include "../Geometry/GeometricObject.h"
-#include "../Geometry/Point.h"
-#include "../Geometry/Curve.h"
 #include <QPainter>
 #include <QPen>
 #include <QBrush>
 #include <QPointF>
 #include <QTransform>
 #include <vector>
-#include <cmath>
 #include <QDebug>
+
+#include "../Geometry/InterpolatedCurve.h"
+#include "../Geometry/ImageObject.h"
+#include "../Geometry/BezierCurve.h"
 
 class QtRenderer : public IRenderer {
 public:
@@ -3355,7 +3279,7 @@ public:
     void renderCurve(const Curve& curve) override;
     void renderObject(const GeometricObject& object) override;
     void renderGrid(double gridSize) override;
-    void renderText(const QPointF &position, const QString &text);
+    void renderText(const QPointF &position, const QString &text) const;
     void renderAxes() override;
     void renderAxisTicks();
     void renderSelectionMarker(const QPointF& position) override;
@@ -3429,8 +3353,6 @@ private:
 //===== START FILE: Graphics\ViewportManager.cpp =====//
 
 #include "ViewportManager.h"
-#include <algorithm>
-#include <cmath>
 
 // Stałe domyślne
 constexpr double DEFAULT_MIN_ZOOM = 0.1;
@@ -3637,8 +3559,6 @@ void ViewportManager::updateTransformations()
 
 #pragma once
 
-#include <QPointF>
-#include <QRectF>
 #include <QTransform>
 
 class ViewportManager {
@@ -3821,12 +3741,6 @@ public:
 
 #include "ActionHandler.h"
 #include "MainWindow.h"
-#include "../Core/CommandManager.h"
-#include <QMessageBox>
-#include <QFileDialog>
-#include <QApplication>
-#include <QKeyEvent>
-#include <QStatusBar>
 
 ActionHandler::ActionHandler(MainWindow& mainWindow)
     : QObject(&mainWindow)
@@ -3940,7 +3854,8 @@ void ActionHandler::onAddPointModeAction() {
     } else {
         QMessageBox::warning(&m_mainWindow, "Edycja punktów kontrolnych",
                             "Najpierw zaznacz krzywą, aby dodać do niej punkty kontrolne.");
-        m_mainWindow.m_selectModeAction->setChecked(true);
+
+        m_mainWindow.m_addPointModeAction->setChecked(false);
     }
 }
 
@@ -3952,9 +3867,11 @@ void ActionHandler::onMovePointModeAction() {
     } else {
         QMessageBox::warning(&m_mainWindow, "Edycja punktów kontrolnych",
                             "Najpierw zaznacz krzywą, aby przesuwać jej punkty kontrolne.");
-        m_mainWindow.m_selectModeAction->setChecked(true);
+
+        m_mainWindow.m_movePointModeAction->setChecked(false);
     }
 }
+
 
 void ActionHandler::onDeletePointAction() {
     auto selectedObj = m_mainWindow.getCanvas()->selectedObject();
@@ -3980,7 +3897,11 @@ void ActionHandler::onDeletePointAction() {
 
 void ActionHandler::onFinishEditingAction() {
     m_mainWindow.getCanvas()->finishEditing();
-    m_mainWindow.m_selectModeAction->setChecked(true);
+
+    m_mainWindow.m_selectModeAction->setChecked(false);
+    m_mainWindow.m_addPointModeAction->setChecked(false);
+    m_mainWindow.m_movePointModeAction->setChecked(false);
+
     m_mainWindow.updateModeLabel();
     m_mainWindow.getStatusBar()->showMessage("Zakończono edycję punktów kontrolnych");
 }
@@ -4012,9 +3933,9 @@ void ActionHandler::createInterpolatedCurve(InterpolatedCurve::InterpolationType
     curve->setLineWidth(1.0);
     curve->setLineStyle(Qt::SolidLine);
 
-    curve->addPoint(Point(0, 0));
-    curve->addPoint(Point(50, 100));
-    curve->addPoint(Point(100, 0));
+    curve->addControlPoint(Point(0, 0));
+    curve->addControlPoint(Point(50, 100));
+    curve->addControlPoint(Point(100, 0));
     m_mainWindow.getCanvas()->addObject(curve);
     m_mainWindow.getCanvas()->selectObject(curve);
     m_mainWindow.getCanvas()->refresh();
@@ -4073,12 +3994,15 @@ void ActionHandler::onAboutAction() const {
 
 #pragma once
 
-#include <QObject>
-#include <memory>
 #include "../Geometry/InterpolatedCurve.h"
 
+#include "../Core/CommandManager.h"
+#include <QMessageBox>
+#include <QFileDialog>
+#include <QKeyEvent>
+#include <QStatusBar>
+
 class MainWindow;
-class QAction;
 
 class ActionHandler : public QObject {
     Q_OBJECT
@@ -4131,22 +4055,6 @@ private:
 
 #include "MainWindow.h"
 #include "ActionHandler.h"
-#include "../Math/EigenMathAdapter.h"
-#include "../Graphics/QtRenderer.h"
-#include "../Geometry/ImageObject.h"
-#include <QFileDialog>
-#include <QMessageBox>
-#include <QKeySequence>
-#include <QToolButton>
-#include <QComboBox>
-#include <QPushButton>
-#include <QColorDialog>
-#include <QDoubleSpinBox>
-#include <QCheckBox>
-#include <QApplication>
-#include <QStatusBar>
-#include <QTimer>
-
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -4378,7 +4286,7 @@ void MainWindow::updateObjectsTree() {
         if (const auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(obj)) {
             item->setText(1, "Krzywa");
 
-            const auto& points = curve->getPoints();
+            const auto& points = curve->getControlPoints();
             for (size_t i = 0; i < points.size(); ++i) {
                 auto* pointItem = new QTreeWidgetItem(item);
                 const Point& p = points[i];
@@ -4831,10 +4739,22 @@ void MainWindow::onEditingFinished() {
 #include <QToolButton>
 #include <QComboBox>
 #include <QLabel>
-#include <memory>
 
 #include "../Graphics/Canvas.h"
 #include "../Core/CommandManager.h"
+
+#include "../Math/EigenMathAdapter.h"
+#include "../Graphics/QtRenderer.h"
+#include "../Geometry/ImageObject.h"
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QKeySequence>
+#include <QPushButton>
+#include <QColorDialog>
+#include <QDoubleSpinBox>
+#include <QCheckBox>
+#include <QApplication>
+#include <QTimer>
 
 class ActionHandler;
 

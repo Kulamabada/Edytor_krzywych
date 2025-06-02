@@ -1,8 +1,4 @@
 #include "Canvas.h"
-#include <utility>
-#include <QMessageBox>
-#include "../Geometry/ImageObject.h"
-#include "../Geometry/BezierCurve.h"
 
 Canvas::Canvas(QWidget* parent): QWidget(parent)
 {
@@ -283,7 +279,7 @@ void Canvas::selectControlPoint(const int pointIndex) {
 
     // Sprawdź InterpolatedCurve
     if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-        maxPointCount = static_cast<int>(curve->getPointCount());
+        maxPointCount = static_cast<int>(curve->getControlPointCount());
     }
     // Sprawdź BezierCurve
     else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
@@ -502,9 +498,9 @@ void Canvas::keyPressEvent(QKeyEvent* event)
 
         // Obsługa InterpolatedCurve
         if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-            if (m_selectedControlPointIndex < static_cast<int>(curve->getPointCount())) {
-                if (curve->getPointCount() > 2) {
-                    curve->removePoint(m_selectedControlPointIndex);
+            if (m_selectedControlPointIndex < static_cast<int>(curve->getControlPointCount())) {
+                if (curve->getControlPointCount() > 2) {
+                    curve->removeControlPoint(m_selectedControlPointIndex);
                     deleted = true;
                 } else {
                     QMessageBox::warning(this, "Usuwanie punktu",

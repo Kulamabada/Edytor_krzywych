@@ -1,7 +1,4 @@
 #include "Command.h"
-#include <algorithm>
-#include <cassert>
-#include <ranges>
 
 namespace {
     int addObjectToScene(std::shared_ptr<GeometricObject> object);
@@ -165,11 +162,11 @@ bool AddControlPointCommand::execute() {
     if (!m_curve)
         return false;
 
-    if (m_index < 0 || m_index > static_cast<int>(m_curve->getPointCount())) {
-        m_curve->addPoint(m_point);
-        m_addedIndex = static_cast<int>(m_curve->getPointCount()) - 1;
+    if (m_index < 0 || m_index > static_cast<int>(m_curve->getControlPointCount())) {
+        m_curve->addControlPoint(m_point);
+        m_addedIndex = static_cast<int>(m_curve->getControlPointCount()) - 1;
     } else {
-        m_curve->insertPoint(m_index, m_point);
+        m_curve->insertControlPoint(m_index, m_point);
         m_addedIndex = m_index;
     }
 
@@ -178,11 +175,11 @@ bool AddControlPointCommand::execute() {
 
 bool AddControlPointCommand::undo() {
     if (!m_curve || m_addedIndex < 0 ||
-        m_addedIndex >= static_cast<int>(m_curve->getPointCount())) {
+        m_addedIndex >= static_cast<int>(m_curve->getControlPointCount())) {
         return false;
     }
 
-    m_curve->removePoint(m_addedIndex);
+    m_curve->removeControlPoint(m_addedIndex);
     return true;
 }
 
@@ -191,29 +188,29 @@ MoveControlPointCommand::MoveControlPointCommand(std::shared_ptr<InterpolatedCur
                                                const Point& newPosition)
     : CurveCommand(curve), m_pointIndex(pointIndex), m_newPosition(newPosition) {
 
-    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getPointCount())) {
-        const auto& points = m_curve->getPoints();
+    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
+        const auto& points = m_curve->getControlPoints();
         m_oldPosition = points[m_pointIndex];
     }
 }
 
 bool MoveControlPointCommand::execute() {
     if (!m_curve || m_pointIndex < 0 ||
-        m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
         return false;
     }
 
-    m_curve->movePoint(m_pointIndex, m_newPosition);
+    m_curve->moveControlPoint(m_pointIndex, m_newPosition);
     return true;
 }
 
 bool MoveControlPointCommand::undo() {
     if (!m_curve || m_pointIndex < 0 ||
-        m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
         return false;
     }
 
-    m_curve->movePoint(m_pointIndex, m_oldPosition);
+    m_curve->moveControlPoint(m_pointIndex, m_oldPosition);
     return true;
 }
 
@@ -221,22 +218,22 @@ DeleteControlPointCommand::DeleteControlPointCommand(std::shared_ptr<Interpolate
                                                   int pointIndex)
     : CurveCommand(curve), m_pointIndex(pointIndex) {
 
-    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getPointCount())) {
-        const auto& points = m_curve->getPoints();
+    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
+        const auto& points = m_curve->getControlPoints();
         m_deletedPoint = points[m_pointIndex];
     }
 }
 
 bool DeleteControlPointCommand::execute() {
     if (!m_curve || m_pointIndex < 0 ||
-        m_pointIndex >= static_cast<int>(m_curve->getPointCount())) {
+        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
         return false;
     }
 
-    if (m_curve->getPointCount() < 3)
+    if (m_curve->getControlPointCount() < 3)
         return false;
 
-    m_curve->removePoint(m_pointIndex);
+    m_curve->removeControlPoint(m_pointIndex);
     return true;
 }
 
@@ -244,10 +241,10 @@ bool DeleteControlPointCommand::undo() {
     if (!m_curve)
         return false;
 
-    if (m_pointIndex >= static_cast<int>(m_curve->getPointCount()))
-        m_curve->addPoint(m_deletedPoint);
+    if (m_pointIndex >= static_cast<int>(m_curve->getControlPointCount()))
+        m_curve->addControlPoint(m_deletedPoint);
     else
-        m_curve->insertPoint(m_pointIndex, m_deletedPoint);
+        m_curve->insertControlPoint(m_pointIndex, m_deletedPoint);
 
     return true;
 }
@@ -256,7 +253,7 @@ BatchControlPointsCommand::BatchControlPointsCommand(std::shared_ptr<Interpolate
                                                    const std::vector<Point>& newPoints)
     : CurveCommand(curve), m_newPoints(newPoints) {
     if (m_curve)
-        m_oldPoints = m_curve->getPoints();
+        m_oldPoints = m_curve->getControlPoints();
 }
 
 bool BatchControlPointsCommand::execute() {
@@ -266,7 +263,7 @@ bool BatchControlPointsCommand::execute() {
     if (m_newPoints.size() < 2)
         return false;
 
-    m_curve->setPoints(m_newPoints);
+    m_curve->setControlPoints(m_newPoints);
     return true;
 }
 
@@ -274,7 +271,7 @@ bool BatchControlPointsCommand::undo() {
     if (!m_curve)
         return false;
 
-    m_curve->setPoints(m_oldPoints);
+    m_curve->setControlPoints(m_oldPoints);
     return true;
 }
 

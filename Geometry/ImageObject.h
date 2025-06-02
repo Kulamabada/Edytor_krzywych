@@ -1,9 +1,7 @@
 #pragma once
 
-#include "GeometricObject.h"
 #include "Point.h"
 #include <QImage>
-#include <array>
 
 class ImageObject final : public GeometricObject {
 public:
