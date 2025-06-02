@@ -132,35 +132,33 @@ void QtRenderer::renderObject(const GeometricObject& object)
 void QtRenderer::renderGrid(double gridSize) {
     if (!m_drawGrid || !m_painter) return;
 
-    QRectF visibleRect = m_viewportManager->visibleWorldRect();
+    const QRectF visibleRect = m_viewportManager->visibleWorldRect();
 
-    QPen smallPen(QColor(230, 230, 230), 0.5, Qt::DotLine);
+    const QPen smallPen(QColor(230, 230, 230), 0.5, Qt::DotLine);
     m_painter->setPen(smallPen);
 
-    for (double x = std::floor(visibleRect.left()); x <= visibleRect.right(); x += 1.0) {
+    for (double x = std::floor(visibleRect.left()); x <= visibleRect.right(); x += 1.0)
         m_painter->drawLine(QPointF(x, visibleRect.top()), QPointF(x, visibleRect.bottom()));
-    }
-    for (double y = std::floor(visibleRect.top()); y <= visibleRect.bottom(); y += 1.0) {
-        m_painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
-    }
 
-    QPen mainPen(QColor(200, 200, 200), 1.0, Qt::SolidLine);
+    for (double y = std::floor(visibleRect.top()); y <= visibleRect.bottom(); y += 1.0)
+        m_painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
+
+    const QPen mainPen(QColor(200, 200, 200), 1.0, Qt::SolidLine);
     m_painter->setPen(mainPen);
 
-    for (double x = std::floor(visibleRect.left() / 5) * 5; x <= visibleRect.right(); x += 5.0) {
+    for (double x = std::floor(visibleRect.left() / 5) * 5; x <= visibleRect.right(); x += 5.0)
         m_painter->drawLine(QPointF(x, visibleRect.top()), QPointF(x, visibleRect.bottom()));
-    }
-    for (double y = std::floor(visibleRect.top() / 5) * 5; y <= visibleRect.bottom(); y += 5.0) {
+
+    for (double y = std::floor(visibleRect.top() / 5) * 5; y <= visibleRect.bottom(); y += 5.0)
         m_painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.right(), y));
-    }
 }
 
 void QtRenderer::renderText(const QPointF& position, const QString& text) {
     if (!m_painter) return;
     m_painter->save();
-    QTransform current = m_painter->transform();
+    const QTransform current = m_painter->transform();
     m_painter->resetTransform();
-    QPointF screenPos = current.map(position);
+    const QPointF screenPos = current.map(position);
     m_painter->drawText(screenPos, text);
     m_painter->restore();
 }
@@ -169,15 +167,15 @@ void QtRenderer::renderAxes()
 {
     if (!m_drawAxes || !m_painter || !m_viewportManager) return;
 
-    QPen pen(m_axesColor, m_axesWidth, Qt::SolidLine);
+    const QPen pen(m_axesColor, m_axesWidth, Qt::SolidLine);
     m_painter->setPen(pen);
 
-    QRectF visibleRect = m_viewportManager->visibleWorldRect();
+    const QRectF visibleRect = m_viewportManager->visibleWorldRect();
 
     m_painter->drawLine(QPointF(visibleRect.left(), 0), QPointF(visibleRect.right(), 0));
     m_painter->drawLine(QPointF(0, visibleRect.top()), QPointF(0, visibleRect.bottom()));
 
-    double arrowSize = 7.0 / m_viewportManager->zoomFactor();
+    const double arrowSize = 7.0 / m_viewportManager->zoomFactor();
 
     QPolygonF arrowX;
     arrowX << QPointF(visibleRect.right(), 0)
@@ -201,19 +199,17 @@ void QtRenderer::renderAxes()
 void QtRenderer::renderAxisTicks() {
     if (!m_painter || !m_viewportManager || !m_painter->isActive()) return;
 
-    QRectF visibleRect = m_viewportManager->visibleWorldRect();
-    double zoomFactor = m_viewportManager->zoomFactor();
+    const QRectF visibleRect = m_viewportManager->visibleWorldRect();
+    const double zoomFactor = m_viewportManager->zoomFactor();
 
-    double viewportWidth = visibleRect.width();
-    double viewportHeight = visibleRect.height();
+    const double viewportWidth = visibleRect.width(), viewportHeight = visibleRect.height();
 
-    double desiredTickCount = 16.0;
-    double optimalSpacingX = viewportWidth / desiredTickCount;
-    double optimalSpacingY = viewportHeight / desiredTickCount;
+    constexpr double desiredTickCount = 16.0;
+    const double optimalSpacingX = viewportWidth / desiredTickCount, optimalSpacingY = viewportHeight / desiredTickCount;
 
     auto findNiceSpacing = [](double optimalSpacing) -> double {
-        double magnitude = pow(10, floor(log10(optimalSpacing)));
-        double normalized = optimalSpacing / magnitude;
+        const double magnitude = pow(10, floor(log10(optimalSpacing)));
+        const double normalized = optimalSpacing / magnitude;
 
         if (normalized < 1.2) return 1.0 * magnitude;
         if (normalized < 2.5) return 2.0 * magnitude;
@@ -221,23 +217,21 @@ void QtRenderer::renderAxisTicks() {
         return 10.0 * magnitude;
     };
 
-    double tickSpacingX = findNiceSpacing(optimalSpacingX);
-    double tickSpacingY = findNiceSpacing(optimalSpacingY);
+    const double tickSpacingX = findNiceSpacing(optimalSpacingX), tickSpacingY = findNiceSpacing(optimalSpacingY);
 
-    double xMin = floor(visibleRect.left() / tickSpacingX) * tickSpacingX;
-    double xMax = ceil(visibleRect.right() / tickSpacingX) * tickSpacingX;
-    double yMin = floor(visibleRect.top() / tickSpacingY) * tickSpacingY;
-    double yMax = ceil(visibleRect.bottom() / tickSpacingY) * tickSpacingY;
+    const double xMin = floor(visibleRect.left() / tickSpacingX) * tickSpacingX;
+    const double xMax = ceil(visibleRect.right() / tickSpacingX) * tickSpacingX;
+    const double yMin = floor(visibleRect.top() / tickSpacingY) * tickSpacingY;
+    const double yMax = ceil(visibleRect.bottom() / tickSpacingY) * tickSpacingY;
 
-    double tickLength = 5.0 / zoomFactor;
+    const double tickLength = 5.0 / zoomFactor;
 
-    auto determinePrecision = [](double spacing) -> int {
+    auto determinePrecision = [](const double spacing) -> int {
         if (spacing >= 1.0) return 0;
         return std::min(6, static_cast<int>(std::ceil(std::abs(std::log10(spacing)))));
     };
 
-    int xPrecision = determinePrecision(tickSpacingX);
-    int yPrecision = determinePrecision(tickSpacingY);
+    const int xPrecision = determinePrecision(tickSpacingX), yPrecision = determinePrecision(tickSpacingY);
 
     for (double x = xMin; x <= xMax; x += tickSpacingX) {
         if (std::abs(x) < 1e-6) continue;
@@ -293,9 +287,8 @@ void QtRenderer::renderSelectionMarker(const QPointF& position)
 
 void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bool isActive)
 {
-    if (!m_painter || !m_painter->isActive()) {
+    if (!m_painter || !m_painter->isActive())
         return;
-    }
 
     m_painter->save();
     m_painter->resetTransform();
@@ -362,7 +355,6 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
     if (draggingIndex >= 0 && draggingIndex < static_cast<int>(points.size()) && draggingIndex != selectedIndex)
         renderControlPoint(screenPositions[draggingIndex], false, true);
 
-
     m_painter->save();
     m_painter->resetTransform();
     QPen textPen(Qt::black);
@@ -379,7 +371,7 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         QPointF textPos = screenPositions[i] + QPointF(m_controlPointSize + 2,
                                                   m_controlPointSize / 2.0);
 
-        QRectF bgRect = QRectF(textPos.x() - 1, textPos.y() - textRect.height(),
+        auto bgRect = QRectF(textPos.x() - 1, textPos.y() - textRect.height(),
                               textRect.width() + 2, textRect.height() + 2);
         m_painter->fillRect(bgRect, QColor(255, 255, 255, 180));
 
@@ -397,7 +389,7 @@ void QtRenderer::renderControlPolygon(const std::vector<Point>& points)
     m_painter->save();
     m_painter->resetTransform();
 
-    QPen pen(m_controlPolygonColor, m_controlPolygonWidth, m_controlPolygonStyle);
+    const QPen pen(m_controlPolygonColor, m_controlPolygonWidth, m_controlPolygonStyle);
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 
@@ -412,40 +404,40 @@ void QtRenderer::renderControlPolygon(const std::vector<Point>& points)
     m_painter->restore();
 }
 
-void QtRenderer::setPointStyle(const QColor& color, float size)
+void QtRenderer::setPointStyle(const QColor& color, const float size)
 {
     m_pointColor = color;
     m_pointSize = size;
 }
 
-void QtRenderer::setCurveStyle(const QColor& color, float width, Qt::PenStyle style)
+void QtRenderer::setCurveStyle(const QColor& color, const float width, const Qt::PenStyle style)
 {
     m_curveColor = color;
     m_curveWidth = width;
     m_curveStyle = style;
 }
 
-void QtRenderer::setSelectionStyle(const QColor& color, float size)
+void QtRenderer::setSelectionStyle(const QColor& color, const float size)
 {
     m_selectionColor = color;
     m_selectionSize = size;
 }
 
-void QtRenderer::setGridStyle(const QColor& color, float width, Qt::PenStyle style)
+void QtRenderer::setGridStyle(const QColor& color, const float width, const Qt::PenStyle style)
 {
     m_gridColor = color;
     m_gridWidth = width;
     m_gridStyle = style;
 }
 
-void QtRenderer::setAxesStyle(const QColor& color, float width)
+void QtRenderer::setAxesStyle(const QColor& color, const float width)
 {
     m_axesColor = color;
     m_axesWidth = width;
 }
 
 void QtRenderer::setControlPointStyle(const QColor& normalColor, const QColor& selectedColor,
-                                const QColor& activeColor, float size)
+                                const QColor& activeColor, const float size)
 {
     m_controlPointNormalColor = normalColor;
     m_controlPointSelectedColor = selectedColor;
@@ -453,24 +445,24 @@ void QtRenderer::setControlPointStyle(const QColor& normalColor, const QColor& s
     m_controlPointSize = size;
 }
 
-void QtRenderer::setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style)
+void QtRenderer::setControlPolygonStyle(const QColor& color, const float width, const Qt::PenStyle style)
 {
     m_controlPolygonColor = color;
     m_controlPolygonWidth = width;
     m_controlPolygonStyle = style;
 }
 
-void QtRenderer::setDrawGrid(bool draw)
+void QtRenderer::setDrawGrid(const bool draw)
 {
     m_drawGrid = draw;
 }
 
-void QtRenderer::setDrawAxes(bool draw)
+void QtRenderer::setDrawAxes(const bool draw)
 {
     m_drawAxes = draw;
 }
 
-void QtRenderer::setDrawControlPolygon(bool draw)
+void QtRenderer::setDrawControlPolygon(const bool draw)
 {
     m_drawControlPolygon = draw;
 }
@@ -593,21 +585,18 @@ double QtRenderer::distanceSquared(const Point& a, const Point& b)
     return dx * dx + dy * dy;
 }
 
-void QtRenderer::renderBezierControlPolygon(const std::vector<Point>& points,
-                                          const QColor& color,
-                                          double width,
-                                          Qt::PenStyle style) {
-    if (!m_painter || !m_viewportManager || points.size() < 2)
-        return;
+void QtRenderer::renderBezierControlPolygon(const std::vector<Point>& points, const QColor& color,
+                                          const double width, const Qt::PenStyle style)
+{
+    if (!m_painter || !m_viewportManager || points.size() < 2) return;
 
-    QPen pen(color, width, style);
+    const QPen pen(color, width, style);
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 
     QPolygonF polygon;
-    for (const auto& point : points) {
+    for (const auto& point : points)
         polygon << QPointF(point.x(), point.y());
-    }
 
     m_painter->drawPolyline(polygon);
 }
