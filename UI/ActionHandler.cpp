@@ -2,8 +2,7 @@
 #include "MainWindow.h"
 
 ActionHandler::ActionHandler(MainWindow& mainWindow)
-    : QObject(&mainWindow)
-    , m_mainWindow(mainWindow)
+    : QObject{&mainWindow} , m_mainWindow{mainWindow}
 {
     connectActions();
 }
@@ -131,7 +130,6 @@ void ActionHandler::onMovePointModeAction() {
     }
 }
 
-
 void ActionHandler::onDeletePointAction() {
     auto selectedObj = m_mainWindow.getCanvas()->selectedObject();
     if (!selectedObj) {
@@ -139,8 +137,10 @@ void ActionHandler::onDeletePointAction() {
         return;
     }
 
-    const bool isCurveWithControlPoints = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj) ||
-        std::dynamic_pointer_cast<BezierCurve>(selectedObj);
+    bool isCurveWithControlPoints = false;
+    if (auto curve = std::dynamic_pointer_cast<Curve>(selectedObj)) {
+        isCurveWithControlPoints = curve->hasControlPoints();
+    }
 
     if (isCurveWithControlPoints) {
         QKeyEvent keyEvent(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
@@ -185,38 +185,31 @@ void ActionHandler::onFitContentAction() {
     m_mainWindow.getStatusBar()->showMessage("Dopasowano widok do zawartości");
 }
 
-void ActionHandler::createInterpolatedCurve(InterpolatedCurve::InterpolationType type, const QString& typeName) {
-    auto curve = std::make_shared<InterpolatedCurve>(std::static_pointer_cast<IMathProvider>(m_mainWindow.m_mathProvider), type);
-
-    curve->setColor(Qt::blue);
-    curve->setLineWidth(1.0);
-    curve->setLineStyle(Qt::SolidLine);
-
-    curve->addControlPoint(Point(0, 0));
-    curve->addControlPoint(Point(50, 100));
-    curve->addControlPoint(Point(100, 0));
+void ActionHandler::createAndAddCurve(std::shared_ptr<Curve> curve, const QString& message) {
     m_mainWindow.getCanvas()->addObject(curve);
     m_mainWindow.getCanvas()->selectObject(curve);
     m_mainWindow.getCanvas()->refresh();
     m_mainWindow.updateObjectsTree();
-    m_mainWindow.getStatusBar()->showMessage(QString("Utworzono krzywą interpolowaną typu %1").arg(typeName));
+    m_mainWindow.getStatusBar()->showMessage(message);
 }
 
-void ActionHandler::onNifsAction() {
-    createInterpolatedCurve(InterpolatedCurve::InterpolationType::NIFS3, "NIFS3");
+void ActionHandler::createInterpolatedCurve(InterpolatedCurve::InterpolationType type, const QString& typeName) {
+    const auto curve = std::make_shared<InterpolatedCurve>(std::static_pointer_cast<IMathProvider>(m_mainWindow.m_mathProvider), type);
+
+    curve->addControlPoint(Point(0, 0));
+    curve->addControlPoint(Point(50, 100));
+    curve->addControlPoint(Point(100, 0));
+
+    createAndAddCurve(curve, QString("Utworzono krzywą interpolowaną typu %1").arg(typeName));
 }
 
-void ActionHandler::onOifsAction() {
-    createInterpolatedCurve(InterpolatedCurve::InterpolationType::OIFS3, "OIFS3");
-}
+void ActionHandler::onNifsAction() { createInterpolatedCurve(Type::NIFS3, "NIFS3"); }
 
-void ActionHandler::onLagrangeAction() {
-    createInterpolatedCurve(InterpolatedCurve::InterpolationType::Lagrange, "Lagrange");
-}
+void ActionHandler::onOifsAction() { createInterpolatedCurve(Type::OIFS3, "OIFS3"); }
 
-void ActionHandler::onBarycentricAction() {
-    createInterpolatedCurve(InterpolatedCurve::InterpolationType::Barycentric, "Barycentric");
-}
+void ActionHandler::onLagrangeAction() { createInterpolatedCurve(Type::Lagrange, "Lagrange"); }
+
+void ActionHandler::onBarycentricAction() { createInterpolatedCurve(Type::Barycentric, "Barycentric"); }
 
 void ActionHandler::onBezierAction() {
     const auto curve = std::make_shared<BezierCurve>();
@@ -226,11 +219,7 @@ void ActionHandler::onBezierAction() {
     curve->addControlPoint(Point(25, 75, 0));
     curve->addControlPoint(Point(50, -25, 0));
 
-    m_mainWindow.getCanvas()->addObject(curve);
-    m_mainWindow.getCanvas()->selectObject(curve);
-    m_mainWindow.getCanvas()->refresh();
-    m_mainWindow.updateObjectsTree();
-    m_mainWindow.getStatusBar()->showMessage("Utworzono krzywą Béziera");
+    createAndAddCurve(curve, "Utworzono krzywą Béziera");
 }
 
 void ActionHandler::onAboutAction() const {

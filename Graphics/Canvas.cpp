@@ -74,7 +74,6 @@ void Canvas::clearSelection()
 {
     if (m_selectedObject) {
         m_selectedObject = nullptr;
-
         m_selectedControlPointIndex = -1;
 
         if (m_isEditingPoints)
@@ -229,13 +228,11 @@ bool Canvas::addControlPoint(const QPointF& screenPos) {
 
         int insertIndex;
 
-        // Jeśli jest zaznaczony punkt kontrolny, wstaw nowy punkt po nim
         if (m_selectedControlPointIndex >= 0 &&
             m_selectedControlPointIndex < static_cast<int>(curve->getControlPointCount())) {
             insertIndex = m_selectedControlPointIndex + 1;
             curve->insertControlPoint(insertIndex, newPoint);
             } else {
-                // Jeśli nie ma zaznaczonego punktu, dodaj na końcu
                 curve->addControlPoint(newPoint);
                 insertIndex = static_cast<int>(curve->getControlPointCount()) - 1;
             }
@@ -247,7 +244,6 @@ bool Canvas::addControlPoint(const QPointF& screenPos) {
     }
     return false;
 }
-
 
 bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
     if (!m_viewportManager || pointIndex < 0) return false;
@@ -275,25 +271,19 @@ void Canvas::selectControlPoint(const int pointIndex) {
     auto selectedObj = selectedObject();
     if (!selectedObj) return;
 
-    int maxPointCount = 0;
+    if (auto curve = std::dynamic_pointer_cast<Curve>(selectedObj)) {
+        if (!curve->hasControlPoints()) return;
 
-    // Sprawdź InterpolatedCurve
-    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-        maxPointCount = static_cast<int>(curve->getControlPointCount());
-    }
-    // Sprawdź BezierCurve
-    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
-        maxPointCount = static_cast<int>(bezierCurve->getControlPointCount());
-    }
-    else {
-        return;
-    }
+        int maxPointCount = static_cast<int>(curve->getControlPointCount());
 
-    if (pointIndex >= 0 && pointIndex < maxPointCount) {
-        m_selectedControlPointIndex = pointIndex;
-        emit controlPointSelected(pointIndex);
+        if (pointIndex >= 0 && pointIndex < maxPointCount) {
+            m_selectedControlPointIndex = pointIndex;
+            emit controlPointSelected(pointIndex);
+        } else {
+            m_selectedControlPointIndex = -1;
+        }
     } else {
-        m_selectedControlPointIndex = -1;
+        return;
     }
 
     update();
@@ -354,8 +344,7 @@ void Canvas::drawControlPoints() {
 
     if (const auto curve = std::dynamic_pointer_cast<Curve>(selectedObj))
         if (curve->hasControlPoints()) {
-            const auto& points = curve->getControlPoints();
-            m_renderer->renderControlPoints(points, m_selectedControlPointIndex,
+            m_renderer->renderControlPoints(*curve, m_selectedControlPointIndex,
                                           m_isDraggingPoint ? m_selectedControlPointIndex : -1);
         }
 }
@@ -400,7 +389,6 @@ void Canvas::mousePressEvent(QMouseEvent* event)
             case EditMode::None:
                     if (const auto hitObject = hitTestObject(event->pos())) {
                         selectObject(hitObject);
-
                         if (hasSelectedCurveWithControlPoints()) {
                             setEditMode(EditMode::SelectPoint);
                             emit editingStarted();
@@ -494,70 +482,41 @@ void Canvas::keyPressEvent(QKeyEvent* event)
         auto selectedObj = selectedObject();
         if (!selectedObj) return;
 
-        bool deleted = false;
+        if (auto curve = std::dynamic_pointer_cast<Curve>(selectedObj)) {
+            if (curve->hasControlPoints() &&
+                m_selectedControlPointIndex < static_cast<int>(curve->getControlPointCount())) {
 
-        // Obsługa InterpolatedCurve
-        if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-            if (m_selectedControlPointIndex < static_cast<int>(curve->getControlPointCount())) {
                 if (curve->getControlPointCount() > 2) {
                     curve->removeControlPoint(m_selectedControlPointIndex);
-                    deleted = true;
+                    m_selectedControlPointIndex = -1;
+                    update();
                 } else {
                     QMessageBox::warning(this, "Usuwanie punktu",
-                        "Krzywa musi mieć co najmniej 2 punkty.");
+                        "Krzywa musi mieć co najmniej 2 punkty kontrolne.");
                 }
-            }
-        }
-        // Obsługa BezierCurve
-        else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
-            if (m_selectedControlPointIndex < static_cast<int>(bezierCurve->getControlPointCount())) {
-                if (bezierCurve->getControlPointCount() > 2) {
-                    bezierCurve->removeControlPoint(m_selectedControlPointIndex);
-                    deleted = true;
-                } else {
-                    QMessageBox::warning(this, "Usuwanie punktu",
-                        "Krzywa Béziera musi mieć co najmniej 2 punkty kontrolne.");
                 }
-            }
-        }
-
-        if (deleted) {
-            m_selectedControlPointIndex = -1;
-            update();
         }
     }
 
     QWidget::keyPressEvent(event);
 }
 
-std::shared_ptr<BezierCurve> Canvas::getSelectedBezierCurve() const {
-    const auto selectedObj = selectedObject();
-    if (!selectedObj) return nullptr;
-
-    return std::dynamic_pointer_cast<BezierCurve>(selectedObj);
-}
-
 bool Canvas::hasSelectedCurveWithControlPoints() const {
     const auto selectedObj = selectedObject();
     if (!selectedObj) return false;
 
-    if (const auto curve = std::dynamic_pointer_cast<Curve>(selectedObj)) {
+    if (const auto curve = std::dynamic_pointer_cast<Curve>(selectedObj))
         return curve->hasControlPoints();
-    }
+
     return false;
 }
 
 std::shared_ptr<GeometricObject> Canvas::hitTestObject(const QPointF& pos, double tolerance) const {
     if (!m_viewportManager) return nullptr;
 
-    QPointF worldPos = m_viewportManager->screenToWorld(pos);
-
-    // Sprawdź każdy obiekt od końca (ostatnie dodane mają priorytet)
     for (auto it = m_objects.rbegin(); it != m_objects.rend(); ++it) {
         const auto& object = *it;
-
         if (auto curve = std::dynamic_pointer_cast<Curve>(object)) {
-            // Test kolizji z krzywą - sprawdź punkty wzdłuż krzywej
             constexpr int testPoints = 100;
             for (int i = 0; i <= testPoints; ++i) {
                 double t = static_cast<double>(i) / testPoints;

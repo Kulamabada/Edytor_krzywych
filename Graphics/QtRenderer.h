@@ -29,24 +29,21 @@ public:
     void renderAxes() override;
     void renderAxisTicks();
     void renderSelectionMarker(const QPointF& position) override;
-    void renderControlPoint(const QPointF& position, bool isSelected = false, bool isActive = false) override;
-    void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int draggingIndex = -1) override;
-    void renderControlPolygon(const std::vector<Point>& points) override;
+    void renderControlPoint(const QPointF& position, const Curve& curve, bool isSelected = false, bool isActive = false) override;
+    void renderControlPoints(const Curve& curve, int selectedIndex = -1, int draggingIndex = -1) override;
     void setPointStyle(const QColor& color, float size) override;
     void setCurveStyle(const QColor& color, float width, Qt::PenStyle style = Qt::SolidLine) override;
     void setSelectionStyle(const QColor& color, float size) override;
     void setGridStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) override;
     void setAxesStyle(const QColor& color, float width) override;
-    void setControlPointStyle(const QColor& normalColor, const QColor& selectedColor, const QColor& activeColor, float size) override;
-    void setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) override;
     void setDrawGrid(bool draw) override;
     void setDrawAxes(bool draw) override;
-    void setDrawControlPolygon(bool draw) override;
-
     void renderPolyline(const std::vector<Point>& points) override;
     void renderConvexHull(const std::vector<Point>& points) override;
     void setPolylineStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) override;
     void setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) override;
+    void renderCurveExtras(const Curve& curve) override;
+
 private:
     QColor m_pointColor{Qt::black};
     float m_pointSize{4.0f};
@@ -60,13 +57,6 @@ private:
     Qt::PenStyle m_gridStyle{Qt::DotLine};
     QColor m_axesColor{Qt::black};
     float m_axesWidth{1.0f};
-    QColor m_controlPointNormalColor{Qt::blue};
-    QColor m_controlPointSelectedColor{Qt::red};
-    QColor m_controlPointActiveColor{Qt::green};
-    float m_controlPointSize{5.0f};
-    QColor m_controlPolygonColor{Qt::darkGray};
-    float m_controlPolygonWidth{1.0f};
-    Qt::PenStyle m_controlPolygonStyle{Qt::DashLine};
 
     QColor m_polylineColor{Qt::darkGreen};
     float m_polylineWidth{1.0f};
@@ -78,18 +68,17 @@ private:
 
     bool m_drawGrid{true};
     bool m_drawAxes{true};
-    bool m_drawControlPolygon{false};
 
     QPainter* m_painter{nullptr};
     ViewportManager* m_viewportManager{nullptr};
+
+    QPolygonF pointsToPolygon(const std::vector<Point>& points) const;
+    void renderMainCurve(const Curve& curve);
+    void renderCurvePolyline(const Curve& curve);
+    void renderCurveConvexHull(const Curve& curve);
 
     std::vector<Point> computeConvexHull(const std::vector<Point>& points) const;
     static double crossProduct(const Point& O, const Point& A, const Point& B) ;
     static double polarAngle(const Point& pivot, const Point& point) ;
     static double distanceSquared(const Point& a, const Point& b) ;
-
-    void renderBezierControlPolygon(const std::vector<Point>& points,
-                              const QColor& color,
-                              double width,
-                              Qt::PenStyle style);
 };

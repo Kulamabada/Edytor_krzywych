@@ -9,6 +9,7 @@
 #include <QStatusBar>
 
 class MainWindow;
+using Type = InterpolatedCurve::InterpolationType;
 
 class ActionHandler : public QObject {
     Q_OBJECT
@@ -17,8 +18,8 @@ public:
     explicit ActionHandler(MainWindow& mainWindow);
     ~ActionHandler() override = default;
 
-public slots:
-    void onNewAction();
+    public slots:
+        void onNewAction();
     void onOpenAction();
     void onSaveAction();
     void onSaveAsAction();
@@ -51,6 +52,7 @@ public slots:
 private:
     void connectActions();
     void createInterpolatedCurve(InterpolatedCurve::InterpolationType type, const QString& typeName);
+    void createAndAddCurve(std::shared_ptr<Curve> curve, const QString& message);
 
     MainWindow& m_mainWindow;
 };

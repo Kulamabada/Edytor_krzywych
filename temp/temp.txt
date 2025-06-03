@@ -1,5 +1,5 @@
-// Plik wygenerowany automatycznie 2025-06-02 23:31:34
-// Zawiera 35 plików z projektu edytora krzywych
+// Plik wygenerowany automatycznie 2025-06-05 13:26:06
+// Zawiera 36 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
 
@@ -97,15 +97,10 @@ private:
 
 namespace {
     int addObjectToScene(std::shared_ptr<GeometricObject> object);
-
     bool removeObjectFromScene(int objectId);
-
     std::shared_ptr<GeometricObject> getObjectFromScene(int objectId);
-
     bool transformObject(int objectId, const Eigen::Matrix3d& transform);
-
     ObjectStyle getObjectStyle(int objectId);
-
     bool setObjectStyle(int objectId, const ObjectStyle& style);
 }
 
@@ -248,13 +243,12 @@ bool CompoundCommand::redo() {
     return success;
 }
 
-
-AddControlPointCommand::AddControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, const Point& point, int index)
+AddControlPointCommand::AddControlPointCommand(std::shared_ptr<Curve> curve, const Point& point, int index)
     : CurveCommand(curve), m_point(point), m_index(index), m_addedIndex(-1) {
 }
 
 bool AddControlPointCommand::execute() {
-    if (!m_curve)
+    if (!m_curve || !m_curve->hasControlPoints())
         return false;
 
     if (m_index < 0 || m_index > static_cast<int>(m_curve->getControlPointCount())) {
@@ -278,20 +272,21 @@ bool AddControlPointCommand::undo() {
     return true;
 }
 
-MoveControlPointCommand::MoveControlPointCommand(std::shared_ptr<InterpolatedCurve> curve,
+MoveControlPointCommand::MoveControlPointCommand(std::shared_ptr<Curve> curve,
                                                int pointIndex,
                                                const Point& newPosition)
     : CurveCommand(curve), m_pointIndex(pointIndex), m_newPosition(newPosition) {
 
-    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
+    if (m_curve && m_curve->hasControlPoints() &&
+        m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
         const auto& points = m_curve->getControlPoints();
         m_oldPosition = points[m_pointIndex];
     }
 }
 
 bool MoveControlPointCommand::execute() {
-    if (!m_curve || m_pointIndex < 0 ||
-        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
+    if (!m_curve || !m_curve->hasControlPoints() ||
+        m_pointIndex < 0 || m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
         return false;
     }
 
@@ -300,8 +295,8 @@ bool MoveControlPointCommand::execute() {
 }
 
 bool MoveControlPointCommand::undo() {
-    if (!m_curve || m_pointIndex < 0 ||
-        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
+    if (!m_curve || !m_curve->hasControlPoints() ||
+        m_pointIndex < 0 || m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
         return false;
     }
 
@@ -309,19 +304,19 @@ bool MoveControlPointCommand::undo() {
     return true;
 }
 
-DeleteControlPointCommand::DeleteControlPointCommand(std::shared_ptr<InterpolatedCurve> curve,
-                                                  int pointIndex)
+DeleteControlPointCommand::DeleteControlPointCommand(std::shared_ptr<Curve> curve, int pointIndex)
     : CurveCommand(curve), m_pointIndex(pointIndex) {
 
-    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
+    if (m_curve && m_curve->hasControlPoints() &&
+        m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
         const auto& points = m_curve->getControlPoints();
         m_deletedPoint = points[m_pointIndex];
     }
 }
 
 bool DeleteControlPointCommand::execute() {
-    if (!m_curve || m_pointIndex < 0 ||
-        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
+    if (!m_curve || !m_curve->hasControlPoints() ||
+        m_pointIndex < 0 || m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
         return false;
     }
 
@@ -333,7 +328,7 @@ bool DeleteControlPointCommand::execute() {
 }
 
 bool DeleteControlPointCommand::undo() {
-    if (!m_curve)
+    if (!m_curve || !m_curve->hasControlPoints())
         return false;
 
     if (m_pointIndex >= static_cast<int>(m_curve->getControlPointCount()))
@@ -344,15 +339,15 @@ bool DeleteControlPointCommand::undo() {
     return true;
 }
 
-BatchControlPointsCommand::BatchControlPointsCommand(std::shared_ptr<InterpolatedCurve> curve,
+BatchControlPointsCommand::BatchControlPointsCommand(std::shared_ptr<Curve> curve,
                                                    const std::vector<Point>& newPoints)
     : CurveCommand(curve), m_newPoints(newPoints) {
-    if (m_curve)
+    if (m_curve && m_curve->hasControlPoints())
         m_oldPoints = m_curve->getControlPoints();
 }
 
 bool BatchControlPointsCommand::execute() {
-    if (!m_curve)
+    if (!m_curve || !m_curve->hasControlPoints())
         return false;
 
     if (m_newPoints.size() < 2)
@@ -363,7 +358,7 @@ bool BatchControlPointsCommand::execute() {
 }
 
 bool BatchControlPointsCommand::undo() {
-    if (!m_curve)
+    if (!m_curve || !m_curve->hasControlPoints())
         return false;
 
     m_curve->setControlPoints(m_oldPoints);
@@ -397,130 +392,6 @@ namespace {
     }
 }
 
-
-// Implementacja AddBezierCurveCommand
-AddBezierCurveCommand::AddBezierCurveCommand(std::shared_ptr<BezierCurve> curve)
-    : m_curve(std::move(curve)), m_curveId(-1) {
-}
-
-bool AddBezierCurveCommand::execute() {
-    if (!m_curve) {
-        return false;
-    }
-
-    m_curveId = addObjectToScene(m_curve);
-    return m_curveId >= 0;
-}
-
-bool AddBezierCurveCommand::undo() {
-    if (m_curveId < 0)
-        return false;
-
-    return removeObjectFromScene(m_curveId);
-}
-
-bool AddBezierCurveCommand::redo() {
-    return execute();
-}
-
-// Implementacja AddBezierControlPointCommand
-AddBezierControlPointCommand::AddBezierControlPointCommand(std::shared_ptr<BezierCurve> curve, const Point& point, int index)
-    : BezierCurveCommand(curve), m_point(point), m_index(index), m_addedIndex(-1) {
-}
-
-bool AddBezierControlPointCommand::execute() {
-    if (!m_curve)
-        return false;
-
-    if (m_index < 0 || m_index > static_cast<int>(m_curve->getControlPointCount())) {
-        m_curve->addControlPoint(m_point);
-        m_addedIndex = static_cast<int>(m_curve->getControlPointCount()) - 1;
-    } else {
-        m_curve->insertControlPoint(m_index, m_point);
-        m_addedIndex = m_index;
-    }
-
-    return true;
-}
-
-bool AddBezierControlPointCommand::undo() {
-    if (!m_curve || m_addedIndex < 0 ||
-        m_addedIndex >= static_cast<int>(m_curve->getControlPointCount())) {
-        return false;
-    }
-
-    m_curve->removeControlPoint(m_addedIndex);
-    return true;
-}
-
-// Implementacja MoveBezierControlPointCommand
-MoveBezierControlPointCommand::MoveBezierControlPointCommand(std::shared_ptr<BezierCurve> curve,
-                                                           int pointIndex,
-                                                           const Point& newPosition)
-    : BezierCurveCommand(curve), m_pointIndex(pointIndex), m_newPosition(newPosition) {
-
-    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
-        const auto& points = m_curve->getControlPoints();
-        m_oldPosition = points[m_pointIndex];
-    }
-}
-
-bool MoveBezierControlPointCommand::execute() {
-    if (!m_curve || m_pointIndex < 0 ||
-        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
-        return false;
-    }
-
-    m_curve->moveControlPoint(m_pointIndex, m_newPosition);
-    return true;
-}
-
-bool MoveBezierControlPointCommand::undo() {
-    if (!m_curve || m_pointIndex < 0 ||
-        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
-        return false;
-    }
-
-    m_curve->moveControlPoint(m_pointIndex, m_oldPosition);
-    return true;
-}
-
-// Implementacja DeleteBezierControlPointCommand
-DeleteBezierControlPointCommand::DeleteBezierControlPointCommand(std::shared_ptr<BezierCurve> curve,
-                                                                int pointIndex)
-    : BezierCurveCommand(curve), m_pointIndex(pointIndex) {
-
-    if (m_curve && m_pointIndex >= 0 && m_pointIndex < static_cast<int>(m_curve->getControlPointCount())) {
-        const auto& points = m_curve->getControlPoints();
-        m_deletedPoint = points[m_pointIndex];
-    }
-}
-
-bool DeleteBezierControlPointCommand::execute() {
-    if (!m_curve || m_pointIndex < 0 ||
-        m_pointIndex >= static_cast<int>(m_curve->getControlPointCount())) {
-        return false;
-    }
-
-    if (m_curve->getControlPointCount() < 3)
-        return false;
-
-    m_curve->removeControlPoint(m_pointIndex);
-    return true;
-}
-
-bool DeleteBezierControlPointCommand::undo() {
-    if (!m_curve)
-        return false;
-
-    if (m_pointIndex >= static_cast<int>(m_curve->getControlPointCount()))
-        m_curve->addControlPoint(m_deletedPoint);
-    else
-        m_curve->insertControlPoint(m_pointIndex, m_deletedPoint);
-
-    return true;
-}
-
 //===== END FILE: Core\Command.cpp =====//
 
 //===== START FILE: Core\Command.h =====//
@@ -529,13 +400,11 @@ bool DeleteBezierControlPointCommand::undo() {
 
 #include <string>
 #include "AbstractCommand.h"
-#include "../Geometry/BezierCurve.h"
-#include "CurveCommand.h"
+#include "../Geometry/Curve.h"
 #include <algorithm>
 #include <cassert>
 #include <ranges>
 
-// Command to add a geometric object to the scene
 class AddObjectCommand : public AbstractCommand {
 public:
     explicit AddObjectCommand(std::shared_ptr<GeometricObject> object);
@@ -550,7 +419,6 @@ private:
     int m_objectId{-1};
 };
 
-// Command to remove a geometric object from the scene
 class RemoveObjectCommand : public AbstractCommand {
 public:
     explicit RemoveObjectCommand(int objectId);
@@ -565,7 +433,6 @@ private:
     std::shared_ptr<GeometricObject> m_removedObject;
 };
 
-// Command to transform a geometric object
 class TransformObjectCommand : public AbstractCommand {
 public:
     TransformObjectCommand(int objectId, const Eigen::Matrix3d& transformation);
@@ -581,14 +448,12 @@ private:
     Eigen::Matrix3d m_inverseTransform;
 };
 
-// Object style properties
 struct ObjectStyle {
     QColor color;
     double lineWidth;
     Qt::PenStyle lineStyle;
 };
 
-// Command to modify object visual properties
 class ModifyObjectStyleCommand : public AbstractCommand {
 public:
     ModifyObjectStyleCommand(int objectId, const ObjectStyle& newStyle);
@@ -604,7 +469,6 @@ private:
     ObjectStyle m_oldStyle;
 };
 
-// Compound command for executing multiple commands as a single operation
 class CompoundCommand : public AbstractCommand {
 public:
     CompoundCommand(const std::string& name);
@@ -620,9 +484,22 @@ private:
     std::string m_name;
 };
 
+class CurveCommand : public AbstractCommand {
+protected:
+    std::shared_ptr<Curve> m_curve;
+
+public:
+    explicit CurveCommand(std::shared_ptr<Curve> curve) : m_curve(curve) {}
+    virtual ~CurveCommand() = default;
+
+    bool redo() override {
+        return execute();
+    }
+};
+
 class AddControlPointCommand : public CurveCommand {
 public:
-    AddControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, const Point& point, int index = -1);
+    AddControlPointCommand(std::shared_ptr<Curve> curve, const Point& point, int index = -1);
     ~AddControlPointCommand() override = default;
 
     bool execute() override;
@@ -630,13 +507,13 @@ public:
 
 private:
     Point m_point;
-    int m_index;       // Pozycja do wstawienia lub -1 dla dodania na końcu
-    int m_addedIndex;  // Rzeczywisty indeks po dodaniu
+    int m_index;
+    int m_addedIndex;
 };
 
 class MoveControlPointCommand : public CurveCommand {
 public:
-    MoveControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, int pointIndex, const Point& newPosition);
+    MoveControlPointCommand(std::shared_ptr<Curve> curve, int pointIndex, const Point& newPosition);
     ~MoveControlPointCommand() override = default;
 
     bool execute() override;
@@ -650,7 +527,7 @@ private:
 
 class DeleteControlPointCommand : public CurveCommand {
 public:
-    DeleteControlPointCommand(std::shared_ptr<InterpolatedCurve> curve, int pointIndex);
+    DeleteControlPointCommand(std::shared_ptr<Curve> curve, int pointIndex);
     ~DeleteControlPointCommand() override = default;
 
     bool execute() override;
@@ -663,7 +540,7 @@ private:
 
 class BatchControlPointsCommand : public CurveCommand {
 public:
-    BatchControlPointsCommand(std::shared_ptr<InterpolatedCurve> curve, const std::vector<Point>& newPoints);
+    BatchControlPointsCommand(std::shared_ptr<Curve> curve, const std::vector<Point>& newPoints);
     ~BatchControlPointsCommand() override = default;
 
     bool execute() override;
@@ -672,76 +549,6 @@ public:
 private:
     std::vector<Point> m_oldPoints;
     std::vector<Point> m_newPoints;
-};
-
-// Komenda do dodawania krzywej Béziera
-class AddBezierCurveCommand : public AbstractCommand {
-public:
-    explicit AddBezierCurveCommand(std::shared_ptr<BezierCurve> curve);
-    ~AddBezierCurveCommand() override = default;
-
-    bool execute() override;
-    bool undo() override;
-    bool redo() override;
-
-private:
-    std::shared_ptr<BezierCurve> m_curve;
-    int m_curveId{-1};
-};
-
-// Komendy dla edycji punktów kontrolnych krzywej Béziera
-class BezierCurveCommand : public AbstractCommand {
-protected:
-    std::shared_ptr<BezierCurve> m_curve;
-
-public:
-    explicit BezierCurveCommand(std::shared_ptr<BezierCurve> curve) : m_curve(curve) {}
-    virtual ~BezierCurveCommand() = default;
-
-    bool redo() override {
-        return execute();
-    }
-};
-
-class AddBezierControlPointCommand : public BezierCurveCommand {
-public:
-    AddBezierControlPointCommand(std::shared_ptr<BezierCurve> curve, const Point& point, int index = -1);
-    ~AddBezierControlPointCommand() override = default;
-
-    bool execute() override;
-    bool undo() override;
-
-private:
-    Point m_point;
-    int m_index;
-    int m_addedIndex;
-};
-
-class MoveBezierControlPointCommand : public BezierCurveCommand {
-public:
-    MoveBezierControlPointCommand(std::shared_ptr<BezierCurve> curve, int pointIndex, const Point& newPosition);
-    ~MoveBezierControlPointCommand() override = default;
-
-    bool execute() override;
-    bool undo() override;
-
-private:
-    int m_pointIndex;
-    Point m_oldPosition;
-    Point m_newPosition;
-};
-
-class DeleteBezierControlPointCommand : public BezierCurveCommand {
-public:
-    DeleteBezierControlPointCommand(std::shared_ptr<BezierCurve> curve, int pointIndex);
-    ~DeleteBezierControlPointCommand() override = default;
-
-    bool execute() override;
-    bool undo() override;
-
-private:
-    int m_pointIndex;
-    Point m_deletedPoint;
 };
 
 //===== END FILE: Core\Command.h =====//
@@ -848,69 +655,144 @@ private:
 
 //===== END FILE: Core\CommandManager.h =====//
 
-//===== START FILE: Core\CurveCommand.h =====//
-
-#pragma once
-
-#include "AbstractCommand.h"
-#include "../Geometry/InterpolatedCurve.h"
-
-class CurveCommand : public AbstractCommand {
-protected:
-    std::shared_ptr<InterpolatedCurve> m_curve;
-
-public:
-    explicit CurveCommand(std::shared_ptr<InterpolatedCurve> curve) : m_curve(curve) {}
-    virtual ~CurveCommand() = default;
-
-    bool redo() override {
-        return execute();
-    }
-};
-
-//===== END FILE: Core\CurveCommand.h =====//
-
 //===== START FILE: Geometry\BezierCurve.cpp =====//
 
 #include "BezierCurve.h"
+#include <stdexcept>
+#include <algorithm>
 
-BezierCurve::BezierCurve() {
-}
-
-void BezierCurve::addControlPoint(const Point& point) {
-    m_controlPoints.push_back(point);
-}
-
-void BezierCurve::insertControlPoint(size_t index, const Point& point) {
-    if (index <= m_controlPoints.size())
-        m_controlPoints.insert(m_controlPoints.begin() + index, point);
-}
-
-void BezierCurve::removeControlPoint(size_t index) {
-    if (index < m_controlPoints.size())
-        m_controlPoints.erase(m_controlPoints.begin() + index);
-}
-
-void BezierCurve::setControlPoints(const std::vector<Point>& points) {
-    m_controlPoints = points;
-}
-
-void BezierCurve::moveControlPoint(size_t index, const Point& newPosition) {
-    if (index < m_controlPoints.size())
-        m_controlPoints[index] = newPosition;
-}
-
-const std::vector<Point>& BezierCurve::getControlPoints() const {
-    return m_controlPoints;
-}
-
-size_t BezierCurve::getControlPointCount() const {
-    return m_controlPoints.size();
+BezierCurve::BezierCurve() : Curve(CurveType::Bezier) {
 }
 
 int BezierCurve::getDegree() const {
     return static_cast<int>(m_controlPoints.size()) - 1;
 }
+
+std::unique_ptr<Curve> BezierCurve::createClone() const {
+    return std::make_unique<BezierCurve>();
+}
+
+void BezierCurve::copySpecificPropertiesTo(Curve* target) const {
+    if (auto bezierTarget = dynamic_cast<BezierCurve*>(target)) {
+        bezierTarget->m_weights = m_weights;
+    }
+}
+
+Point BezierCurve::getPointAt(double t) const {
+    validateParameterRange(t);
+
+    if (hasWeights()) {
+        return rationalDeCasteljau(t);
+    } else {
+        return deCasteljau(t);
+    }
+}
+
+Vector BezierCurve::getTangentAt(double t) const {
+    validateParameterRange(t);
+
+    if (hasWeights()) {
+        return rationalDeCasteljauDerivative(t);
+    } else {
+        return deCasteljauDerivative(t);
+    }
+}
+
+// === Obsługa wag ===
+
+void BezierCurve::setWeights(const std::vector<double>& weights) {
+    if (weights.size() != m_controlPoints.size()) {
+        throw std::invalid_argument("Liczba wag musi być równa liczbie punktów kontrolnych");
+    }
+
+    // Sprawdzenie czy wszystkie wagi są dodatnie
+    if (std::any_of(weights.begin(), weights.end(), [](double w) { return w <= 0.0; })) {
+        throw std::invalid_argument("Wszystkie wagi muszą być dodatnie");
+    }
+
+    m_weights = weights;
+    onControlPointsChanged();
+}
+
+const std::vector<double>& BezierCurve::getWeights() const {
+    return m_weights;
+}
+
+void BezierCurve::setWeight(size_t index, double weight) {
+    if (index >= m_controlPoints.size()) {
+        throw std::out_of_range("Indeks poza zakresem");
+    }
+
+    if (weight <= 0.0) {
+        throw std::invalid_argument("Waga musi być dodatnia");
+    }
+
+    ensureWeightsSize();
+    m_weights[index] = weight;
+    onControlPointsChanged();
+}
+
+double BezierCurve::getWeight(size_t index) const {
+    if (index >= m_controlPoints.size()) {
+        throw std::out_of_range("Indeks poza zakresem");
+    }
+
+    if (hasWeights() && index < m_weights.size()) {
+        return m_weights[index];
+    }
+
+    return 1.0; // Domyślna waga
+}
+
+bool BezierCurve::hasWeights() const {
+    return !m_weights.empty() && m_weights.size() == m_controlPoints.size();
+}
+
+void BezierCurve::clearWeights() {
+    m_weights.clear();
+    onControlPointsChanged();
+}
+
+// === Nadpisane metody z Curve ===
+
+void BezierCurve::addControlPoint(const Point& point) {
+    Curve::addControlPoint(point);
+
+    if (hasWeights()) {
+        m_weights.push_back(1.0); // Domyślna waga dla nowego punktu
+    }
+}
+
+void BezierCurve::insertControlPoint(size_t index, const Point& point) {
+    if (index <= m_controlPoints.size()) {
+        Curve::insertControlPoint(index, point);
+
+        if (hasWeights()) {
+            m_weights.insert(m_weights.begin() + index, 1.0);
+        }
+    }
+}
+
+void BezierCurve::removeControlPoint(size_t index) {
+    if (index < m_controlPoints.size()) {
+        Curve::removeControlPoint(index);
+
+        if (hasWeights() && index < m_weights.size()) {
+            m_weights.erase(m_weights.begin() + index);
+        }
+    }
+}
+
+void BezierCurve::setControlPoints(const std::vector<Point>& points) {
+    Curve::setControlPoints(points);
+
+    // Jeśli wcześniej były wagi, dostosuj ich liczbę
+    if (!m_weights.empty()) {
+        m_weights.resize(points.size(), 1.0);
+    }
+}
+
+// === Algorytmy de Casteljau ===
 
 Point BezierCurve::deCasteljau(const double t) const {
     if (m_controlPoints.empty())
@@ -919,27 +801,61 @@ Point BezierCurve::deCasteljau(const double t) const {
     if (m_controlPoints.size() == 1)
         return m_controlPoints[0];
 
-    // Kopiujemy punkty kontrolne do tymczasowej tablicy
     std::vector<Point> temp = m_controlPoints;
 
-    // Algorytm de Casteljau - iteracyjna implementacja
     for (size_t level = 1; level < m_controlPoints.size(); ++level) {
         for (size_t i = 0; i < m_controlPoints.size() - level; ++i) {
-            double x = (1.0 - t) * temp[i].x() + t * temp[i + 1].x();
-            double y = (1.0 - t) * temp[i].y() + t * temp[i + 1].y();
-            double z = (1.0 - t) * temp[i].z() + t * temp[i + 1].z();
-            temp[i] = Point(x, y, z);
+            temp[i] = interpolateLinear(temp[i], temp[i + 1], t);
         }
     }
 
     return temp[0];
 }
 
+Point BezierCurve::rationalDeCasteljau(double t) const {
+    if (m_controlPoints.empty())
+        return Point(0, 0, 0);
+
+    if (m_controlPoints.size() == 1)
+        return m_controlPoints[0];
+
+    validateWeights();
+
+    const size_t n = m_controlPoints.size();
+    std::vector<Point> tempPoints = m_controlPoints;
+    std::vector<double> tempWeights = m_weights;
+
+    for (size_t level = 1; level < n; ++level) {
+        for (size_t i = 0; i < n - level; ++i) {
+            // Oblicz nową wagę
+            const double newWeight = (1.0 - t) * tempWeights[i] + t * tempWeights[i + 1];
+
+            // Oblicz nowy punkt używając wag
+            const double w1 = (1.0 - t) * tempWeights[i];
+            const double w2 = t * tempWeights[i + 1];
+
+            const Point& p1 = tempPoints[i];
+            const Point& p2 = tempPoints[i + 1];
+
+            // Interpolacja z wagami: (w1*P1 + w2*P2) / (w1 + w2)
+            const double invNewWeight = 1.0 / newWeight;
+            tempPoints[i] = Point(
+                (w1 * p1.x() + w2 * p2.x()) * invNewWeight,
+                (w1 * p1.y() + w2 * p2.y()) * invNewWeight,
+                (w1 * p1.z() + w2 * p2.z()) * invNewWeight
+            );
+
+            tempWeights[i] = newWeight;
+        }
+    }
+
+    return tempPoints[0];
+}
+
 Vector BezierCurve::deCasteljauDerivative(double t) const {
     if (m_controlPoints.size() < 2)
         return Vector::Zero();
 
-    // Tworzymy krzywą różnicową (derivative curve)
     std::vector<Point> derivativePoints;
     int n = static_cast<int>(m_controlPoints.size()) - 1;
 
@@ -950,13 +866,9 @@ Vector BezierCurve::deCasteljauDerivative(double t) const {
         derivativePoints.emplace_back(dx, dy, dz);
     }
 
-    // Algorytm de Casteljau dla krzywej pochodnej
     for (size_t level = 1; level < derivativePoints.size(); ++level)
         for (size_t i = 0; i < derivativePoints.size() - level; ++i) {
-            double x = (1.0 - t) * derivativePoints[i].x() + t * derivativePoints[i + 1].x();
-            double y = (1.0 - t) * derivativePoints[i].y() + t * derivativePoints[i + 1].y();
-            double z = (1.0 - t) * derivativePoints[i].z() + t * derivativePoints[i + 1].z();
-            derivativePoints[i] = Point(x, y, z);
+            derivativePoints[i] = interpolateLinear(derivativePoints[i], derivativePoints[i + 1], t);
         }
 
     if (derivativePoints.empty())
@@ -965,76 +877,62 @@ Vector BezierCurve::deCasteljauDerivative(double t) const {
     return Vector(derivativePoints[0].x(), derivativePoints[0].y(), derivativePoints[0].z());
 }
 
-Point BezierCurve::getPointAt(double t) const {
-    t = std::max(0.0, std::min(1.0, t));
-    return deCasteljau(t);
-}
-
-Vector BezierCurve::getTangentAt(double t) const {
-    t = std::max(0.0, std::min(1.0, t));
-    return deCasteljauDerivative(t);
-}
-
-double BezierCurve::getLength() const {
+Vector BezierCurve::rationalDeCasteljauDerivative(double t) const {
     if (m_controlPoints.size() < 2)
-        return 0.0;
-
-    // Przybliżenie długości przez próbkowanie
-    constexpr int numSamples = 1000;
-    double length = 0.0;
-    Point prevPoint = getPointAt(0.0);
-
-    for (int i = 1; i <= numSamples; ++i) {
-        double t = static_cast<double>(i) / numSamples;
-        Point currentPoint = getPointAt(t);
-        length += prevPoint.distanceTo(currentPoint);
-        prevPoint = currentPoint;
-    }
-
-    return length;
-}
-
-Vector BezierCurve::getPosition() const {
-    if (m_controlPoints.empty())
         return Vector::Zero();
 
-    Vector sum = Vector::Zero();
-    for (const auto& point : m_controlPoints)
-        sum += Vector(point.x(), point.y(), point.z());
+    validateWeights();
 
-    return sum / static_cast<double>(m_controlPoints.size());
+    // Dla wymiernej krzywej Béziera: C(t) = S(t) / W(t)
+    // Pochodna: C'(t) = (S'(t) * W(t) - S(t) * W'(t)) / W(t)^2
+
+    // Oblicz S(t) - numerator (suma wagowanych punktów)
+    Point numerator = rationalDeCasteljau(t);
+    double denominator = 0.0;
+
+    // Oblicz W(t) - mianownik (suma wag)
+    const size_t n = m_controlPoints.size();
+    std::vector<double> tempWeights = m_weights;
+
+    for (size_t level = 1; level < n; ++level) {
+        for (size_t i = 0; i < n - level; ++i) {
+            tempWeights[i] = (1.0 - t) * tempWeights[i] + t * tempWeights[i + 1];
+        }
+    }
+    denominator = tempWeights[0];
+
+    // Oblicz pochodne używając różnic skończonych dla dokładności
+    const double epsilon = 1e-6;
+    const double t1 = std::max(0.0, t - epsilon);
+    const double t2 = std::min(1.0, t + epsilon);
+
+    const Point p1 = rationalDeCasteljau(t1);
+    const Point p2 = rationalDeCasteljau(t2);
+    const double dt = t2 - t1;
+
+    return Vector(
+        (p2.x() - p1.x()) / dt,
+        (p2.y() - p1.y()) / dt,
+        (p2.z() - p1.z()) / dt
+    );
 }
 
-void BezierCurve::setPosition(const Eigen::Vector3d& position) {
-    if (m_controlPoints.empty())
-        return;
+// === Metody pomocnicze ===
 
-    const Vector currentCenter = getPosition();
-    Vector delta = position - currentCenter;
-
-    for (auto& point : m_controlPoints) {
-        point.setX(point.x() + delta.x());
-        point.setY(point.y() + delta.y());
-        point.setZ(point.z() + delta.z());
+void BezierCurve::ensureWeightsSize() {
+    if (m_weights.size() != m_controlPoints.size()) {
+        m_weights.resize(m_controlPoints.size(), 1.0);
     }
 }
 
-void BezierCurve::transform(const TransformMatrix& matrix) {
-    for (auto& point : m_controlPoints)
-        point.transform(matrix);
-}
+void BezierCurve::validateWeights() const {
+    if (m_weights.size() != m_controlPoints.size()) {
+        throw std::runtime_error("Rozmiar wektorów wag i punktów kontrolnych nie jest zgodny");
+    }
 
-std::unique_ptr<Curve> BezierCurve::clone() const {
-    auto copy = std::make_unique<BezierCurve>();
-    copy->setControlPoints(m_controlPoints);
-    copy->setColor(m_color);
-    copy->setLineWidth(m_lineWidth);
-    copy->setLineStyle(m_lineStyle);
-    copy->setShowControlPolygon(m_showControlPolygon);
-    copy->setControlPolygonColor(m_controlPolygonColor);
-    copy->setControlPolygonWidth(m_controlPolygonWidth);
-    copy->setControlPolygonStyle(m_controlPolygonStyle);
-    return copy;
+    if (std::any_of(m_weights.begin(), m_weights.end(), [](double w) { return w <= 0.0; })) {
+        throw std::runtime_error("Wszystkie wagi muszą być dodatnie");
+    }
 }
 
 //===== END FILE: Geometry\BezierCurve.cpp =====//
@@ -1052,105 +950,501 @@ public:
 
     int getDegree() const;
 
-    // Curve
-    double getLength() const override;
     Point getPointAt(double t) const override;
     Vector getTangentAt(double t) const override;
-    std::unique_ptr<Curve> clone() const override;
 
-    bool hasControlPoints() const override { return true; }
+    // Obsługa wag dla wymiernych krzywych Béziera
+    void setWeights(const std::vector<double>& weights);
+    const std::vector<double>& getWeights() const;
+    void setWeight(size_t index, double weight);
+    double getWeight(size_t index) const;
+    bool hasWeights() const;
+    void clearWeights();
+
+    // Nadpisane metody z Curve dla obsługi wag
     void addControlPoint(const Point& point) override;
     void insertControlPoint(size_t index, const Point& point) override;
     void removeControlPoint(size_t index) override;
     void setControlPoints(const std::vector<Point>& points) override;
-    void moveControlPoint(size_t index, const Point& newPosition) override;
-    const std::vector<Point>& getControlPoints() const override;
-    size_t getControlPointCount() const override;
 
-    //  GeometricObject
-    Vector getPosition() const override;
-    void setPosition(const Eigen::Vector3d& position) override;
-    void transform(const TransformMatrix& matrix) override;
-
-    void setColor(const QColor& color) { m_color = color; }
-    QColor getColor() const { return m_color; }
-
-    void setLineWidth(double width) { m_lineWidth = width; }
-    double getLineWidth() const { return m_lineWidth; }
-
-    void setLineStyle(Qt::PenStyle style) { m_lineStyle = style; }
-    Qt::PenStyle getLineStyle() const { return m_lineStyle; }
-
-    void setShowControlPolygon(bool show) { m_showControlPolygon = show; }
-    bool getShowControlPolygon() const { return m_showControlPolygon; }
-
-    void setControlPolygonColor(const QColor& color) { m_controlPolygonColor = color; }
-    QColor getControlPolygonColor() const { return m_controlPolygonColor; }
-
-    void setControlPolygonWidth(double width) { m_controlPolygonWidth = width; }
-    double getControlPolygonWidth() const { return m_controlPolygonWidth; }
-
-    void setControlPolygonStyle(Qt::PenStyle style) { m_controlPolygonStyle = style; }
-    Qt::PenStyle getControlPolygonStyle() const { return m_controlPolygonStyle; }
+protected:
+    std::unique_ptr<Curve> createClone() const override;
+    void copySpecificPropertiesTo(Curve* target) const override;
 
 private:
-    std::vector<Point> m_controlPoints;
+    // Algorytmy de Casteljau
+    Point deCasteljau(double t) const;                    // Zwykły algorytm
+    Point rationalDeCasteljau(double t) const;            // Wymierny algorytm
+    Vector deCasteljauDerivative(double t) const;         // Zwykła pochodna
+    Vector rationalDeCasteljauDerivative(double t) const; // Wymierna pochodna
 
-    QColor m_color{Qt::blue};
-    double m_lineWidth{2.0};
-    Qt::PenStyle m_lineStyle{Qt::SolidLine};
+    // Pomocnicze metody dla wymiernych krzywych
+    void ensureWeightsSize();
+    void validateWeights() const;
 
-    bool m_showControlPolygon{true};
-    QColor m_controlPolygonColor{Qt::darkGray};
-    double m_controlPolygonWidth{1.0};
-    Qt::PenStyle m_controlPolygonStyle{Qt::DashLine};
-
-    Point deCasteljau(double t) const;
-    Vector deCasteljauDerivative(double t) const;
+    std::vector<double> m_weights;
 };
 
 //===== END FILE: Geometry\BezierCurve.h =====//
+
+//===== START FILE: Geometry\Curve.cpp =====//
+
+#include "Curve.h"
+#include "TransformMatrix.h"
+
+DefaultCurveConfig Curve::createDefaultConfig(CurveType type) {
+    DefaultCurveConfig config;
+
+    switch (type) {
+        case CurveType::Bezier:
+            config.lineWidth = 2.0;
+            config.color = Qt::blue;
+            config.showControlPoints = true;
+            break;
+
+        case CurveType::Interpolated:
+            config.lineWidth = 1.0;
+            config.color = Qt::blue;
+            config.showControlPoints = true;
+            break;
+
+        case CurveType::Generic:
+        default:
+            config.lineWidth = 1.5;
+            config.color = Qt::black;
+            config.showControlPoints = false;
+            break;
+    }
+
+    return config;
+}
+
+Curve::Curve(CurveType type) : m_type(type) {
+    DefaultCurveConfig config = createDefaultConfig(type);
+    initializeFromConfig(config);
+    initializePrecisionConfig(type);
+}
+
+Curve::Curve(const DefaultCurveConfig& config) : m_type(CurveType::Generic) {
+    initializeFromConfig(config);
+    initializePrecisionConfig(CurveType::Generic);
+}
+
+void Curve::initializePrecisionConfig(CurveType type) {
+    switch (type) {
+        case CurveType::Bezier:
+            m_precisionConfig.lengthSamples = 1000;
+            m_precisionConfig.tangentEpsilon = 1e-6;
+            m_precisionConfig.renderSamples = 1000;
+            break;
+
+        case CurveType::Interpolated:
+            m_precisionConfig.lengthSamples = 200;
+            m_precisionConfig.tangentEpsilon = 1e-6;
+            m_precisionConfig.renderSamples = 200;
+            break;
+
+        case CurveType::Generic:
+        default:
+            m_precisionConfig.lengthSamples = 500;
+            m_precisionConfig.tangentEpsilon = 1e-6;
+            m_precisionConfig.renderSamples = 500;
+            break;
+    }
+}
+
+void Curve::initializeFromConfig(const DefaultCurveConfig& config) {
+    m_style.color = config.color;
+    m_style.lineWidth = config.lineWidth;
+    m_style.lineStyle = config.lineStyle;
+
+    m_controlPointStyle.show = config.showControlPoints;
+    m_controlPointStyle.normalColor = config.controlPointNormalColor;
+    m_controlPointStyle.selectedColor = config.controlPointSelectedColor;
+    m_controlPointStyle.activeColor = config.controlPointActiveColor;
+    m_controlPointStyle.size = config.controlPointSize;
+
+    m_drawPolyline = config.drawPolyline;
+    m_drawConvexHull = config.drawConvexHull;
+    m_drawMainCurve = true;
+
+    m_polylineColor = config.polylineColor;
+    m_polylineWidth = config.polylineWidth;
+    m_polylineStyle = config.polylineStyle;
+
+    m_convexHullColor = config.convexHullColor;
+    m_convexHullWidth = config.convexHullWidth;
+    m_convexHullStyle = config.convexHullStyle;
+}
+
+double Curve::getLength() const {
+    return calculateLengthByDiscretization();
+}
+
+std::unique_ptr<Curve> Curve::clone() const {
+    auto copy = createClone();
+    copy->setControlPoints(m_controlPoints);
+    copyStylesTo(copy.get());
+    copySpecificPropertiesTo(copy.get());
+    return copy;
+}
+
+void Curve::addControlPoint(const Point& point) {
+    m_controlPoints.push_back(point);
+    onControlPointsChanged();
+}
+
+void Curve::insertControlPoint(size_t index, const Point& point) {
+    if (index <= m_controlPoints.size()) {
+        m_controlPoints.insert(m_controlPoints.begin() + index, point);
+        onControlPointsChanged();
+    }
+}
+
+void Curve::removeControlPoint(size_t index) {
+    if (index < m_controlPoints.size()) {
+        m_controlPoints.erase(m_controlPoints.begin() + index);
+        onControlPointsChanged();
+    }
+}
+
+void Curve::setControlPoints(const std::vector<Point>& points) {
+    m_controlPoints = points;
+    onControlPointsChanged();
+}
+
+void Curve::moveControlPoint(size_t index, const Point& newPosition) {
+    if (index < m_controlPoints.size()) {
+        m_controlPoints[index] = newPosition;
+        onControlPointsChanged();
+    }
+}
+
+const std::vector<Point>& Curve::getControlPoints() const {
+    return m_controlPoints;
+}
+
+size_t Curve::getControlPointCount() const {
+    return m_controlPoints.size();
+}
+
+void Curve::copyStylesTo(Curve* target) const {
+    if (!target) return;
+
+    target->setStyle(m_style);
+    target->setControlPointStyle(m_controlPointStyle);
+    target->setDrawPolyline(m_drawPolyline);
+    target->setDrawConvexHull(m_drawConvexHull);
+    target->setPolylineColor(m_polylineColor);
+    target->setPolylineWidth(m_polylineWidth);
+    target->setPolylineStyle(m_polylineStyle);
+    target->setConvexHullColor(m_convexHullColor);
+    target->setConvexHullWidth(m_convexHullWidth);
+    target->setConvexHullStyle(m_convexHullStyle);
+    target->setDrawMainCurve(m_drawMainCurve);
+    target->setPrecisionConfig(m_precisionConfig);
+}
+
+Vector Curve::getPosition() const {
+    if (!hasControlPoints() || getControlPointCount() == 0)
+        return Vector::Zero();
+
+    const auto& points = getControlPoints();
+    Vector sum = Vector::Zero();
+    for (const auto& point : points)
+        sum += Vector(point.x(), point.y(), point.z());
+
+    return sum / static_cast<double>(points.size());
+}
+
+void Curve::setPosition(const Eigen::Vector3d& position) {
+    if (!hasControlPoints() || getControlPointCount() == 0)
+        return;
+
+    const Vector currentCenter = getPosition();
+    Vector delta = position - currentCenter;
+
+    auto points = getControlPoints();
+    for (auto& point : points) {
+        point.setX(point.x() + delta.x());
+        point.setY(point.y() + delta.y());
+        point.setZ(point.z() + delta.z());
+    }
+    setControlPoints(points);
+}
+
+void Curve::transform(const TransformMatrix& matrix) {
+    if (!hasControlPoints())
+        return;
+
+    auto points = getControlPoints();
+    for (auto& point : points)
+        point.transform(matrix);
+    setControlPoints(points);
+}
+
+double Curve::calculateLengthByDiscretization(int numSamples) const {
+    if (m_controlPoints.size() < 2)
+        return 0.0;
+
+    if (numSamples <= 0)
+        numSamples = getDefaultLengthSamples();
+
+    double length = 0.0;
+    Point prevPoint = getPointAt(0.0);
+
+    for (int i = 1; i <= numSamples; ++i) {
+        double t = static_cast<double>(i) / numSamples;
+        Point currentPoint = getPointAt(t);
+        length += prevPoint.distanceTo(currentPoint);
+        prevPoint = currentPoint;
+    }
+
+    return length;
+}
+
+Vector Curve::calculateTangentByFiniteDifference(double t, double epsilon) const {
+    if (epsilon <= 0.0)
+        epsilon = getDefaultTangentEpsilon();
+
+    Point p1 = getPointAt(t);
+    Point p2 = getPointAt(t + epsilon);
+
+    return Vector(
+        (p2.x() - p1.x()) / epsilon,
+        (p2.y() - p1.y()) / epsilon,
+        (p2.z() - p1.z()) / epsilon
+    );
+}
+
+bool Curve::validateParameterRange(double& t) const {
+    t = std::max(0.0, std::min(1.0, t));
+    return t >= 0.0 && t <= 1.0;
+}
+
+Point Curve::interpolateLinear(const Point& p1, const Point& p2, double t) const {
+    const double oneMinusT = 1.0 - t;
+    return Point(
+        oneMinusT * p1.x() + t * p2.x(),
+        oneMinusT * p1.y() + t * p2.y(),
+        oneMinusT * p1.z() + t * p2.z()
+    );
+}
+
+double Curve::calculateParameterForSegment(size_t segmentIndex, size_t totalSegments, double localT) const {
+    double segmentLength = 1.0 / totalSegments;
+    return segmentIndex * segmentLength + localT * segmentLength;
+}
+
+//===== END FILE: Geometry\Curve.cpp =====//
 
 //===== START FILE: Geometry\Curve.h =====//
 
 #pragma once
 
 #include "GeometricObject.h"
+#include "CurveStyle.h"
 #include <vector>
 #include "Point.h"
-#include <QColor>
 
-// Forward declarations
-class Point;
+enum class CurveType {
+    Bezier,
+    Interpolated,
+    Generic
+};
+
+struct DefaultCurveConfig {
+    double lineWidth = 2.0;
+    QColor color = Qt::blue;
+    Qt::PenStyle lineStyle = Qt::SolidLine;
+    bool showControlPoints = true;
+    double controlPointSize = 5.0;
+    QColor controlPointNormalColor = Qt::blue;
+    QColor controlPointSelectedColor = Qt::red;
+    QColor controlPointActiveColor = Qt::green;
+
+    bool drawPolyline = false;
+    bool drawConvexHull = false;
+    QColor polylineColor = Qt::darkGreen;
+    double polylineWidth = 1.0;
+    Qt::PenStyle polylineStyle = Qt::DashLine;
+
+    QColor convexHullColor = Qt::red;
+    double convexHullWidth = 1.0;
+    Qt::PenStyle convexHullStyle = Qt::DotLine;
+};
+
+struct CurvePrecisionConfig {
+    int lengthSamples = 1000;
+    double tangentEpsilon = 1e-6;
+    int renderSamples = 1000;
+};
 
 class Curve : public GeometricObject {
 public:
-    Curve(){};
+    explicit Curve(CurveType type = CurveType::Generic);
+    explicit Curve(const DefaultCurveConfig& config);
     ~Curve() override = default;
 
-    virtual double getLength() const = 0;
+    static DefaultCurveConfig createDefaultConfig(CurveType type);
+
+    CurveType getType() const { return m_type; }
+    bool isType(CurveType type) const { return m_type == type; }
+
+    virtual double getLength() const;
     virtual Point getPointAt(double t) const = 0;
     virtual Vector getTangentAt(double t) const = 0;
+    std::unique_ptr<Curve> clone() const;
 
-    virtual std::unique_ptr<Curve> clone() const = 0;
+    virtual bool hasControlPoints() const { return true; }
+    virtual void addControlPoint(const Point& point);
+    virtual void insertControlPoint(size_t index, const Point& point);
+    virtual void removeControlPoint(size_t index);
+    virtual void setControlPoints(const std::vector<Point>& points);
+    virtual void moveControlPoint(size_t index, const Point& newPosition);
+    virtual const std::vector<Point>& getControlPoints() const;
+    virtual size_t getControlPointCount() const;
 
-    virtual bool hasControlPoints() const { return false; }
-    virtual void addControlPoint(const Point& point) {}
-    virtual void insertControlPoint(size_t index, const Point& point) {}
-    virtual void removeControlPoint(size_t index) {}
-    virtual void setControlPoints(const std::vector<Point>& points) {}
-    virtual void moveControlPoint(size_t index, const Point& newPosition) {}
-    virtual const std::vector<Point>& getControlPoints() const {
-        static std::vector<Point> empty;
-        return empty;
-    }
-    virtual size_t getControlPointCount() const { return 0; }
+    Vector getPosition() const override;
+    void setPosition(const Eigen::Vector3d& position) override;
+    void transform(const TransformMatrix& matrix) override;
 
-    // Override from GeometricObject
-    void transform(const TransformMatrix& matrix) override = 0;
+    const CurveStyle& getStyle() const { return m_style; }
+    void setStyle(const CurveStyle& style) { m_style = style; }
+
+    void setColor(const QColor& color) { m_style.color = color; }
+    QColor getColor() const { return m_style.color; }
+
+    void setLineWidth(double width) { m_style.lineWidth = width; }
+    double getLineWidth() const { return m_style.lineWidth; }
+
+    void setLineStyle(Qt::PenStyle style) { m_style.lineStyle = style; }
+    Qt::PenStyle getLineStyle() const { return m_style.lineStyle; }
+
+    const ControlPointStyle& getControlPointStyle() const { return m_controlPointStyle; }
+    void setControlPointStyle(const ControlPointStyle& style) { m_controlPointStyle = style; }
+
+    void setShowControlPoints(bool show) { m_controlPointStyle.show = show; }
+    bool getShowControlPoints() const { return m_controlPointStyle.show; }
+
+    void setControlPointNormalColor(const QColor& color) { m_controlPointStyle.normalColor = color; }
+    QColor getControlPointNormalColor() const { return m_controlPointStyle.normalColor; }
+
+    void setControlPointSelectedColor(const QColor& color) { m_controlPointStyle.selectedColor = color; }
+    QColor getControlPointSelectedColor() const { return m_controlPointStyle.selectedColor; }
+
+    void setControlPointActiveColor(const QColor& color) { m_controlPointStyle.activeColor = color; }
+    QColor getControlPointActiveColor() const { return m_controlPointStyle.activeColor; }
+
+    void setControlPointSize(double size) { m_controlPointStyle.size = size; }
+    double getControlPointSize() const { return m_controlPointStyle.size; }
+
+    bool getDrawPolyline() const { return m_drawPolyline; }
+    void setDrawPolyline(bool draw) { m_drawPolyline = draw; }
+
+    bool getDrawConvexHull() const { return m_drawConvexHull; }
+    void setDrawConvexHull(bool draw) { m_drawConvexHull = draw; }
+
+    QColor getPolylineColor() const { return m_polylineColor; }
+    void setPolylineColor(const QColor& color) { m_polylineColor = color; }
+
+    double getPolylineWidth() const { return m_polylineWidth; }
+    void setPolylineWidth(double width) { m_polylineWidth = width; }
+
+    Qt::PenStyle getPolylineStyle() const { return m_polylineStyle; }
+    void setPolylineStyle(Qt::PenStyle style) { m_polylineStyle = style; }
+
+    QColor getConvexHullColor() const { return m_convexHullColor; }
+    void setConvexHullColor(const QColor& color) { m_convexHullColor = color; }
+
+    double getConvexHullWidth() const { return m_convexHullWidth; }
+    void setConvexHullWidth(double width) { m_convexHullWidth = width; }
+
+    Qt::PenStyle getConvexHullStyle() const { return m_convexHullStyle; }
+    void setConvexHullStyle(Qt::PenStyle style) { m_convexHullStyle = style; }
+
+    virtual bool getDrawMainCurve() const { return m_drawMainCurve; }
+    virtual void setDrawMainCurve(bool draw) { m_drawMainCurve = draw; }
+
+    const CurvePrecisionConfig& getPrecisionConfig() const { return m_precisionConfig; }
+    void setPrecisionConfig(const CurvePrecisionConfig& config) { m_precisionConfig = config; }
+
+    virtual int getDefaultLengthSamples() const { return m_precisionConfig.lengthSamples; }
+    virtual double getDefaultTangentEpsilon() const { return m_precisionConfig.tangentEpsilon; }
+    virtual int getDefaultRenderSamples() const { return m_precisionConfig.renderSamples; }
+
+protected:
+    virtual std::unique_ptr<Curve> createClone() const = 0;
+    virtual void copySpecificPropertiesTo(Curve* target) const {}
+
+    void copyStylesTo(Curve* target) const;
+    virtual void onControlPointsChanged() {}
+
+    double calculateLengthByDiscretization(int numSamples = -1) const;
+    Vector calculateTangentByFiniteDifference(double t, double epsilon = -1.0) const;
+    bool validateParameterRange(double& t) const;
+    Point interpolateLinear(const Point& p1, const Point& p2, double t) const;
+    double calculateParameterForSegment(size_t segmentIndex, size_t totalSegments, double localT) const;
+
+    std::vector<Point> m_controlPoints;
+    CurveStyle m_style;
+    ControlPointStyle m_controlPointStyle;
+
+    bool m_drawPolyline{false};
+    bool m_drawConvexHull{false};
+    bool m_drawMainCurve{true};
+
+    QColor m_polylineColor{Qt::darkGreen};
+    double m_polylineWidth{1.0};
+    Qt::PenStyle m_polylineStyle{Qt::DashLine};
+
+    QColor m_convexHullColor{Qt::red};
+    double m_convexHullWidth{1.0};
+    Qt::PenStyle m_convexHullStyle{Qt::DotLine};
+
+    CurvePrecisionConfig m_precisionConfig;
+
+private:
+    void initializeFromConfig(const DefaultCurveConfig& config);
+    void initializePrecisionConfig(CurveType type);
+
+    CurveType m_type;
 };
 
 //===== END FILE: Geometry\Curve.h =====//
+
+//===== START FILE: Geometry\CurveStyle.h =====//
+
+#pragma once
+
+#include <QColor>
+#include <Qt>
+
+struct CurveStyle {
+    QColor color{Qt::blue};
+    double lineWidth{1.0};
+    Qt::PenStyle lineStyle{Qt::SolidLine};
+
+    CurveStyle() = default;
+    CurveStyle(const QColor& c, double w, Qt::PenStyle s)
+        : color(c), lineWidth(w), lineStyle(s) {}
+};
+
+struct ControlPointStyle {
+    bool show{true};
+    QColor normalColor{Qt::blue};
+    QColor selectedColor{Qt::red};
+    QColor activeColor{Qt::green};
+    double size{5.0};
+
+    ControlPointStyle() = default;
+    ControlPointStyle(bool s, const QColor& normal, const QColor& selected,
+                     const QColor& active, double sz)
+        : show(s), normalColor(normal), selectedColor(selected),
+          activeColor(active), size(sz) {}
+};
+
+//===== END FILE: Geometry\CurveStyle.h =====//
 
 //===== START FILE: Geometry\GeometricObject.h =====//
 
@@ -1281,46 +1575,25 @@ private:
 
 InterpolatedCurve::InterpolatedCurve(std::shared_ptr<IMathProvider> mathProvider,
                                     InterpolationType type)
-    : type(type),
-      mathProvider(std::move(mathProvider)){}
+    : Curve(CurveType::Interpolated),
+      type(type),
+      mathProvider(std::move(mathProvider))
+{
+}
 
-void InterpolatedCurve::addControlPoint(const Point& point) {
-    points.push_back(point);
+std::unique_ptr<Curve> InterpolatedCurve::createClone() const {
+    return std::make_unique<InterpolatedCurve>(mathProvider, type);
+}
+
+void InterpolatedCurve::copySpecificPropertiesTo(Curve* target) const {
+    if (auto interpolatedTarget = dynamic_cast<InterpolatedCurve*>(target)) {
+        interpolatedTarget->type = type;
+        interpolatedTarget->mathProvider = mathProvider;
+    }
+}
+
+void InterpolatedCurve::onControlPointsChanged() {
     needsRebuild = true;
-}
-
-void InterpolatedCurve::insertControlPoint(const size_t index, const Point& point) {
-    if (index <= points.size()) {
-        points.insert(points.begin() + index, point);
-        needsRebuild = true;
-    }
-}
-
-void InterpolatedCurve::removeControlPoint(const size_t index) {
-    if (index < points.size()) {
-        points.erase(points.begin() + index);
-        needsRebuild = true;
-    }
-}
-
-void InterpolatedCurve::setControlPoints(const std::vector<Point>& newPoints) {
-    points = newPoints;
-    needsRebuild = true;
-}
-
-void InterpolatedCurve::moveControlPoint(size_t index, const Point& newPosition) {
-    if (index < points.size()) {
-        points[index] = newPosition;
-        needsRebuild = true;
-    }
-}
-
-const std::vector<Point>& InterpolatedCurve::getControlPoints() const {
-    return points;
-}
-
-size_t InterpolatedCurve::getControlPointCount() const {
-    return points.size();
 }
 
 void InterpolatedCurve::setInterpolationType(InterpolationType newType) {
@@ -1330,10 +1603,12 @@ void InterpolatedCurve::setInterpolationType(InterpolationType newType) {
     }
 }
 
-InterpolatedCurve::InterpolationType InterpolatedCurve::getInterpolationType() const { return type; }
+InterpolatedCurve::InterpolationType InterpolatedCurve::getInterpolationType() const {
+    return type;
+}
 
 void InterpolatedCurve::rebuildInterpolation() const {
-    if (!needsRebuild || points.size() < 2) {
+    if (!needsRebuild || m_controlPoints.size() < 2) {
         needsRebuild = false;
         return;
     }
@@ -1357,19 +1632,105 @@ void InterpolatedCurve::rebuildInterpolation() const {
     needsRebuild = false;
 }
 
+Vector InterpolatedCurve::getTangentAt(double t) const {
+    return calculateTangentByFiniteDifference(t);
+}
+
+Point InterpolatedCurve::getPointAt(double t) const {
+    if (m_controlPoints.empty()) return Point(0.0, 0.0, 0.0);
+    if (m_controlPoints.size() == 1) return m_controlPoints[0];
+
+    if (needsRebuild) {
+        rebuildInterpolation();
+    }
+
+    validateParameterRange(t);
+
+    size_t numSegments = (type == InterpolationType::OIFS3) ? m_controlPoints.size() : (m_controlPoints.size() - 1);
+    double segmentLength = 1.0 / numSegments;
+    size_t segmentIndex = std::min(static_cast<size_t>(t / segmentLength), numSegments - 1);
+    double localT = (t - segmentIndex * segmentLength) / segmentLength;
+
+    if (type == InterpolationType::NIFS3 || type == InterpolationType::OIFS3) {
+        if (segmentIndex >= coefficients.size())
+            return m_controlPoints[m_controlPoints.size() - 1];
+
+        const auto& coef = coefficients[segmentIndex];
+        Eigen::Vector4d tVec;
+        tVec << 1.0, localT, localT*localT, localT*localT*localT;
+
+        double x = tVec.dot(coef.col(0));
+        double y = tVec.dot(coef.col(1));
+
+        return Point(x, y, 0.0);
+    }
+    else if (type == InterpolationType::Lagrange) {
+        double x = 0.0;
+        double y = 0.0;
+
+        for (size_t i = 0; i < m_controlPoints.size(); ++i) {
+            double L = 1.0;
+            for (size_t j = 0; j < m_controlPoints.size(); ++j) {
+                if (i != j) {
+                    double tj = static_cast<double>(j) / (m_controlPoints.size() - 1);
+                    double ti = static_cast<double>(i) / (m_controlPoints.size() - 1);
+                    L *= (t - tj) / (ti - tj);
+                }
+            }
+            x += m_controlPoints[i].x() * L;
+            y += m_controlPoints[i].y() * L;
+        }
+
+        return Point(x, y, 0.0);
+    }
+    else if (type == InterpolationType::Barycentric) {
+        double x = 0.0;
+        double y = 0.0;
+        double sumW = 0.0;
+
+        std::vector<double> weights(m_controlPoints.size());
+        for (size_t i = 0; i < m_controlPoints.size(); ++i) {
+            double ti = static_cast<double>(i) / (m_controlPoints.size() - 1);
+            weights[i] = 1.0;
+            for (size_t j = 0; j < m_controlPoints.size(); ++j) {
+                if (i != j) {
+                    double tj = static_cast<double>(j) / (m_controlPoints.size() - 1);
+                    weights[i] *= (ti - tj);
+                }
+            }
+            weights[i] = 1.0 / weights[i];
+        }
+
+        for (size_t i = 0; i < m_controlPoints.size(); ++i) {
+            double ti = static_cast<double>(i) / (m_controlPoints.size() - 1);
+
+            if (std::abs(t - ti) < 1e-10) {
+                return m_controlPoints[i];
+            }
+
+            double w = weights[i] / (t - ti);
+            x += m_controlPoints[i].x() * w;
+            y += m_controlPoints[i].y() * w;
+            sumW += w;
+        }
+        return {x / sumW, y / sumW, 0.0};
+    }
+
+    const size_t nextIndex = (segmentIndex + 1) % m_controlPoints.size();
+    return interpolateLinear(m_controlPoints[segmentIndex], m_controlPoints[nextIndex], localT);
+}
+
 void InterpolatedCurve::buildNIFS3() const {
-    const size_t n = points.size();
+    const size_t n = m_controlPoints.size();
     if (n < 2) return;
 
-    // Parametryzacja od 0 do 1
     std::vector<double> xs(n), ys_x(n), ys_y(n);
     for (size_t i = 0; i < n; ++i) {
         xs[i] = static_cast<double>(i) / (n - 1);
-        ys_x[i] = points[i].x();
-        ys_y[i] = points[i].y();
+        ys_x[i] = m_controlPoints[i].x();
+        ys_y[i] = m_controlPoints[i].y();
     }
 
-    // Obliczanie ilorazów różnicowych
     std::vector<double> ds_x;
     std::vector<double> ds_y;
     for (size_t i = 1; i < n - 1; ++i) {
@@ -1381,7 +1742,6 @@ void InterpolatedCurve::buildNIFS3() const {
         ds_y.push_back(6.0 * (term1_y - term2_y) / (xs[i + 1] - xs[i - 1]));
     }
 
-    // Współczynniki p
     std::vector<double> ps;
     ps.push_back(0.0);
     for (size_t i = 1; i < n - 1; ++i) {
@@ -1389,7 +1749,6 @@ void InterpolatedCurve::buildNIFS3() const {
         ps.push_back((lambda - 1.0) / (lambda * ps[i - 1] + 2.0));
     }
 
-    // Współczynniki q dla x i y
     std::vector<double> qs_x;
     std::vector<double> qs_y;
     qs_x.push_back(0.0);
@@ -1400,11 +1759,9 @@ void InterpolatedCurve::buildNIFS3() const {
         qs_y.push_back((ds_y[i - 1] - lambda * qs_y[i - 1]) / (lambda * ps[i - 1] + 2.0));
     }
 
-    // Momenty M - dokładnie jak w Pythonie
     std::vector<double> M_x(n, 0.0), M_y(n, 0.0);
 
-    // Uzupełniamy wartości od końca, zgodnie z algorytmem Pythona
-    M_x[n-1] = 0.0;  // Naturalne warunki brzegowe
+    M_x[n-1] = 0.0;
     M_y[n-1] = 0.0;
     M_x[n-2] = qs_x.back();
     M_y[n-2] = qs_y.back();
@@ -1413,16 +1770,12 @@ void InterpolatedCurve::buildNIFS3() const {
         M_x[i] = ps[i] * M_x[i+1] + qs_x[i];
         M_y[i] = ps[i] * M_y[i+1] + qs_y[i];
     }
-    // M_x[0] i M_y[0] pozostają równe 0 (naturalne warunki brzegowe)
 
-    // Obliczanie współczynników wielomianów
     coefficients.clear();
     for (size_t i = 0; i < n - 1; ++i) {
         double h = xs[i + 1] - xs[i];
         Eigen::Matrix<double, 4, 2> coef;
 
-        // Obliczamy współczynniki dla wielomianu w formie standardowej
-        // a + b*t + c*t^2 + d*t^3
         coef(0, 0) = ys_x[i];
         coef(1, 0) = (ys_x[i + 1] - ys_x[i]) - (h * h / 6.0) * (M_x[i + 1] + 2.0 * M_x[i]);
         coef(2, 0) = (h * h / 2.0) * M_x[i];
@@ -1438,7 +1791,7 @@ void InterpolatedCurve::buildNIFS3() const {
 }
 
 void InterpolatedCurve::buildOIFS3() const {
-    const size_t n = points.size();
+    const size_t n = m_controlPoints.size();
     if (n < 3) return;
 
     Eigen::MatrixXd A = Eigen::MatrixXd::Zero(n, n);
@@ -1453,8 +1806,8 @@ void InterpolatedCurve::buildOIFS3() const {
         A(i, i) = 4.0;
         A(i, next) = 1.0;
 
-        bx(i) = 3.0 * (points[next].x() - points[prev].x());
-        by(i) = 3.0 * (points[next].y() - points[prev].y());
+        bx(i) = 3.0 * (m_controlPoints[next].x() - m_controlPoints[prev].x());
+        by(i) = 3.0 * (m_controlPoints[next].y() - m_controlPoints[prev].y());
     }
 
     Eigen::VectorXd cx = A.colPivHouseholderQr().solve(bx);
@@ -1465,181 +1818,28 @@ void InterpolatedCurve::buildOIFS3() const {
 
         Eigen::Matrix<double, 4, 2> coef;
 
-        coef(0, 0) = points[i].x();
+        coef(0, 0) = m_controlPoints[i].x();
         coef(1, 0) = cx(i);
-        coef(2, 0) = 3.0 * (points[next].x() - points[i].x()) - 2.0 * cx(i) - cx(next);
-        coef(3, 0) = 2.0 * (points[i].x() - points[next].x()) + cx(i) + cx(next);
+        coef(2, 0) = 3.0 * (m_controlPoints[next].x() - m_controlPoints[i].x()) - 2.0 * cx(i) - cx(next);
+        coef(3, 0) = 2.0 * (m_controlPoints[i].x() - m_controlPoints[next].x()) + cx(i) + cx(next);
 
-        coef(0, 1) = points[i].y();
+        coef(0, 1) = m_controlPoints[i].y();
         coef(1, 1) = cy(i);
-        coef(2, 1) = 3.0 * (points[next].y() - points[i].y()) - 2.0 * cy(i) - cy(next);
-        coef(3, 1) = 2.0 * (points[i].y() - points[next].y()) + cy(i) + cy(next);
+        coef(2, 1) = 3.0 * (m_controlPoints[next].y() - m_controlPoints[i].y()) - 2.0 * cy(i) - cy(next);
+        coef(3, 1) = 2.0 * (m_controlPoints[i].y() - m_controlPoints[next].y()) + cy(i) + cy(next);
 
         coefficients.push_back(coef);
     }
 }
 
 void InterpolatedCurve::buildLagrange() const {
-    const size_t n = points.size();
+    const size_t n = m_controlPoints.size();
     if (n < 2) return;
 }
 
 void InterpolatedCurve::buildBarycentric() const {
-    const size_t n = points.size();
+    const size_t n = m_controlPoints.size();
     if (n < 2) return;
-}
-
-Vector InterpolatedCurve::getTangentAt(double t) const {
-    const double epsilon = 1e-6;
-    Point p1 = getPointAt(t);
-    Point p2 = getPointAt(t + epsilon);
-
-    return Vector(
-        (p2.x() - p1.x()) / epsilon,
-        (p2.y() - p1.y()) / epsilon,
-        (p2.z() - p1.z()) / epsilon
-    );
-}
-
-Point InterpolatedCurve::getPointAt(double t) const {
-    if (points.empty()) return Point(0.0, 0.0, 0.0);
-    if (points.size() == 1) return points[0];
-
-    if (needsRebuild) {
-        rebuildInterpolation();
-    }
-
-    t = std::max(0.0, std::min(1.0, t));
-
-    size_t numSegments = (type == InterpolationType::OIFS3) ? points.size() : (points.size() - 1);
-    double segmentLength = 1.0 / numSegments;
-    size_t segmentIndex = std::min(static_cast<size_t>(t / segmentLength), numSegments - 1);
-    double localT = (t - segmentIndex * segmentLength) / segmentLength;
-
-    if (type == InterpolationType::NIFS3 || type == InterpolationType::OIFS3) {
-        if (segmentIndex >= coefficients.size())
-            return points[points.size() - 1];
-
-        const auto& coef = coefficients[segmentIndex];
-        Eigen::Vector4d tVec;
-        tVec << 1.0, localT, localT*localT, localT*localT*localT;
-
-        double x = tVec.dot(coef.col(0));
-        double y = tVec.dot(coef.col(1));
-
-        return Point(x, y, 0.0);
-    }
-    else if (type == InterpolationType::Lagrange) {
-        double x = 0.0;
-        double y = 0.0;
-
-        for (size_t i = 0; i < points.size(); ++i) {
-            double L = 1.0;
-            for (size_t j = 0; j < points.size(); ++j) {
-                if (i != j) {
-                    double tj = static_cast<double>(j) / (points.size() - 1);
-                    double ti = static_cast<double>(i) / (points.size() - 1);
-                    L *= (t - tj) / (ti - tj);
-                }
-            }
-            x += points[i].x() * L;
-            y += points[i].y() * L;
-        }
-
-        return Point(x, y, 0.0);
-    }
-    else if (type == InterpolationType::Barycentric) {
-        double x = 0.0;
-        double y = 0.0;
-        double sumW = 0.0;
-
-        std::vector<double> weights(points.size());
-        for (size_t i = 0; i < points.size(); ++i) {
-            double ti = static_cast<double>(i) / (points.size() - 1);
-            weights[i] = 1.0;
-            for (size_t j = 0; j < points.size(); ++j) {
-                if (i != j) {
-                    double tj = static_cast<double>(j) / (points.size() - 1);
-                    weights[i] *= (ti - tj);
-                }
-            }
-            weights[i] = 1.0 / weights[i];
-        }
-
-        for (size_t i = 0; i < points.size(); ++i) {
-            double ti = static_cast<double>(i) / (points.size() - 1);
-
-            if (std::abs(t - ti) < 1e-10) {
-                return points[i];
-            }
-
-            double w = weights[i] / (t - ti);
-            x += points[i].x() * w;
-            y += points[i].y() * w;
-            sumW += w;
-        }
-        return {x / sumW, y / sumW, 0.0};
-    }
-
-    const size_t nextIndex = (segmentIndex + 1) % points.size();
-    const double oneMinusT = 1.0 - localT;
-    double x = oneMinusT * points[segmentIndex].x() + localT * points[nextIndex].x();
-    double y = oneMinusT * points[segmentIndex].y() + localT * points[nextIndex].y();
-    double z = oneMinusT * points[segmentIndex].z() + localT * points[nextIndex].z();
-
-    return {x, y, z};
-}
-
-
-
-double InterpolatedCurve::getLength() const {
-    constexpr int steps = 200;
-    double length = 0.0;
-    Point prev = getPointAt(0.0);
-
-    for (int i = 1; i <= steps; ++i) {
-        const double t = static_cast<double>(i) / steps;
-        Point curr = getPointAt(t);
-        length += prev.distanceTo(curr);
-        prev = curr;
-    }
-
-    return length;
-}
-
-void InterpolatedCurve::transform(const TransformMatrix& matrix) {
-    for (auto& point : points)
-        point.transform(matrix);
-
-    needsRebuild = true;
-}
-
-std::unique_ptr<Curve> InterpolatedCurve::clone() const {
-    auto copy = std::make_unique<InterpolatedCurve>(mathProvider, type);
-    copy->setControlPoints(points);
-    return copy;
-}
-
-Vector InterpolatedCurve::getPosition() const {
-    if (points.empty()) return Vector::Zero();
-
-    Vector sum = Vector::Zero();
-    for (const auto& p : points)
-        sum += Vector(p.x(), p.y(), p.z());
-
-    return sum / static_cast<double>(points.size());
-}
-
-void InterpolatedCurve::setPosition(const Eigen::Vector3d& position) {
-    if (points.empty()) return;
-
-    Vector delta = position - getPosition();
-    for (auto& p : points) {
-        p.setX(p.x() + delta.x());
-        p.setY(p.y() + delta.y());
-        p.setZ(p.z() + delta.z());
-    }
-    needsRebuild = true;
 }
 
 //===== END FILE: Geometry\InterpolatedCurve.cpp =====//
@@ -1671,93 +1871,25 @@ public:
     void setInterpolationType(InterpolationType type);
     InterpolationType getInterpolationType() const;
 
-    // Curve
-    double getLength() const override;
     Point getPointAt(double t) const override;
     Vector getTangentAt(double t) const override;
 
-    bool hasControlPoints() const override { return true; }
-    void addControlPoint(const Point& point) override;
-    void insertControlPoint(size_t index, const Point& point) override;
-    void removeControlPoint(size_t index) override;
-    void setControlPoints(const std::vector<Point>& points) override;
-    void moveControlPoint(size_t index, const Point& newPosition) override;
-    const std::vector<Point>& getControlPoints() const override;
-    size_t getControlPointCount() const override;
+protected:
+    std::unique_ptr<Curve> createClone() const override;
+    void copySpecificPropertiesTo(Curve* target) const override;
+    void onControlPointsChanged() override;
 
-    // GeometricObject
-    void transform(const TransformMatrix& matrix) override;
-    std::unique_ptr<Curve> clone() const override;
-    Vector getPosition() const override;
-    void setPosition(const Eigen::Vector3d& position) override;
-
-    void setColor(const QColor& color) { m_color = color; }
-    QColor getColor() const { return m_color; }
-
-    void setLineWidth(double width) { m_lineWidth = width; }
-    double getLineWidth() const { return m_lineWidth; }
-
-    void setLineStyle(Qt::PenStyle style) { m_lineStyle = style; }
-    Qt::PenStyle getLineStyle() const { return m_lineStyle; }
-
-    bool getDrawInterpolatedCurve() const { return m_drawInterpolatedCurve; }
-    void setDrawInterpolatedCurve(bool draw) { m_drawInterpolatedCurve = draw; }
-
-    bool getDrawPolyline() const { return m_drawPolyline; }
-    void setDrawPolyline(bool draw) { m_drawPolyline = draw; }
-
-    bool getDrawConvexHull() const { return m_drawConvexHull; }
-    void setDrawConvexHull(bool draw) { m_drawConvexHull = draw; }
-
-    QColor getPolylineColor() const { return m_polylineColor; }
-    void setPolylineColor(const QColor& color) { m_polylineColor = color; }
-
-    double getPolylineWidth() const { return m_polylineWidth; }
-    void setPolylineWidth(double width) { m_polylineWidth = width; }
-
-    Qt::PenStyle getPolylineStyle() const { return m_polylineStyle; }
-    void setPolylineStyle(Qt::PenStyle style) { m_polylineStyle = style; }
-
-    // Właściwości stylu otoczki wypukłej
-    QColor getConvexHullColor() const { return m_convexHullColor; }
-    void setConvexHullColor(const QColor& color) { m_convexHullColor = color; }
-
-    double getConvexHullWidth() const { return m_convexHullWidth; }
-    void setConvexHullWidth(double width) { m_convexHullWidth = width; }
-
-    Qt::PenStyle getConvexHullStyle() const { return m_convexHullStyle; }
-    void setConvexHullStyle(Qt::PenStyle style) { m_convexHullStyle = style; }
 private:
-    std::vector<Point> points;
     InterpolationType type;
     std::shared_ptr<IMathProvider> mathProvider;
 
     mutable std::vector<Eigen::Matrix<double, 4, 2>> coefficients;
     mutable bool needsRebuild{true};
 
-    QColor m_color{Qt::blue};
-    double m_lineWidth{1.0};
-    Qt::PenStyle m_lineStyle{Qt::SolidLine};
-
-    bool m_drawInterpolatedCurve{true};
-    bool m_drawPolyline{false};
-    bool m_drawConvexHull{false};
-
-    // Dodatkowe właściwości stylu dla łamanej
-    QColor m_polylineColor{Qt::darkGreen};
-    double m_polylineWidth{1.0};
-    Qt::PenStyle m_polylineStyle{Qt::DashLine};
-
-    // Dodatkowe właściwości stylu dla otoczki wypukłej
-    QColor m_convexHullColor{Qt::red};
-    double m_convexHullWidth{1.0};
-    Qt::PenStyle m_convexHullStyle{Qt::DotLine};
-
     void buildNIFS3() const;
     void buildOIFS3() const;
     void buildLagrange() const;
     void buildBarycentric() const;
-
     void rebuildInterpolation() const;
 };
 
@@ -1977,7 +2109,6 @@ void Canvas::clearSelection()
 {
     if (m_selectedObject) {
         m_selectedObject = nullptr;
-
         m_selectedControlPointIndex = -1;
 
         if (m_isEditingPoints)
@@ -2132,13 +2263,11 @@ bool Canvas::addControlPoint(const QPointF& screenPos) {
 
         int insertIndex;
 
-        // Jeśli jest zaznaczony punkt kontrolny, wstaw nowy punkt po nim
         if (m_selectedControlPointIndex >= 0 &&
             m_selectedControlPointIndex < static_cast<int>(curve->getControlPointCount())) {
             insertIndex = m_selectedControlPointIndex + 1;
             curve->insertControlPoint(insertIndex, newPoint);
             } else {
-                // Jeśli nie ma zaznaczonego punktu, dodaj na końcu
                 curve->addControlPoint(newPoint);
                 insertIndex = static_cast<int>(curve->getControlPointCount()) - 1;
             }
@@ -2150,7 +2279,6 @@ bool Canvas::addControlPoint(const QPointF& screenPos) {
     }
     return false;
 }
-
 
 bool Canvas::moveControlPoint(int pointIndex, const QPointF& screenPos) {
     if (!m_viewportManager || pointIndex < 0) return false;
@@ -2178,25 +2306,19 @@ void Canvas::selectControlPoint(const int pointIndex) {
     auto selectedObj = selectedObject();
     if (!selectedObj) return;
 
-    int maxPointCount = 0;
+    if (auto curve = std::dynamic_pointer_cast<Curve>(selectedObj)) {
+        if (!curve->hasControlPoints()) return;
 
-    // Sprawdź InterpolatedCurve
-    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-        maxPointCount = static_cast<int>(curve->getControlPointCount());
-    }
-    // Sprawdź BezierCurve
-    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
-        maxPointCount = static_cast<int>(bezierCurve->getControlPointCount());
-    }
-    else {
-        return;
-    }
+        int maxPointCount = static_cast<int>(curve->getControlPointCount());
 
-    if (pointIndex >= 0 && pointIndex < maxPointCount) {
-        m_selectedControlPointIndex = pointIndex;
-        emit controlPointSelected(pointIndex);
+        if (pointIndex >= 0 && pointIndex < maxPointCount) {
+            m_selectedControlPointIndex = pointIndex;
+            emit controlPointSelected(pointIndex);
+        } else {
+            m_selectedControlPointIndex = -1;
+        }
     } else {
-        m_selectedControlPointIndex = -1;
+        return;
     }
 
     update();
@@ -2257,8 +2379,7 @@ void Canvas::drawControlPoints() {
 
     if (const auto curve = std::dynamic_pointer_cast<Curve>(selectedObj))
         if (curve->hasControlPoints()) {
-            const auto& points = curve->getControlPoints();
-            m_renderer->renderControlPoints(points, m_selectedControlPointIndex,
+            m_renderer->renderControlPoints(*curve, m_selectedControlPointIndex,
                                           m_isDraggingPoint ? m_selectedControlPointIndex : -1);
         }
 }
@@ -2303,7 +2424,6 @@ void Canvas::mousePressEvent(QMouseEvent* event)
             case EditMode::None:
                     if (const auto hitObject = hitTestObject(event->pos())) {
                         selectObject(hitObject);
-
                         if (hasSelectedCurveWithControlPoints()) {
                             setEditMode(EditMode::SelectPoint);
                             emit editingStarted();
@@ -2397,70 +2517,41 @@ void Canvas::keyPressEvent(QKeyEvent* event)
         auto selectedObj = selectedObject();
         if (!selectedObj) return;
 
-        bool deleted = false;
+        if (auto curve = std::dynamic_pointer_cast<Curve>(selectedObj)) {
+            if (curve->hasControlPoints() &&
+                m_selectedControlPointIndex < static_cast<int>(curve->getControlPointCount())) {
 
-        // Obsługa InterpolatedCurve
-        if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj)) {
-            if (m_selectedControlPointIndex < static_cast<int>(curve->getControlPointCount())) {
                 if (curve->getControlPointCount() > 2) {
                     curve->removeControlPoint(m_selectedControlPointIndex);
-                    deleted = true;
+                    m_selectedControlPointIndex = -1;
+                    update();
                 } else {
                     QMessageBox::warning(this, "Usuwanie punktu",
-                        "Krzywa musi mieć co najmniej 2 punkty.");
+                        "Krzywa musi mieć co najmniej 2 punkty kontrolne.");
                 }
-            }
-        }
-        // Obsługa BezierCurve
-        else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
-            if (m_selectedControlPointIndex < static_cast<int>(bezierCurve->getControlPointCount())) {
-                if (bezierCurve->getControlPointCount() > 2) {
-                    bezierCurve->removeControlPoint(m_selectedControlPointIndex);
-                    deleted = true;
-                } else {
-                    QMessageBox::warning(this, "Usuwanie punktu",
-                        "Krzywa Béziera musi mieć co najmniej 2 punkty kontrolne.");
                 }
-            }
-        }
-
-        if (deleted) {
-            m_selectedControlPointIndex = -1;
-            update();
         }
     }
 
     QWidget::keyPressEvent(event);
 }
 
-std::shared_ptr<BezierCurve> Canvas::getSelectedBezierCurve() const {
-    const auto selectedObj = selectedObject();
-    if (!selectedObj) return nullptr;
-
-    return std::dynamic_pointer_cast<BezierCurve>(selectedObj);
-}
-
 bool Canvas::hasSelectedCurveWithControlPoints() const {
     const auto selectedObj = selectedObject();
     if (!selectedObj) return false;
 
-    if (const auto curve = std::dynamic_pointer_cast<Curve>(selectedObj)) {
+    if (const auto curve = std::dynamic_pointer_cast<Curve>(selectedObj))
         return curve->hasControlPoints();
-    }
+
     return false;
 }
 
 std::shared_ptr<GeometricObject> Canvas::hitTestObject(const QPointF& pos, double tolerance) const {
     if (!m_viewportManager) return nullptr;
 
-    QPointF worldPos = m_viewportManager->screenToWorld(pos);
-
-    // Sprawdź każdy obiekt od końca (ostatnie dodane mają priorytet)
     for (auto it = m_objects.rbegin(); it != m_objects.rend(); ++it) {
         const auto& object = *it;
-
         if (auto curve = std::dynamic_pointer_cast<Curve>(object)) {
-            // Test kolizji z krzywą - sprawdź punkty wzdłuż krzywej
             constexpr int testPoints = 100;
             for (int i = 0; i <= testPoints; ++i) {
                 double t = static_cast<double>(i) / testPoints;
@@ -2627,27 +2718,25 @@ public:
     virtual void renderAxes() = 0;
     virtual void renderSelectionMarker(const QPointF& position) = 0;
 
-    virtual void renderControlPoint(const QPointF& position, bool isSelected = false, bool isActive = false) = 0;
-    virtual void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int activeIndex = -1) = 0;
-    virtual void renderControlPolygon(const std::vector<Point>& points) = 0;
+    virtual void renderControlPoint(const QPointF& position, const Curve& curve, bool isSelected = false, bool isActive = false) = 0;
+    virtual void renderControlPoints(const Curve& curve, int selectedIndex = -1, int activeIndex = -1) = 0;
 
     virtual void setPointStyle(const QColor& color, float size) = 0;
     virtual void setCurveStyle(const QColor& color, float width, Qt::PenStyle style = Qt::SolidLine) = 0;
     virtual void setSelectionStyle(const QColor& color, float size) = 0;
     virtual void setGridStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) = 0;
     virtual void setAxesStyle(const QColor& color, float width) = 0;
-    virtual void setControlPointStyle(const QColor& normalColor, const QColor& selectedColor, const QColor& activeColor, float size) = 0;
-    virtual void setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) = 0;
 
     virtual void setDrawGrid(bool draw) = 0;
     virtual void setDrawAxes(bool draw) = 0;
-    virtual void setDrawControlPolygon(bool draw) = 0;
 
     virtual void renderPolyline(const std::vector<Point>& points) = 0;
     virtual void renderConvexHull(const std::vector<Point>& points) = 0;
 
     virtual void setPolylineStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) = 0;
     virtual void setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) = 0;
+
+    virtual void renderCurveExtras(const Curve& curve) = 0;
 };
 
 //===== END FILE: Graphics\IRenderer.h =====//
@@ -2706,63 +2795,77 @@ void QtRenderer::renderPoint(const Point& point)
 void QtRenderer::renderCurve(const Curve& curve) {
     if (!m_painter || !m_viewportManager) return;
 
-    if (const auto interpolatedCurve = dynamic_cast<const InterpolatedCurve*>(&curve)) {
+    renderMainCurve(curve);
+    renderCurveExtras(curve);
+}
 
-        if (interpolatedCurve->getDrawInterpolatedCurve()) {
-            QColor color = interpolatedCurve->getColor();
-            double width = interpolatedCurve->getLineWidth();
-            Qt::PenStyle style = interpolatedCurve->getLineStyle();
+void QtRenderer::renderMainCurve(const Curve& curve) {
+    if (!curve.getDrawMainCurve() || !curve.hasControlPoints() || curve.getControlPointCount() < 2)
+        return;
 
-            const QPen pen(color, width, style);
-            m_painter->setPen(pen);
-            m_painter->setBrush(Qt::NoBrush);
+    QColor color = curve.getColor();
+    double width = curve.getLineWidth();
+    Qt::PenStyle style = curve.getLineStyle();
 
-            constexpr int numSegments = 5000;
-            QPolygonF points;
+    const QPen pen(color, width, style);
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
 
-            for (int i = 0; i <= numSegments; ++i) {
-                double t = static_cast<double>(i) / numSegments;
-                Point p = curve.getPointAt(t);
-                points.append(QPointF(p.x(), p.y()));
-            }
-            m_painter->drawPolyline(points);
-        }
-
-        if (interpolatedCurve->getDrawPolyline())
-            renderPolyline(interpolatedCurve->getControlPoints());
-
-        if (interpolatedCurve->getDrawConvexHull())
-            renderConvexHull(interpolatedCurve->getControlPoints());
+    constexpr int numSegments = 1000;
+    QPolygonF points;
+    for (int i = 0; i <= numSegments; ++i) {
+        double t = static_cast<double>(i) / numSegments;
+        Point p = curve.getPointAt(t);
+        points.append(QPointF(p.x(), p.y()));
     }
+    m_painter->drawPolyline(points);
+}
 
-    if (const auto bezierCurve = dynamic_cast<const BezierCurve*>(&curve)) {
-        QColor color = bezierCurve->getColor();
-        double width = bezierCurve->getLineWidth();
-        Qt::PenStyle style = bezierCurve->getLineStyle();
+void QtRenderer::renderCurveExtras(const Curve& curve) {
+    if (!curve.hasControlPoints() || curve.getControlPointCount() < 2) return;
 
-        const QPen pen(color, width, style);
-        m_painter->setPen(pen);
-        m_painter->setBrush(Qt::NoBrush);
+    renderCurvePolyline(curve);
+    renderCurveConvexHull(curve);
+}
 
-        if (bezierCurve->getControlPointCount() >= 2) {
-            constexpr int numSegments = 1000;
-            QPolygonF points;
+void QtRenderer::renderCurvePolyline(const Curve& curve) {
+    if (!curve.getDrawPolyline()) return;
 
-            for (int i = 0; i <= numSegments; ++i) {
-                double t = static_cast<double>(i) / numSegments;
-                Point p = curve.getPointAt(t);
-                points.append(QPointF(p.x(), p.y()));
-            }
+    const auto& controlPoints = curve.getControlPoints();
+    const QPen pen(curve.getPolylineColor(), curve.getPolylineWidth(), curve.getPolylineStyle());
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
 
-            m_painter->drawPolyline(points);
-        }
+    QPolygonF polylinePoints = pointsToPolygon(controlPoints);
+    m_painter->drawPolyline(polylinePoints);
+}
 
-        if (bezierCurve->getShowControlPolygon())
-            renderBezierControlPolygon(bezierCurve->getControlPoints(),
-                                     bezierCurve->getControlPolygonColor(),
-                                     bezierCurve->getControlPolygonWidth(),
-                                     bezierCurve->getControlPolygonStyle());
+void QtRenderer::renderCurveConvexHull(const Curve& curve) {
+    if (!curve.getDrawConvexHull() || curve.getControlPointCount() < 3) return;
+
+    const auto& controlPoints = curve.getControlPoints();
+    const std::vector<Point> hull = computeConvexHull(controlPoints);
+
+    if (hull.size() < 3) return;
+
+    const QPen pen(curve.getConvexHullColor(), curve.getConvexHullWidth(), curve.getConvexHullStyle());
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
+
+    QPolygonF hullPolygon = pointsToPolygon(hull);
+    if (!hull.empty()) {
+        hullPolygon << QPointF(hull[0].x(), hull[0].y());
     }
+    m_painter->drawPolyline(hullPolygon);
+}
+
+QPolygonF QtRenderer::pointsToPolygon(const std::vector<Point>& points) const {
+    QPolygonF polygon;
+    polygon.reserve(points.size());
+    for (const auto& point : points) {
+        polygon << QPointF(point.x(), point.y());
+    }
+    return polygon;
 }
 
 void QtRenderer::renderObject(const GeometricObject& object)
@@ -2932,7 +3035,7 @@ void QtRenderer::renderSelectionMarker(const QPointF& position)
     m_painter->restore();
 }
 
-void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bool isActive)
+void QtRenderer::renderControlPoint(const QPointF& position, const Curve& curve, bool isSelected, bool isActive)
 {
     if (!m_painter || !m_painter->isActive())
         return;
@@ -2942,24 +3045,26 @@ void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bo
 
     QColor fillColor;
     if (isActive) {
-        fillColor = m_controlPointActiveColor;
+        fillColor = curve.getControlPointActiveColor();
     } else if (isSelected) {
-        fillColor = m_controlPointSelectedColor;
+        fillColor = curve.getControlPointSelectedColor();
     } else {
-        fillColor = m_controlPointNormalColor;
+        fillColor = curve.getControlPointNormalColor();
     }
+
+    double pointSize = curve.getControlPointSize();
 
     QPen shadowPen(Qt::black, 1.0);
     QBrush shadowBrush(QColor(0, 0, 0, 50));
     m_painter->setPen(shadowPen);
     m_painter->setBrush(shadowBrush);
-    m_painter->drawEllipse(position + QPointF(1, 1), m_controlPointSize + 1, m_controlPointSize + 1);
+    m_painter->drawEllipse(position + QPointF(1, 1), pointSize + 1, pointSize + 1);
 
     QPen pen(Qt::black, 1.0);
     QBrush brush(fillColor);
     m_painter->setPen(pen);
     m_painter->setBrush(brush);
-    m_painter->drawEllipse(position, m_controlPointSize, m_controlPointSize);
+    m_painter->drawEllipse(position, pointSize, pointSize);
 
     if (isSelected) {
         m_painter->setPen(Qt::white);
@@ -2978,13 +3083,15 @@ void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bo
     m_painter->restore();
 }
 
-void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selectedIndex, int draggingIndex)
+void QtRenderer::renderControlPoints(const Curve& curve, int selectedIndex, int draggingIndex)
 {
-    if (!m_painter || !m_viewportManager || points.empty())
+    if (!m_painter || !m_viewportManager || !curve.hasControlPoints())
         return;
 
-    if (m_drawControlPolygon && points.size() >= 2)
-        renderControlPolygon(points);
+    const auto& points = curve.getControlPoints();
+    if (points.empty()) return;
+
+    if (!curve.getShowControlPoints()) return;
 
     std::vector<QPointF> screenPositions;
     screenPositions.reserve(points.size());
@@ -2994,13 +3101,13 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
 
     for (size_t i = 0; i < points.size(); ++i)
         if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != draggingIndex)
-            renderControlPoint(screenPositions[i], false, false);
+            renderControlPoint(screenPositions[i], curve, false, false);
 
     if (selectedIndex >= 0 && selectedIndex < static_cast<int>(points.size()))
-        renderControlPoint(screenPositions[selectedIndex], true, false);
+        renderControlPoint(screenPositions[selectedIndex], curve, true, false);
 
     if (draggingIndex >= 0 && draggingIndex < static_cast<int>(points.size()) && draggingIndex != selectedIndex)
-        renderControlPoint(screenPositions[draggingIndex], false, true);
+        renderControlPoint(screenPositions[draggingIndex], curve, false, true);
 
     m_painter->save();
     m_painter->resetTransform();
@@ -3015,8 +3122,8 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         QString label = QString::number(i);
         QFontMetrics fm(font);
         QRect textRect = fm.boundingRect(label);
-        QPointF textPos = screenPositions[i] + QPointF(m_controlPointSize + 2,
-                                                  m_controlPointSize / 2.0);
+        QPointF textPos = screenPositions[i] + QPointF(curve.getControlPointSize() + 2,
+                                                  curve.getControlPointSize() / 2.0);
 
         auto bgRect = QRectF(textPos.x() - 1, textPos.y() - textRect.height(),
                               textRect.width() + 2, textRect.height() + 2);
@@ -3024,29 +3131,6 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
 
         m_painter->drawText(textPos, label);
     }
-
-    m_painter->restore();
-}
-
-void QtRenderer::renderControlPolygon(const std::vector<Point>& points)
-{
-    if (!m_painter || !m_viewportManager || points.size() < 2)
-        return;
-
-    m_painter->save();
-    m_painter->resetTransform();
-
-    const QPen pen(m_controlPolygonColor, m_controlPolygonWidth, m_controlPolygonStyle);
-    m_painter->setPen(pen);
-    m_painter->setBrush(Qt::NoBrush);
-
-    QPolygonF polygon;
-    for (const auto& point : points) {
-        QPointF screenPos = m_viewportManager->worldToScreen(QPointF(point.x(), point.y()));
-        polygon << screenPos;
-    }
-
-    m_painter->drawPolyline(polygon);
 
     m_painter->restore();
 }
@@ -3083,22 +3167,6 @@ void QtRenderer::setAxesStyle(const QColor& color, const float width)
     m_axesWidth = width;
 }
 
-void QtRenderer::setControlPointStyle(const QColor& normalColor, const QColor& selectedColor,
-                                const QColor& activeColor, const float size)
-{
-    m_controlPointNormalColor = normalColor;
-    m_controlPointSelectedColor = selectedColor;
-    m_controlPointActiveColor = activeColor;
-    m_controlPointSize = size;
-}
-
-void QtRenderer::setControlPolygonStyle(const QColor& color, const float width, const Qt::PenStyle style)
-{
-    m_controlPolygonColor = color;
-    m_controlPolygonWidth = width;
-    m_controlPolygonStyle = style;
-}
-
 void QtRenderer::setDrawGrid(const bool draw)
 {
     m_drawGrid = draw;
@@ -3107,11 +3175,6 @@ void QtRenderer::setDrawGrid(const bool draw)
 void QtRenderer::setDrawAxes(const bool draw)
 {
     m_drawAxes = draw;
-}
-
-void QtRenderer::setDrawControlPolygon(const bool draw)
-{
-    m_drawControlPolygon = draw;
 }
 
 void QtRenderer::renderPolyline(const std::vector<Point>& points)
@@ -3123,10 +3186,7 @@ void QtRenderer::renderPolyline(const std::vector<Point>& points)
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 
-    QPolygonF polygon;
-    for (const auto& point : points)
-        polygon << QPointF(point.x(), point.y());
-
+    QPolygonF polygon = pointsToPolygon(points);
     m_painter->drawPolyline(polygon);
 }
 
@@ -3142,10 +3202,7 @@ void QtRenderer::renderConvexHull(const std::vector<Point>& points)
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 
-    QPolygonF polygon;
-    for (const auto& point : hull)
-        polygon << QPointF(point.x(), point.y());
-
+    QPolygonF polygon = pointsToPolygon(hull);
     if (!hull.empty())
         polygon << QPointF(hull[0].x(), hull[0].y());
 
@@ -3232,22 +3289,6 @@ double QtRenderer::distanceSquared(const Point& a, const Point& b)
     return dx * dx + dy * dy;
 }
 
-void QtRenderer::renderBezierControlPolygon(const std::vector<Point>& points, const QColor& color,
-                                          const double width, const Qt::PenStyle style)
-{
-    if (!m_painter || !m_viewportManager || points.size() < 2) return;
-
-    const QPen pen(color, width, style);
-    m_painter->setPen(pen);
-    m_painter->setBrush(Qt::NoBrush);
-
-    QPolygonF polygon;
-    for (const auto& point : points)
-        polygon << QPointF(point.x(), point.y());
-
-    m_painter->drawPolyline(polygon);
-}
-
 //===== END FILE: Graphics\QtRenderer.cpp =====//
 
 //===== START FILE: Graphics\QtRenderer.h =====//
@@ -3283,24 +3324,21 @@ public:
     void renderAxes() override;
     void renderAxisTicks();
     void renderSelectionMarker(const QPointF& position) override;
-    void renderControlPoint(const QPointF& position, bool isSelected = false, bool isActive = false) override;
-    void renderControlPoints(const std::vector<Point>& points, int selectedIndex = -1, int draggingIndex = -1) override;
-    void renderControlPolygon(const std::vector<Point>& points) override;
+    void renderControlPoint(const QPointF& position, const Curve& curve, bool isSelected = false, bool isActive = false) override;
+    void renderControlPoints(const Curve& curve, int selectedIndex = -1, int draggingIndex = -1) override;
     void setPointStyle(const QColor& color, float size) override;
     void setCurveStyle(const QColor& color, float width, Qt::PenStyle style = Qt::SolidLine) override;
     void setSelectionStyle(const QColor& color, float size) override;
     void setGridStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) override;
     void setAxesStyle(const QColor& color, float width) override;
-    void setControlPointStyle(const QColor& normalColor, const QColor& selectedColor, const QColor& activeColor, float size) override;
-    void setControlPolygonStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) override;
     void setDrawGrid(bool draw) override;
     void setDrawAxes(bool draw) override;
-    void setDrawControlPolygon(bool draw) override;
-
     void renderPolyline(const std::vector<Point>& points) override;
     void renderConvexHull(const std::vector<Point>& points) override;
     void setPolylineStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) override;
     void setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) override;
+    void renderCurveExtras(const Curve& curve) override;
+
 private:
     QColor m_pointColor{Qt::black};
     float m_pointSize{4.0f};
@@ -3314,13 +3352,6 @@ private:
     Qt::PenStyle m_gridStyle{Qt::DotLine};
     QColor m_axesColor{Qt::black};
     float m_axesWidth{1.0f};
-    QColor m_controlPointNormalColor{Qt::blue};
-    QColor m_controlPointSelectedColor{Qt::red};
-    QColor m_controlPointActiveColor{Qt::green};
-    float m_controlPointSize{5.0f};
-    QColor m_controlPolygonColor{Qt::darkGray};
-    float m_controlPolygonWidth{1.0f};
-    Qt::PenStyle m_controlPolygonStyle{Qt::DashLine};
 
     QColor m_polylineColor{Qt::darkGreen};
     float m_polylineWidth{1.0f};
@@ -3332,20 +3363,19 @@ private:
 
     bool m_drawGrid{true};
     bool m_drawAxes{true};
-    bool m_drawControlPolygon{false};
 
     QPainter* m_painter{nullptr};
     ViewportManager* m_viewportManager{nullptr};
+
+    QPolygonF pointsToPolygon(const std::vector<Point>& points) const;
+    void renderMainCurve(const Curve& curve);
+    void renderCurvePolyline(const Curve& curve);
+    void renderCurveConvexHull(const Curve& curve);
 
     std::vector<Point> computeConvexHull(const std::vector<Point>& points) const;
     static double crossProduct(const Point& O, const Point& A, const Point& B) ;
     static double polarAngle(const Point& pivot, const Point& point) ;
     static double distanceSquared(const Point& a, const Point& b) ;
-
-    void renderBezierControlPolygon(const std::vector<Point>& points,
-                              const QColor& color,
-                              double width,
-                              Qt::PenStyle style);
 };
 
 //===== END FILE: Graphics\QtRenderer.h =====//
@@ -3743,8 +3773,7 @@ public:
 #include "MainWindow.h"
 
 ActionHandler::ActionHandler(MainWindow& mainWindow)
-    : QObject(&mainWindow)
-    , m_mainWindow(mainWindow)
+    : QObject{&mainWindow} , m_mainWindow{mainWindow}
 {
     connectActions();
 }
@@ -3872,7 +3901,6 @@ void ActionHandler::onMovePointModeAction() {
     }
 }
 
-
 void ActionHandler::onDeletePointAction() {
     auto selectedObj = m_mainWindow.getCanvas()->selectedObject();
     if (!selectedObj) {
@@ -3880,8 +3908,10 @@ void ActionHandler::onDeletePointAction() {
         return;
     }
 
-    const bool isCurveWithControlPoints = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObj) ||
-        std::dynamic_pointer_cast<BezierCurve>(selectedObj);
+    bool isCurveWithControlPoints = false;
+    if (auto curve = std::dynamic_pointer_cast<Curve>(selectedObj)) {
+        isCurveWithControlPoints = curve->hasControlPoints();
+    }
 
     if (isCurveWithControlPoints) {
         QKeyEvent keyEvent(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
@@ -3926,38 +3956,31 @@ void ActionHandler::onFitContentAction() {
     m_mainWindow.getStatusBar()->showMessage("Dopasowano widok do zawartości");
 }
 
-void ActionHandler::createInterpolatedCurve(InterpolatedCurve::InterpolationType type, const QString& typeName) {
-    auto curve = std::make_shared<InterpolatedCurve>(std::static_pointer_cast<IMathProvider>(m_mainWindow.m_mathProvider), type);
-
-    curve->setColor(Qt::blue);
-    curve->setLineWidth(1.0);
-    curve->setLineStyle(Qt::SolidLine);
-
-    curve->addControlPoint(Point(0, 0));
-    curve->addControlPoint(Point(50, 100));
-    curve->addControlPoint(Point(100, 0));
+void ActionHandler::createAndAddCurve(std::shared_ptr<Curve> curve, const QString& message) {
     m_mainWindow.getCanvas()->addObject(curve);
     m_mainWindow.getCanvas()->selectObject(curve);
     m_mainWindow.getCanvas()->refresh();
     m_mainWindow.updateObjectsTree();
-    m_mainWindow.getStatusBar()->showMessage(QString("Utworzono krzywą interpolowaną typu %1").arg(typeName));
+    m_mainWindow.getStatusBar()->showMessage(message);
 }
 
-void ActionHandler::onNifsAction() {
-    createInterpolatedCurve(InterpolatedCurve::InterpolationType::NIFS3, "NIFS3");
+void ActionHandler::createInterpolatedCurve(InterpolatedCurve::InterpolationType type, const QString& typeName) {
+    const auto curve = std::make_shared<InterpolatedCurve>(std::static_pointer_cast<IMathProvider>(m_mainWindow.m_mathProvider), type);
+
+    curve->addControlPoint(Point(0, 0));
+    curve->addControlPoint(Point(50, 100));
+    curve->addControlPoint(Point(100, 0));
+
+    createAndAddCurve(curve, QString("Utworzono krzywą interpolowaną typu %1").arg(typeName));
 }
 
-void ActionHandler::onOifsAction() {
-    createInterpolatedCurve(InterpolatedCurve::InterpolationType::OIFS3, "OIFS3");
-}
+void ActionHandler::onNifsAction() { createInterpolatedCurve(Type::NIFS3, "NIFS3"); }
 
-void ActionHandler::onLagrangeAction() {
-    createInterpolatedCurve(InterpolatedCurve::InterpolationType::Lagrange, "Lagrange");
-}
+void ActionHandler::onOifsAction() { createInterpolatedCurve(Type::OIFS3, "OIFS3"); }
 
-void ActionHandler::onBarycentricAction() {
-    createInterpolatedCurve(InterpolatedCurve::InterpolationType::Barycentric, "Barycentric");
-}
+void ActionHandler::onLagrangeAction() { createInterpolatedCurve(Type::Lagrange, "Lagrange"); }
+
+void ActionHandler::onBarycentricAction() { createInterpolatedCurve(Type::Barycentric, "Barycentric"); }
 
 void ActionHandler::onBezierAction() {
     const auto curve = std::make_shared<BezierCurve>();
@@ -3967,11 +3990,7 @@ void ActionHandler::onBezierAction() {
     curve->addControlPoint(Point(25, 75, 0));
     curve->addControlPoint(Point(50, -25, 0));
 
-    m_mainWindow.getCanvas()->addObject(curve);
-    m_mainWindow.getCanvas()->selectObject(curve);
-    m_mainWindow.getCanvas()->refresh();
-    m_mainWindow.updateObjectsTree();
-    m_mainWindow.getStatusBar()->showMessage("Utworzono krzywą Béziera");
+    createAndAddCurve(curve, "Utworzono krzywą Béziera");
 }
 
 void ActionHandler::onAboutAction() const {
@@ -4003,6 +4022,7 @@ void ActionHandler::onAboutAction() const {
 #include <QStatusBar>
 
 class MainWindow;
+using Type = InterpolatedCurve::InterpolationType;
 
 class ActionHandler : public QObject {
     Q_OBJECT
@@ -4011,8 +4031,8 @@ public:
     explicit ActionHandler(MainWindow& mainWindow);
     ~ActionHandler() override = default;
 
-public slots:
-    void onNewAction();
+    public slots:
+        void onNewAction();
     void onOpenAction();
     void onSaveAction();
     void onSaveAsAction();
@@ -4045,6 +4065,7 @@ public slots:
 private:
     void connectActions();
     void createInterpolatedCurve(InterpolatedCurve::InterpolationType type, const QString& typeName);
+    void createAndAddCurve(std::shared_ptr<Curve> curve, const QString& message);
 
     MainWindow& m_mainWindow;
 };
@@ -4066,8 +4087,6 @@ MainWindow::MainWindow(QWidget* parent)
     , m_modeLabel(nullptr)
 {
     setWindowTitle("Edytor Krzywych");
-    resize(1024, 768);
-
     createMenus();
     createToolbars();
     setupCentralWidget();
@@ -4075,7 +4094,7 @@ MainWindow::MainWindow(QWidget* parent)
     connectSignals();
 
     m_actionHandler = std::make_unique<ActionHandler>(*this);
-
+    showMaximized();
     statusBar()->showMessage("Aplikacja gotowa do użycia");
 }
 
@@ -4218,7 +4237,7 @@ void MainWindow::createDockWidgets() {
     m_objectsTree->setExpandsOnDoubleClick(true);
     m_objectsDock->setWidget(m_objectsTree);
 
-    addDockWidget(Qt::RightDockWidgetArea, m_objectsDock);
+    addDockWidget(Qt::LeftDockWidgetArea, m_objectsDock);
 
     m_propertiesDock = new QDockWidget("Właściwości", this);
     m_propertiesDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
@@ -4337,288 +4356,6 @@ void MainWindow::updateObjectsTree() {
     m_objectsTree->expandAll();
 }
 
-void MainWindow::updatePropertiesPanel() {
-    QLayoutItem* child;
-    while ((child = m_propertiesLayout->takeAt(0)) != nullptr) {
-        delete child->widget();
-        delete child;
-    }
-
-    auto selectedObject = m_canvas->selectedObject();
-    if (!selectedObject) {
-        m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt, aby edytować jego właściwości"));
-        return;
-    }
-
-    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObject)) {
-        m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej interpolowanej</b>"));
-
-        m_propertiesLayout->addWidget(new QLabel("Typ interpolacji:"));
-
-        QComboBox* typeCombo = new QComboBox();
-        typeCombo->addItem("NIFS3 (Natural Cubic Spline)", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::NIFS3)));
-        typeCombo->addItem("OIFS3 (Closed Cubic Spline)", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::OIFS3)));
-        typeCombo->addItem("Lagrange", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Lagrange)));
-        typeCombo->addItem("Barycentric", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Barycentric)));
-
-        typeCombo->setCurrentIndex(static_cast<int>(curve->getInterpolationType()));
-        m_propertiesLayout->addWidget(typeCombo);
-
-        connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            [this, curve](int index) {
-                const auto type = static_cast<InterpolatedCurve::InterpolationType>(index);
-                curve->setInterpolationType(type);
-                m_canvas->refresh();
-                QTimer::singleShot(0, [this]() {
-                        updatePropertiesPanel();
-                    });
-
-                QString typeName;
-                switch (type) {
-                    case InterpolatedCurve::InterpolationType::NIFS3: typeName = "NIFS3"; break;
-                    case InterpolatedCurve::InterpolationType::OIFS3: typeName = "OIFS3"; break;
-                    case InterpolatedCurve::InterpolationType::Lagrange: typeName = "Lagrange"; break;
-                    case InterpolatedCurve::InterpolationType::Barycentric: typeName = "Barycentric"; break;
-                }
-
-                statusBar()->showMessage(QString("Zmieniono typ interpolacji na %1").arg(typeName));
-            });
-
-        // === SEKCJA KONTROLI RENDEROWANIA ===
-        m_propertiesLayout->addWidget(new QLabel("<b>Kontrola wyświetlania:</b>"));
-
-        // Checkbox dla krzywej interpolowanej
-        auto* drawCurveCheckBox = new QCheckBox("Rysuj krzywą interpolowaną");
-        drawCurveCheckBox->setChecked(curve->getDrawInterpolatedCurve());
-        m_propertiesLayout->addWidget(drawCurveCheckBox);
-
-        connect(drawCurveCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
-            curve->setDrawInterpolatedCurve(checked);
-            m_canvas->refresh();
-            statusBar()->showMessage(checked ? "Włączono rysowanie krzywej" : "Wyłączono rysowanie krzywej");
-        });
-
-        // Checkbox dla łamanej
-        auto* drawPolylineCheckBox = new QCheckBox("Rysuj łamaną łączącą punkty");
-        drawPolylineCheckBox->setChecked(curve->getDrawPolyline());
-        m_propertiesLayout->addWidget(drawPolylineCheckBox);
-
-        connect(drawPolylineCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
-            curve->setDrawPolyline(checked);
-            m_canvas->refresh();
-            statusBar()->showMessage(checked ? "Włączono rysowanie łamanej" : "Wyłączono rysowanie łamanej");
-        });
-
-        // Checkbox dla otoczki wypukłej
-        auto* drawConvexHullCheckBox = new QCheckBox("Rysuj otoczkę wypukłą punktów");
-        drawConvexHullCheckBox->setChecked(curve->getDrawConvexHull());
-        m_propertiesLayout->addWidget(drawConvexHullCheckBox);
-
-        connect(drawConvexHullCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
-            curve->setDrawConvexHull(checked);
-            m_canvas->refresh();
-            statusBar()->showMessage(checked ? "Włączono rysowanie otoczki wypukłej" : "Wyłączono rysowanie otoczki wypukłej");
-        });
-
-        // === WŁAŚCIWOŚCI KRZYWEJ INTERPOLOWANEJ ===
-        m_propertiesLayout->addWidget(new QLabel("<b>Styl krzywej interpolowanej:</b>"));
-
-        m_propertiesLayout->addWidget(new QLabel("Kolor linii:"));
-
-        QPushButton* colorButton = new QPushButton();
-        colorButton->setFixedSize(80, 25);
-        QColor currentColor = curve->getColor();
-        QString styleSheet = QString("background-color: %1;").arg(currentColor.name());
-        colorButton->setStyleSheet(styleSheet);
-
-        m_propertiesLayout->addWidget(colorButton);
-
-        connect(colorButton, &QPushButton::clicked, [this, curve, colorButton]() {
-            QColor color = QColorDialog::getColor(curve->getColor(), nullptr, "Wybierz kolor linii");
-            if (color.isValid()) {
-                curve->setColor(color);
-                QString styleSheet = QString("background-color: %1;").arg(color.name());
-                colorButton->setStyleSheet(styleSheet);
-                m_canvas->refresh();
-                statusBar()->showMessage("Zmieniono kolor linii");
-            }
-        });
-
-        m_propertiesLayout->addWidget(new QLabel("Grubość linii:"));
-
-        auto* widthSpinBox = new QDoubleSpinBox();
-        widthSpinBox->setRange(0.1, 10.0);
-        widthSpinBox->setSingleStep(0.1);
-        widthSpinBox->setValue(curve->getLineWidth());
-
-        m_propertiesLayout->addWidget(widthSpinBox);
-
-        connect(widthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
-            curve->setLineWidth(value);
-            m_canvas->refresh();
-            statusBar()->showMessage(QString("Zmieniono grubość linii na %1").arg(std::to_string(value)));
-        });
-
-        m_propertiesLayout->addWidget(new QLabel("Styl linii:"));
-
-        auto* lineStyleCombo = new QComboBox();
-        lineStyleCombo->addItem("Ciągła", static_cast<int>(Qt::SolidLine));
-        lineStyleCombo->addItem("Przerywana", static_cast<int>(Qt::DashLine));
-        lineStyleCombo->addItem("Kropkowana", static_cast<int>(Qt::DotLine));
-        lineStyleCombo->addItem("Kreska-kropka", static_cast<int>(Qt::DashDotLine));
-        lineStyleCombo->addItem("Kreska-kropka-kropka", static_cast<int>(Qt::DashDotDotLine));
-
-        int styleIndex = 0;
-        switch (curve->getLineStyle()) {
-            case Qt::SolidLine: styleIndex = 0; break;
-            case Qt::DashLine: styleIndex = 1; break;
-            case Qt::DotLine: styleIndex = 2; break;
-            case Qt::DashDotLine: styleIndex = 3; break;
-            case Qt::DashDotDotLine: styleIndex = 4; break;
-            default: styleIndex = 0; break;
-        }
-
-        lineStyleCombo->setCurrentIndex(styleIndex);
-
-        m_propertiesLayout->addWidget(lineStyleCombo);
-
-        connect(lineStyleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, curve, lineStyleCombo](int index) {
-            Qt::PenStyle style = static_cast<Qt::PenStyle>(lineStyleCombo->itemData(index).toInt());
-            curve->setLineStyle(style);
-            m_canvas->refresh();
-            statusBar()->showMessage("Zmieniono styl linii");
-        });
-
-        m_propertiesLayout->addWidget(new QLabel("<b>Styl łamanej:</b>"));
-
-        m_propertiesLayout->addWidget(new QLabel("Kolor łamanej:"));
-        auto polylineColorButton = new QPushButton();
-        polylineColorButton->setFixedSize(80, 25);
-        QColor currentPolylineColor = curve->getPolylineColor();
-        polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(currentPolylineColor.name()));
-        m_propertiesLayout->addWidget(polylineColorButton);
-
-        connect(polylineColorButton, &QPushButton::clicked, [this, curve, polylineColorButton]() {
-            if (QColor color = QColorDialog::getColor(curve->getPolylineColor(), nullptr, "Wybierz kolor łamanej"); color.isValid()) {
-                curve->setPolylineColor(color);
-                polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
-
-                if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
-                    qtRenderer->setPolylineStyle(color, curve->getPolylineWidth(), curve->getPolylineStyle());
-                }
-
-                m_canvas->refresh();
-                statusBar()->showMessage("Zmieniono kolor łamanej");
-            }
-        });
-
-        m_propertiesLayout->addWidget(new QLabel("Grubość łamanej:"));
-        auto* polylineWidthSpinBox = new QDoubleSpinBox();
-        polylineWidthSpinBox->setRange(0.1, 10.0);
-        polylineWidthSpinBox->setSingleStep(0.1);
-        polylineWidthSpinBox->setValue(curve->getPolylineWidth());
-        m_propertiesLayout->addWidget(polylineWidthSpinBox);
-
-        connect(polylineWidthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
-            curve->setPolylineWidth(value);
-
-            if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get()))
-                qtRenderer->setPolylineStyle(curve->getPolylineColor(), value, curve->getPolylineStyle());
-
-            m_canvas->refresh();
-            statusBar()->showMessage(QString("Zmieniono grubość łamanej na %1").arg(std::to_string(value)));
-        });
-
-        m_propertiesLayout->addWidget(new QLabel("<b>Styl otoczki wypukłej:</b>"));
-
-        m_propertiesLayout->addWidget(new QLabel("Kolor otoczki wypukłej:"));
-        QPushButton* convexHullColorButton = new QPushButton();
-        convexHullColorButton->setFixedSize(80, 25);
-        QColor currentConvexHullColor = curve->getConvexHullColor();
-        convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(currentConvexHullColor.name()));
-        m_propertiesLayout->addWidget(convexHullColorButton);
-
-        connect(convexHullColorButton, &QPushButton::clicked, [this, curve, convexHullColorButton]() {
-            QColor color = QColorDialog::getColor(curve->getConvexHullColor(), nullptr, "Wybierz kolor otoczki wypukłej");
-            if (color.isValid()) {
-                curve->setConvexHullColor(color);
-                convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
-
-                if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
-                    qtRenderer->setConvexHullStyle(color, curve->getConvexHullWidth(), curve->getConvexHullStyle());
-                }
-
-                m_canvas->refresh();
-                statusBar()->showMessage("Zmieniono kolor otoczki wypukłej");
-            }
-        });
-
-        m_propertiesLayout->addWidget(new QLabel("<i>Otoczka wypukła obliczana algorytmem Graham Scan</i>"));
-
-        m_propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: %1")
-            .arg(QString::number(curve->getLength(), 'f', 2))));
-    }
-    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObject)) {
-        m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej Béziera</b>"));
-
-        // Informacje o krzywej
-        m_propertiesLayout->addWidget(new QLabel(QString("Liczba punktów kontrolnych: %1")
-                                                .arg(std::to_string(bezierCurve->getControlPointCount()))));
-        m_propertiesLayout->addWidget(new QLabel(QString("Stopień krzywej: %1")
-                                                .arg(std::to_string(bezierCurve->getDegree()))));
-
-        // Checkbox dla wielokąta kontrolnego
-        auto* showPolygonCheckBox = new QCheckBox("Pokaż linie pomocnicze");
-        showPolygonCheckBox->setChecked(bezierCurve->getShowControlPolygon());
-        m_propertiesLayout->addWidget(showPolygonCheckBox);
-
-        connect(showPolygonCheckBox, &QCheckBox::toggled, [this, bezierCurve](bool checked) {
-            bezierCurve->setShowControlPolygon(checked);
-            m_canvas->refresh();
-            statusBar()->showMessage(checked ? "Włączono linie pomocnicze" : "Wyłączono linie pomocnicze");
-        });
-
-        // Kolor krzywej
-        m_propertiesLayout->addWidget(new QLabel("Kolor krzywej:"));
-        QPushButton* colorButton = new QPushButton();
-        colorButton->setFixedSize(80, 25);
-        QColor currentColor = bezierCurve->getColor();
-        colorButton->setStyleSheet(QString("background-color: %1;").arg(currentColor.name()));
-        m_propertiesLayout->addWidget(colorButton);
-
-        connect(colorButton, &QPushButton::clicked, [this, bezierCurve, colorButton]() {
-            QColor color = QColorDialog::getColor(bezierCurve->getColor(), nullptr, "Wybierz kolor krzywej");
-            if (color.isValid()) {
-                bezierCurve->setColor(color);
-                colorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
-                m_canvas->refresh();
-                statusBar()->showMessage("Zmieniono kolor krzywej");
-            }
-        });
-
-        // Grubość linii
-        m_propertiesLayout->addWidget(new QLabel("Grubość linii:"));
-        auto* widthSpinBox = new QDoubleSpinBox();
-        widthSpinBox->setRange(0.1, 10.0);
-        widthSpinBox->setSingleStep(0.1);
-        widthSpinBox->setValue(bezierCurve->getLineWidth());
-        m_propertiesLayout->addWidget(widthSpinBox);
-
-        connect(widthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                [this, bezierCurve](double value) {
-            bezierCurve->setLineWidth(value);
-            m_canvas->refresh();
-            statusBar()->showMessage(QString("Zmieniono grubość linii na %1").arg(std::to_string(value)));
-        });
-
-        return;
-    }
-    else {
-        m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt"));
-    }
-    m_propertiesLayout->addStretch();
-}
-
 void MainWindow::updateModeLabel() {
     switch (m_canvas->getEditMode()) {
         case Canvas::EditMode::None:
@@ -4720,6 +4457,191 @@ void MainWindow::onEditingFinished() {
     m_selectModeAction->setChecked(true);
     updateModeLabel();
     statusBar()->showMessage("Zakończono edycję punktów kontrolnych");
+}
+
+void MainWindow::addUnifiedCurveVisibilityControls(std::shared_ptr<Curve> curve) {
+    m_propertiesLayout->addWidget(new QLabel("<b>Kontrola wyświetlania:</b>"));
+
+    auto* drawCurveCheckBox = new QCheckBox("Rysuj krzywą główną");
+    drawCurveCheckBox->setChecked(curve->getDrawMainCurve());
+    m_propertiesLayout->addWidget(drawCurveCheckBox);
+
+    connect(drawCurveCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
+        curve->setDrawMainCurve(checked);
+        m_canvas->refresh();
+        statusBar()->showMessage(checked ? "Włączono rysowanie krzywej" : "Wyłączono rysowanie krzywej");
+    });
+
+    auto* drawPolylineCheckBox = new QCheckBox("Rysuj łamaną łączącą punkty");
+    drawPolylineCheckBox->setChecked(curve->getDrawPolyline());
+    m_propertiesLayout->addWidget(drawPolylineCheckBox);
+
+    connect(drawPolylineCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
+        curve->setDrawPolyline(checked);
+        m_canvas->refresh();
+        statusBar()->showMessage(checked ? "Włączono rysowanie łamanej" : "Wyłączono rysowanie łamanej");
+    });
+
+    auto* drawConvexHullCheckBox = new QCheckBox("Rysuj otoczkę wypukłą punktów");
+    drawConvexHullCheckBox->setChecked(curve->getDrawConvexHull());
+    m_propertiesLayout->addWidget(drawConvexHullCheckBox);
+
+    connect(drawConvexHullCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
+        curve->setDrawConvexHull(checked);
+        m_canvas->refresh();
+        statusBar()->showMessage(checked ? "Włączono rysowanie otoczki wypukłej" : "Wyłączono rysowanie otoczki wypukłej");
+    });
+}
+
+void MainWindow::addUnifiedCurveStyleControls(std::shared_ptr<Curve> curve) {
+    m_propertiesLayout->addWidget(new QLabel("<b>Styl krzywej głównej:</b>"));
+
+    m_propertiesLayout->addWidget(new QLabel("Kolor linii:"));
+    QPushButton* colorButton = new QPushButton();
+    colorButton->setFixedSize(80, 25);
+    QColor currentColor = curve->getColor();
+    colorButton->setStyleSheet(QString("background-color: %1;").arg(currentColor.name()));
+    m_propertiesLayout->addWidget(colorButton);
+
+    connect(colorButton, &QPushButton::clicked, [this, curve, colorButton]() {
+        QColor color = QColorDialog::getColor(curve->getColor(), nullptr, "Wybierz kolor linii");
+        if (color.isValid()) {
+            curve->setColor(color);
+            colorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+            m_canvas->refresh();
+            statusBar()->showMessage("Zmieniono kolor linii");
+        }
+    });
+
+    m_propertiesLayout->addWidget(new QLabel("Grubość linii:"));
+    auto* widthSpinBox = new QDoubleSpinBox();
+    widthSpinBox->setRange(0.1, 10.0);
+    widthSpinBox->setSingleStep(0.1);
+    widthSpinBox->setValue(curve->getLineWidth());
+    m_propertiesLayout->addWidget(widthSpinBox);
+
+    connect(widthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
+        curve->setLineWidth(value);
+        m_canvas->refresh();
+        statusBar()->showMessage(QString("Zmieniono grubość linii na %1").arg(QString::number(value)));
+    });
+
+    m_propertiesLayout->addWidget(new QLabel("<b>Styl łamanej:</b>"));
+
+    m_propertiesLayout->addWidget(new QLabel("Kolor łamanej:"));
+    auto polylineColorButton = new QPushButton();
+    polylineColorButton->setFixedSize(80, 25);
+    QColor currentPolylineColor = curve->getPolylineColor();
+    polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(currentPolylineColor.name()));
+    m_propertiesLayout->addWidget(polylineColorButton);
+
+    connect(polylineColorButton, &QPushButton::clicked, [this, curve, polylineColorButton]() {
+        QColor color = QColorDialog::getColor(curve->getPolylineColor(), nullptr, "Wybierz kolor łamanej");
+        if (color.isValid()) {
+            curve->setPolylineColor(color);
+            polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+            m_canvas->refresh();
+            statusBar()->showMessage("Zmieniono kolor łamanej");
+        }
+    });
+
+    m_propertiesLayout->addWidget(new QLabel("Grubość łamanej:"));
+    auto* polylineWidthSpinBox = new QDoubleSpinBox();
+    polylineWidthSpinBox->setRange(0.1, 10.0);
+    polylineWidthSpinBox->setSingleStep(0.1);
+    polylineWidthSpinBox->setValue(curve->getPolylineWidth());
+    m_propertiesLayout->addWidget(polylineWidthSpinBox);
+
+    connect(polylineWidthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
+        curve->setPolylineWidth(value);
+        m_canvas->refresh();
+        statusBar()->showMessage(QString("Zmieniono grubość łamanej na %1").arg(QString::number(value)));
+    });
+
+    m_propertiesLayout->addWidget(new QLabel("<b>Styl otoczki wypukłej:</b>"));
+
+    m_propertiesLayout->addWidget(new QLabel("Kolor otoczki wypukłej:"));
+    QPushButton* convexHullColorButton = new QPushButton();
+    convexHullColorButton->setFixedSize(80, 25);
+    QColor currentConvexHullColor = curve->getConvexHullColor();
+    convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(currentConvexHullColor.name()));
+    m_propertiesLayout->addWidget(convexHullColorButton);
+
+    connect(convexHullColorButton, &QPushButton::clicked, [this, curve, convexHullColorButton]() {
+        QColor color = QColorDialog::getColor(curve->getConvexHullColor(), nullptr, "Wybierz kolor otoczki wypukłej");
+        if (color.isValid()) {
+            curve->setConvexHullColor(color);
+            convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+            m_canvas->refresh();
+            statusBar()->showMessage("Zmieniono kolor otoczki wypukłej");
+        }
+    });
+
+    m_propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: %1")
+        .arg(QString::number(curve->getLength(), 'f', 2))));
+}
+
+void MainWindow::updatePropertiesPanel() {
+    QLayoutItem* child;
+    while ((child = m_propertiesLayout->takeAt(0)) != nullptr) {
+        delete child->widget();
+        delete child;
+    }
+
+    auto selectedObject = m_canvas->selectedObject();
+    if (!selectedObject) {
+        m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt, aby edytować jego właściwości"));
+        return;
+    }
+
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObject)) {
+        m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej interpolowanej</b>"));
+
+        m_propertiesLayout->addWidget(new QLabel("Typ interpolacji:"));
+        QComboBox* typeCombo = new QComboBox();
+        typeCombo->addItem("NIFS3 (Natural Cubic Spline)", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::NIFS3)));
+        typeCombo->addItem("OIFS3 (Closed Cubic Spline)", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::OIFS3)));
+        typeCombo->addItem("Lagrange", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Lagrange)));
+        typeCombo->addItem("Barycentric", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Barycentric)));
+
+        typeCombo->setCurrentIndex(static_cast<int>(curve->getInterpolationType()));
+        m_propertiesLayout->addWidget(typeCombo);
+
+        connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            [this, curve](int index) {
+                const auto type = static_cast<InterpolatedCurve::InterpolationType>(index);
+                curve->setInterpolationType(type);
+                m_canvas->refresh();
+                QTimer::singleShot(0, [this]() { updatePropertiesPanel(); });
+
+                QString typeName;
+                switch (type) {
+                    case InterpolatedCurve::InterpolationType::NIFS3: typeName = "NIFS3"; break;
+                    case InterpolatedCurve::InterpolationType::OIFS3: typeName = "OIFS3"; break;
+                    case InterpolatedCurve::InterpolationType::Lagrange: typeName = "Lagrange"; break;
+                    case InterpolatedCurve::InterpolationType::Barycentric: typeName = "Barycentric"; break;
+                }
+                statusBar()->showMessage(QString("Zmieniono typ interpolacji na %1").arg(typeName));
+            });
+
+        addUnifiedCurveVisibilityControls(std::static_pointer_cast<Curve>(curve));
+        addUnifiedCurveStyleControls(std::static_pointer_cast<Curve>(curve));
+    }
+    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObject)) {
+        m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej Béziera</b>"));
+        m_propertiesLayout->addWidget(new QLabel(QString("Liczba punktów kontrolnych: %1")
+                                                .arg(QString::number(bezierCurve->getControlPointCount()))));
+        m_propertiesLayout->addWidget(new QLabel(QString("Stopień krzywej: %1")
+                                                .arg(QString::number(bezierCurve->getDegree()))));
+
+        addUnifiedCurveVisibilityControls(std::static_pointer_cast<Curve>(bezierCurve));
+        addUnifiedCurveStyleControls(std::static_pointer_cast<Curve>(bezierCurve));
+    }
+    else {
+        m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt"));
+    }
+
+    m_propertiesLayout->addStretch();
 }
 
 //===== END FILE: UI\MainWindow.cpp =====//
@@ -4849,6 +4771,9 @@ private:
     QToolButton* m_interpolatedButton;
 
     std::unique_ptr<ActionHandler> m_actionHandler;
+
+    void addUnifiedCurveVisibilityControls(std::shared_ptr<Curve> curve);
+    void addUnifiedCurveStyleControls(std::shared_ptr<Curve> curve);
 
     friend class ActionHandler;
 };

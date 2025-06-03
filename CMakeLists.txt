@@ -37,7 +37,6 @@ add_executable(edytor_krzywych
         Core/Command.h
         Core/CommandManager.cpp
         Core/CommandManager.h
-        Core/CurveCommand.h
 
         Graphics/Canvas.cpp
         Graphics/Canvas.h
@@ -53,6 +52,8 @@ add_executable(edytor_krzywych
         UI/ActionHandler.h
         Geometry/BezierCurve.cpp
         Geometry/BezierCurve.h
+        Geometry/CurveStyle.h
+        Geometry/Curve.cpp
 )
 
 find_package(Qt6 COMPONENTS Core Gui Widgets REQUIRED)

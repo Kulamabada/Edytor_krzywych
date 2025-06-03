@@ -9,59 +9,37 @@ public:
 
     int getDegree() const;
 
-    // Curve
-    double getLength() const override;
     Point getPointAt(double t) const override;
     Vector getTangentAt(double t) const override;
-    std::unique_ptr<Curve> clone() const override;
 
-    bool hasControlPoints() const override { return true; }
+    // Obsługa wag dla wymiernych krzywych Béziera
+    void setWeights(const std::vector<double>& weights);
+    const std::vector<double>& getWeights() const;
+    void setWeight(size_t index, double weight);
+    double getWeight(size_t index) const;
+    bool hasWeights() const;
+    void clearWeights();
+
+    // Nadpisane metody z Curve dla obsługi wag
     void addControlPoint(const Point& point) override;
     void insertControlPoint(size_t index, const Point& point) override;
     void removeControlPoint(size_t index) override;
     void setControlPoints(const std::vector<Point>& points) override;
-    void moveControlPoint(size_t index, const Point& newPosition) override;
-    const std::vector<Point>& getControlPoints() const override;
-    size_t getControlPointCount() const override;
 
-    //  GeometricObject
-    Vector getPosition() const override;
-    void setPosition(const Eigen::Vector3d& position) override;
-    void transform(const TransformMatrix& matrix) override;
-
-    void setColor(const QColor& color) { m_color = color; }
-    QColor getColor() const { return m_color; }
-
-    void setLineWidth(double width) { m_lineWidth = width; }
-    double getLineWidth() const { return m_lineWidth; }
-
-    void setLineStyle(Qt::PenStyle style) { m_lineStyle = style; }
-    Qt::PenStyle getLineStyle() const { return m_lineStyle; }
-
-    void setShowControlPolygon(bool show) { m_showControlPolygon = show; }
-    bool getShowControlPolygon() const { return m_showControlPolygon; }
-
-    void setControlPolygonColor(const QColor& color) { m_controlPolygonColor = color; }
-    QColor getControlPolygonColor() const { return m_controlPolygonColor; }
-
-    void setControlPolygonWidth(double width) { m_controlPolygonWidth = width; }
-    double getControlPolygonWidth() const { return m_controlPolygonWidth; }
-
-    void setControlPolygonStyle(Qt::PenStyle style) { m_controlPolygonStyle = style; }
-    Qt::PenStyle getControlPolygonStyle() const { return m_controlPolygonStyle; }
+protected:
+    std::unique_ptr<Curve> createClone() const override;
+    void copySpecificPropertiesTo(Curve* target) const override;
 
 private:
-    std::vector<Point> m_controlPoints;
+    // Algorytmy de Casteljau
+    Point deCasteljau(double t) const;                    // Zwykły algorytm
+    Point rationalDeCasteljau(double t) const;            // Wymierny algorytm
+    Vector deCasteljauDerivative(double t) const;         // Zwykła pochodna
+    Vector rationalDeCasteljauDerivative(double t) const; // Wymierna pochodna
 
-    QColor m_color{Qt::blue};
-    double m_lineWidth{2.0};
-    Qt::PenStyle m_lineStyle{Qt::SolidLine};
+    // Pomocnicze metody dla wymiernych krzywych
+    void ensureWeightsSize();
+    void validateWeights() const;
 
-    bool m_showControlPolygon{true};
-    QColor m_controlPolygonColor{Qt::darkGray};
-    double m_controlPolygonWidth{1.0};
-    Qt::PenStyle m_controlPolygonStyle{Qt::DashLine};
-
-    Point deCasteljau(double t) const;
-    Vector deCasteljauDerivative(double t) const;
+    std::vector<double> m_weights;
 };

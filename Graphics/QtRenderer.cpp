@@ -50,63 +50,77 @@ void QtRenderer::renderPoint(const Point& point)
 void QtRenderer::renderCurve(const Curve& curve) {
     if (!m_painter || !m_viewportManager) return;
 
-    if (const auto interpolatedCurve = dynamic_cast<const InterpolatedCurve*>(&curve)) {
+    renderMainCurve(curve);
+    renderCurveExtras(curve);
+}
 
-        if (interpolatedCurve->getDrawInterpolatedCurve()) {
-            QColor color = interpolatedCurve->getColor();
-            double width = interpolatedCurve->getLineWidth();
-            Qt::PenStyle style = interpolatedCurve->getLineStyle();
+void QtRenderer::renderMainCurve(const Curve& curve) {
+    if (!curve.getDrawMainCurve() || !curve.hasControlPoints() || curve.getControlPointCount() < 2)
+        return;
 
-            const QPen pen(color, width, style);
-            m_painter->setPen(pen);
-            m_painter->setBrush(Qt::NoBrush);
+    QColor color = curve.getColor();
+    double width = curve.getLineWidth();
+    Qt::PenStyle style = curve.getLineStyle();
 
-            constexpr int numSegments = 5000;
-            QPolygonF points;
+    const QPen pen(color, width, style);
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
 
-            for (int i = 0; i <= numSegments; ++i) {
-                double t = static_cast<double>(i) / numSegments;
-                Point p = curve.getPointAt(t);
-                points.append(QPointF(p.x(), p.y()));
-            }
-            m_painter->drawPolyline(points);
-        }
-
-        if (interpolatedCurve->getDrawPolyline())
-            renderPolyline(interpolatedCurve->getControlPoints());
-
-        if (interpolatedCurve->getDrawConvexHull())
-            renderConvexHull(interpolatedCurve->getControlPoints());
+    constexpr int numSegments = 1000;
+    QPolygonF points;
+    for (int i = 0; i <= numSegments; ++i) {
+        double t = static_cast<double>(i) / numSegments;
+        Point p = curve.getPointAt(t);
+        points.append(QPointF(p.x(), p.y()));
     }
+    m_painter->drawPolyline(points);
+}
 
-    if (const auto bezierCurve = dynamic_cast<const BezierCurve*>(&curve)) {
-        QColor color = bezierCurve->getColor();
-        double width = bezierCurve->getLineWidth();
-        Qt::PenStyle style = bezierCurve->getLineStyle();
+void QtRenderer::renderCurveExtras(const Curve& curve) {
+    if (!curve.hasControlPoints() || curve.getControlPointCount() < 2) return;
 
-        const QPen pen(color, width, style);
-        m_painter->setPen(pen);
-        m_painter->setBrush(Qt::NoBrush);
+    renderCurvePolyline(curve);
+    renderCurveConvexHull(curve);
+}
 
-        if (bezierCurve->getControlPointCount() >= 2) {
-            constexpr int numSegments = 1000;
-            QPolygonF points;
+void QtRenderer::renderCurvePolyline(const Curve& curve) {
+    if (!curve.getDrawPolyline()) return;
 
-            for (int i = 0; i <= numSegments; ++i) {
-                double t = static_cast<double>(i) / numSegments;
-                Point p = curve.getPointAt(t);
-                points.append(QPointF(p.x(), p.y()));
-            }
+    const auto& controlPoints = curve.getControlPoints();
+    const QPen pen(curve.getPolylineColor(), curve.getPolylineWidth(), curve.getPolylineStyle());
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
 
-            m_painter->drawPolyline(points);
-        }
+    QPolygonF polylinePoints = pointsToPolygon(controlPoints);
+    m_painter->drawPolyline(polylinePoints);
+}
 
-        if (bezierCurve->getShowControlPolygon())
-            renderBezierControlPolygon(bezierCurve->getControlPoints(),
-                                     bezierCurve->getControlPolygonColor(),
-                                     bezierCurve->getControlPolygonWidth(),
-                                     bezierCurve->getControlPolygonStyle());
+void QtRenderer::renderCurveConvexHull(const Curve& curve) {
+    if (!curve.getDrawConvexHull() || curve.getControlPointCount() < 3) return;
+
+    const auto& controlPoints = curve.getControlPoints();
+    const std::vector<Point> hull = computeConvexHull(controlPoints);
+
+    if (hull.size() < 3) return;
+
+    const QPen pen(curve.getConvexHullColor(), curve.getConvexHullWidth(), curve.getConvexHullStyle());
+    m_painter->setPen(pen);
+    m_painter->setBrush(Qt::NoBrush);
+
+    QPolygonF hullPolygon = pointsToPolygon(hull);
+    if (!hull.empty()) {
+        hullPolygon << QPointF(hull[0].x(), hull[0].y());
     }
+    m_painter->drawPolyline(hullPolygon);
+}
+
+QPolygonF QtRenderer::pointsToPolygon(const std::vector<Point>& points) const {
+    QPolygonF polygon;
+    polygon.reserve(points.size());
+    for (const auto& point : points) {
+        polygon << QPointF(point.x(), point.y());
+    }
+    return polygon;
 }
 
 void QtRenderer::renderObject(const GeometricObject& object)
@@ -276,7 +290,7 @@ void QtRenderer::renderSelectionMarker(const QPointF& position)
     m_painter->restore();
 }
 
-void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bool isActive)
+void QtRenderer::renderControlPoint(const QPointF& position, const Curve& curve, bool isSelected, bool isActive)
 {
     if (!m_painter || !m_painter->isActive())
         return;
@@ -286,24 +300,26 @@ void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bo
 
     QColor fillColor;
     if (isActive) {
-        fillColor = m_controlPointActiveColor;
+        fillColor = curve.getControlPointActiveColor();
     } else if (isSelected) {
-        fillColor = m_controlPointSelectedColor;
+        fillColor = curve.getControlPointSelectedColor();
     } else {
-        fillColor = m_controlPointNormalColor;
+        fillColor = curve.getControlPointNormalColor();
     }
+
+    double pointSize = curve.getControlPointSize();
 
     QPen shadowPen(Qt::black, 1.0);
     QBrush shadowBrush(QColor(0, 0, 0, 50));
     m_painter->setPen(shadowPen);
     m_painter->setBrush(shadowBrush);
-    m_painter->drawEllipse(position + QPointF(1, 1), m_controlPointSize + 1, m_controlPointSize + 1);
+    m_painter->drawEllipse(position + QPointF(1, 1), pointSize + 1, pointSize + 1);
 
     QPen pen(Qt::black, 1.0);
     QBrush brush(fillColor);
     m_painter->setPen(pen);
     m_painter->setBrush(brush);
-    m_painter->drawEllipse(position, m_controlPointSize, m_controlPointSize);
+    m_painter->drawEllipse(position, pointSize, pointSize);
 
     if (isSelected) {
         m_painter->setPen(Qt::white);
@@ -322,13 +338,15 @@ void QtRenderer::renderControlPoint(const QPointF& position, bool isSelected, bo
     m_painter->restore();
 }
 
-void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selectedIndex, int draggingIndex)
+void QtRenderer::renderControlPoints(const Curve& curve, int selectedIndex, int draggingIndex)
 {
-    if (!m_painter || !m_viewportManager || points.empty())
+    if (!m_painter || !m_viewportManager || !curve.hasControlPoints())
         return;
 
-    if (m_drawControlPolygon && points.size() >= 2)
-        renderControlPolygon(points);
+    const auto& points = curve.getControlPoints();
+    if (points.empty()) return;
+
+    if (!curve.getShowControlPoints()) return;
 
     std::vector<QPointF> screenPositions;
     screenPositions.reserve(points.size());
@@ -338,13 +356,13 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
 
     for (size_t i = 0; i < points.size(); ++i)
         if (static_cast<int>(i) != selectedIndex && static_cast<int>(i) != draggingIndex)
-            renderControlPoint(screenPositions[i], false, false);
+            renderControlPoint(screenPositions[i], curve, false, false);
 
     if (selectedIndex >= 0 && selectedIndex < static_cast<int>(points.size()))
-        renderControlPoint(screenPositions[selectedIndex], true, false);
+        renderControlPoint(screenPositions[selectedIndex], curve, true, false);
 
     if (draggingIndex >= 0 && draggingIndex < static_cast<int>(points.size()) && draggingIndex != selectedIndex)
-        renderControlPoint(screenPositions[draggingIndex], false, true);
+        renderControlPoint(screenPositions[draggingIndex], curve, false, true);
 
     m_painter->save();
     m_painter->resetTransform();
@@ -359,8 +377,8 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
         QString label = QString::number(i);
         QFontMetrics fm(font);
         QRect textRect = fm.boundingRect(label);
-        QPointF textPos = screenPositions[i] + QPointF(m_controlPointSize + 2,
-                                                  m_controlPointSize / 2.0);
+        QPointF textPos = screenPositions[i] + QPointF(curve.getControlPointSize() + 2,
+                                                  curve.getControlPointSize() / 2.0);
 
         auto bgRect = QRectF(textPos.x() - 1, textPos.y() - textRect.height(),
                               textRect.width() + 2, textRect.height() + 2);
@@ -368,29 +386,6 @@ void QtRenderer::renderControlPoints(const std::vector<Point>& points, int selec
 
         m_painter->drawText(textPos, label);
     }
-
-    m_painter->restore();
-}
-
-void QtRenderer::renderControlPolygon(const std::vector<Point>& points)
-{
-    if (!m_painter || !m_viewportManager || points.size() < 2)
-        return;
-
-    m_painter->save();
-    m_painter->resetTransform();
-
-    const QPen pen(m_controlPolygonColor, m_controlPolygonWidth, m_controlPolygonStyle);
-    m_painter->setPen(pen);
-    m_painter->setBrush(Qt::NoBrush);
-
-    QPolygonF polygon;
-    for (const auto& point : points) {
-        QPointF screenPos = m_viewportManager->worldToScreen(QPointF(point.x(), point.y()));
-        polygon << screenPos;
-    }
-
-    m_painter->drawPolyline(polygon);
 
     m_painter->restore();
 }
@@ -427,22 +422,6 @@ void QtRenderer::setAxesStyle(const QColor& color, const float width)
     m_axesWidth = width;
 }
 
-void QtRenderer::setControlPointStyle(const QColor& normalColor, const QColor& selectedColor,
-                                const QColor& activeColor, const float size)
-{
-    m_controlPointNormalColor = normalColor;
-    m_controlPointSelectedColor = selectedColor;
-    m_controlPointActiveColor = activeColor;
-    m_controlPointSize = size;
-}
-
-void QtRenderer::setControlPolygonStyle(const QColor& color, const float width, const Qt::PenStyle style)
-{
-    m_controlPolygonColor = color;
-    m_controlPolygonWidth = width;
-    m_controlPolygonStyle = style;
-}
-
 void QtRenderer::setDrawGrid(const bool draw)
 {
     m_drawGrid = draw;
@@ -451,11 +430,6 @@ void QtRenderer::setDrawGrid(const bool draw)
 void QtRenderer::setDrawAxes(const bool draw)
 {
     m_drawAxes = draw;
-}
-
-void QtRenderer::setDrawControlPolygon(const bool draw)
-{
-    m_drawControlPolygon = draw;
 }
 
 void QtRenderer::renderPolyline(const std::vector<Point>& points)
@@ -467,10 +441,7 @@ void QtRenderer::renderPolyline(const std::vector<Point>& points)
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 
-    QPolygonF polygon;
-    for (const auto& point : points)
-        polygon << QPointF(point.x(), point.y());
-
+    QPolygonF polygon = pointsToPolygon(points);
     m_painter->drawPolyline(polygon);
 }
 
@@ -486,10 +457,7 @@ void QtRenderer::renderConvexHull(const std::vector<Point>& points)
     m_painter->setPen(pen);
     m_painter->setBrush(Qt::NoBrush);
 
-    QPolygonF polygon;
-    for (const auto& point : hull)
-        polygon << QPointF(point.x(), point.y());
-
+    QPolygonF polygon = pointsToPolygon(hull);
     if (!hull.empty())
         polygon << QPointF(hull[0].x(), hull[0].y());
 
@@ -574,20 +542,4 @@ double QtRenderer::distanceSquared(const Point& a, const Point& b)
 {
     const double dx = a.x() - b.x(), dy = a.y() - b.y();
     return dx * dx + dy * dy;
-}
-
-void QtRenderer::renderBezierControlPolygon(const std::vector<Point>& points, const QColor& color,
-                                          const double width, const Qt::PenStyle style)
-{
-    if (!m_painter || !m_viewportManager || points.size() < 2) return;
-
-    const QPen pen(color, width, style);
-    m_painter->setPen(pen);
-    m_painter->setBrush(Qt::NoBrush);
-
-    QPolygonF polygon;
-    for (const auto& point : points)
-        polygon << QPointF(point.x(), point.y());
-
-    m_painter->drawPolyline(polygon);
 }

@@ -11,8 +11,6 @@ MainWindow::MainWindow(QWidget* parent)
     , m_modeLabel(nullptr)
 {
     setWindowTitle("Edytor Krzywych");
-    resize(1024, 768);
-
     createMenus();
     createToolbars();
     setupCentralWidget();
@@ -20,7 +18,7 @@ MainWindow::MainWindow(QWidget* parent)
     connectSignals();
 
     m_actionHandler = std::make_unique<ActionHandler>(*this);
-
+    showMaximized();
     statusBar()->showMessage("Aplikacja gotowa do użycia");
 }
 
@@ -163,7 +161,7 @@ void MainWindow::createDockWidgets() {
     m_objectsTree->setExpandsOnDoubleClick(true);
     m_objectsDock->setWidget(m_objectsTree);
 
-    addDockWidget(Qt::RightDockWidgetArea, m_objectsDock);
+    addDockWidget(Qt::LeftDockWidgetArea, m_objectsDock);
 
     m_propertiesDock = new QDockWidget("Właściwości", this);
     m_propertiesDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
@@ -282,288 +280,6 @@ void MainWindow::updateObjectsTree() {
     m_objectsTree->expandAll();
 }
 
-void MainWindow::updatePropertiesPanel() {
-    QLayoutItem* child;
-    while ((child = m_propertiesLayout->takeAt(0)) != nullptr) {
-        delete child->widget();
-        delete child;
-    }
-
-    auto selectedObject = m_canvas->selectedObject();
-    if (!selectedObject) {
-        m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt, aby edytować jego właściwości"));
-        return;
-    }
-
-    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObject)) {
-        m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej interpolowanej</b>"));
-
-        m_propertiesLayout->addWidget(new QLabel("Typ interpolacji:"));
-
-        QComboBox* typeCombo = new QComboBox();
-        typeCombo->addItem("NIFS3 (Natural Cubic Spline)", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::NIFS3)));
-        typeCombo->addItem("OIFS3 (Closed Cubic Spline)", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::OIFS3)));
-        typeCombo->addItem("Lagrange", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Lagrange)));
-        typeCombo->addItem("Barycentric", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Barycentric)));
-
-        typeCombo->setCurrentIndex(static_cast<int>(curve->getInterpolationType()));
-        m_propertiesLayout->addWidget(typeCombo);
-
-        connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            [this, curve](int index) {
-                const auto type = static_cast<InterpolatedCurve::InterpolationType>(index);
-                curve->setInterpolationType(type);
-                m_canvas->refresh();
-                QTimer::singleShot(0, [this]() {
-                        updatePropertiesPanel();
-                    });
-
-                QString typeName;
-                switch (type) {
-                    case InterpolatedCurve::InterpolationType::NIFS3: typeName = "NIFS3"; break;
-                    case InterpolatedCurve::InterpolationType::OIFS3: typeName = "OIFS3"; break;
-                    case InterpolatedCurve::InterpolationType::Lagrange: typeName = "Lagrange"; break;
-                    case InterpolatedCurve::InterpolationType::Barycentric: typeName = "Barycentric"; break;
-                }
-
-                statusBar()->showMessage(QString("Zmieniono typ interpolacji na %1").arg(typeName));
-            });
-
-        // === SEKCJA KONTROLI RENDEROWANIA ===
-        m_propertiesLayout->addWidget(new QLabel("<b>Kontrola wyświetlania:</b>"));
-
-        // Checkbox dla krzywej interpolowanej
-        auto* drawCurveCheckBox = new QCheckBox("Rysuj krzywą interpolowaną");
-        drawCurveCheckBox->setChecked(curve->getDrawInterpolatedCurve());
-        m_propertiesLayout->addWidget(drawCurveCheckBox);
-
-        connect(drawCurveCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
-            curve->setDrawInterpolatedCurve(checked);
-            m_canvas->refresh();
-            statusBar()->showMessage(checked ? "Włączono rysowanie krzywej" : "Wyłączono rysowanie krzywej");
-        });
-
-        // Checkbox dla łamanej
-        auto* drawPolylineCheckBox = new QCheckBox("Rysuj łamaną łączącą punkty");
-        drawPolylineCheckBox->setChecked(curve->getDrawPolyline());
-        m_propertiesLayout->addWidget(drawPolylineCheckBox);
-
-        connect(drawPolylineCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
-            curve->setDrawPolyline(checked);
-            m_canvas->refresh();
-            statusBar()->showMessage(checked ? "Włączono rysowanie łamanej" : "Wyłączono rysowanie łamanej");
-        });
-
-        // Checkbox dla otoczki wypukłej
-        auto* drawConvexHullCheckBox = new QCheckBox("Rysuj otoczkę wypukłą punktów");
-        drawConvexHullCheckBox->setChecked(curve->getDrawConvexHull());
-        m_propertiesLayout->addWidget(drawConvexHullCheckBox);
-
-        connect(drawConvexHullCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
-            curve->setDrawConvexHull(checked);
-            m_canvas->refresh();
-            statusBar()->showMessage(checked ? "Włączono rysowanie otoczki wypukłej" : "Wyłączono rysowanie otoczki wypukłej");
-        });
-
-        // === WŁAŚCIWOŚCI KRZYWEJ INTERPOLOWANEJ ===
-        m_propertiesLayout->addWidget(new QLabel("<b>Styl krzywej interpolowanej:</b>"));
-
-        m_propertiesLayout->addWidget(new QLabel("Kolor linii:"));
-
-        QPushButton* colorButton = new QPushButton();
-        colorButton->setFixedSize(80, 25);
-        QColor currentColor = curve->getColor();
-        QString styleSheet = QString("background-color: %1;").arg(currentColor.name());
-        colorButton->setStyleSheet(styleSheet);
-
-        m_propertiesLayout->addWidget(colorButton);
-
-        connect(colorButton, &QPushButton::clicked, [this, curve, colorButton]() {
-            QColor color = QColorDialog::getColor(curve->getColor(), nullptr, "Wybierz kolor linii");
-            if (color.isValid()) {
-                curve->setColor(color);
-                QString styleSheet = QString("background-color: %1;").arg(color.name());
-                colorButton->setStyleSheet(styleSheet);
-                m_canvas->refresh();
-                statusBar()->showMessage("Zmieniono kolor linii");
-            }
-        });
-
-        m_propertiesLayout->addWidget(new QLabel("Grubość linii:"));
-
-        auto* widthSpinBox = new QDoubleSpinBox();
-        widthSpinBox->setRange(0.1, 10.0);
-        widthSpinBox->setSingleStep(0.1);
-        widthSpinBox->setValue(curve->getLineWidth());
-
-        m_propertiesLayout->addWidget(widthSpinBox);
-
-        connect(widthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
-            curve->setLineWidth(value);
-            m_canvas->refresh();
-            statusBar()->showMessage(QString("Zmieniono grubość linii na %1").arg(std::to_string(value)));
-        });
-
-        m_propertiesLayout->addWidget(new QLabel("Styl linii:"));
-
-        auto* lineStyleCombo = new QComboBox();
-        lineStyleCombo->addItem("Ciągła", static_cast<int>(Qt::SolidLine));
-        lineStyleCombo->addItem("Przerywana", static_cast<int>(Qt::DashLine));
-        lineStyleCombo->addItem("Kropkowana", static_cast<int>(Qt::DotLine));
-        lineStyleCombo->addItem("Kreska-kropka", static_cast<int>(Qt::DashDotLine));
-        lineStyleCombo->addItem("Kreska-kropka-kropka", static_cast<int>(Qt::DashDotDotLine));
-
-        int styleIndex = 0;
-        switch (curve->getLineStyle()) {
-            case Qt::SolidLine: styleIndex = 0; break;
-            case Qt::DashLine: styleIndex = 1; break;
-            case Qt::DotLine: styleIndex = 2; break;
-            case Qt::DashDotLine: styleIndex = 3; break;
-            case Qt::DashDotDotLine: styleIndex = 4; break;
-            default: styleIndex = 0; break;
-        }
-
-        lineStyleCombo->setCurrentIndex(styleIndex);
-
-        m_propertiesLayout->addWidget(lineStyleCombo);
-
-        connect(lineStyleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, curve, lineStyleCombo](int index) {
-            Qt::PenStyle style = static_cast<Qt::PenStyle>(lineStyleCombo->itemData(index).toInt());
-            curve->setLineStyle(style);
-            m_canvas->refresh();
-            statusBar()->showMessage("Zmieniono styl linii");
-        });
-
-        m_propertiesLayout->addWidget(new QLabel("<b>Styl łamanej:</b>"));
-
-        m_propertiesLayout->addWidget(new QLabel("Kolor łamanej:"));
-        auto polylineColorButton = new QPushButton();
-        polylineColorButton->setFixedSize(80, 25);
-        QColor currentPolylineColor = curve->getPolylineColor();
-        polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(currentPolylineColor.name()));
-        m_propertiesLayout->addWidget(polylineColorButton);
-
-        connect(polylineColorButton, &QPushButton::clicked, [this, curve, polylineColorButton]() {
-            if (QColor color = QColorDialog::getColor(curve->getPolylineColor(), nullptr, "Wybierz kolor łamanej"); color.isValid()) {
-                curve->setPolylineColor(color);
-                polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
-
-                if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
-                    qtRenderer->setPolylineStyle(color, curve->getPolylineWidth(), curve->getPolylineStyle());
-                }
-
-                m_canvas->refresh();
-                statusBar()->showMessage("Zmieniono kolor łamanej");
-            }
-        });
-
-        m_propertiesLayout->addWidget(new QLabel("Grubość łamanej:"));
-        auto* polylineWidthSpinBox = new QDoubleSpinBox();
-        polylineWidthSpinBox->setRange(0.1, 10.0);
-        polylineWidthSpinBox->setSingleStep(0.1);
-        polylineWidthSpinBox->setValue(curve->getPolylineWidth());
-        m_propertiesLayout->addWidget(polylineWidthSpinBox);
-
-        connect(polylineWidthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
-            curve->setPolylineWidth(value);
-
-            if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get()))
-                qtRenderer->setPolylineStyle(curve->getPolylineColor(), value, curve->getPolylineStyle());
-
-            m_canvas->refresh();
-            statusBar()->showMessage(QString("Zmieniono grubość łamanej na %1").arg(std::to_string(value)));
-        });
-
-        m_propertiesLayout->addWidget(new QLabel("<b>Styl otoczki wypukłej:</b>"));
-
-        m_propertiesLayout->addWidget(new QLabel("Kolor otoczki wypukłej:"));
-        QPushButton* convexHullColorButton = new QPushButton();
-        convexHullColorButton->setFixedSize(80, 25);
-        QColor currentConvexHullColor = curve->getConvexHullColor();
-        convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(currentConvexHullColor.name()));
-        m_propertiesLayout->addWidget(convexHullColorButton);
-
-        connect(convexHullColorButton, &QPushButton::clicked, [this, curve, convexHullColorButton]() {
-            QColor color = QColorDialog::getColor(curve->getConvexHullColor(), nullptr, "Wybierz kolor otoczki wypukłej");
-            if (color.isValid()) {
-                curve->setConvexHullColor(color);
-                convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
-
-                if (auto qtRenderer = dynamic_cast<QtRenderer*>(m_renderer.get())) {
-                    qtRenderer->setConvexHullStyle(color, curve->getConvexHullWidth(), curve->getConvexHullStyle());
-                }
-
-                m_canvas->refresh();
-                statusBar()->showMessage("Zmieniono kolor otoczki wypukłej");
-            }
-        });
-
-        m_propertiesLayout->addWidget(new QLabel("<i>Otoczka wypukła obliczana algorytmem Graham Scan</i>"));
-
-        m_propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: %1")
-            .arg(QString::number(curve->getLength(), 'f', 2))));
-    }
-    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObject)) {
-        m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej Béziera</b>"));
-
-        // Informacje o krzywej
-        m_propertiesLayout->addWidget(new QLabel(QString("Liczba punktów kontrolnych: %1")
-                                                .arg(std::to_string(bezierCurve->getControlPointCount()))));
-        m_propertiesLayout->addWidget(new QLabel(QString("Stopień krzywej: %1")
-                                                .arg(std::to_string(bezierCurve->getDegree()))));
-
-        // Checkbox dla wielokąta kontrolnego
-        auto* showPolygonCheckBox = new QCheckBox("Pokaż linie pomocnicze");
-        showPolygonCheckBox->setChecked(bezierCurve->getShowControlPolygon());
-        m_propertiesLayout->addWidget(showPolygonCheckBox);
-
-        connect(showPolygonCheckBox, &QCheckBox::toggled, [this, bezierCurve](bool checked) {
-            bezierCurve->setShowControlPolygon(checked);
-            m_canvas->refresh();
-            statusBar()->showMessage(checked ? "Włączono linie pomocnicze" : "Wyłączono linie pomocnicze");
-        });
-
-        // Kolor krzywej
-        m_propertiesLayout->addWidget(new QLabel("Kolor krzywej:"));
-        QPushButton* colorButton = new QPushButton();
-        colorButton->setFixedSize(80, 25);
-        QColor currentColor = bezierCurve->getColor();
-        colorButton->setStyleSheet(QString("background-color: %1;").arg(currentColor.name()));
-        m_propertiesLayout->addWidget(colorButton);
-
-        connect(colorButton, &QPushButton::clicked, [this, bezierCurve, colorButton]() {
-            QColor color = QColorDialog::getColor(bezierCurve->getColor(), nullptr, "Wybierz kolor krzywej");
-            if (color.isValid()) {
-                bezierCurve->setColor(color);
-                colorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
-                m_canvas->refresh();
-                statusBar()->showMessage("Zmieniono kolor krzywej");
-            }
-        });
-
-        // Grubość linii
-        m_propertiesLayout->addWidget(new QLabel("Grubość linii:"));
-        auto* widthSpinBox = new QDoubleSpinBox();
-        widthSpinBox->setRange(0.1, 10.0);
-        widthSpinBox->setSingleStep(0.1);
-        widthSpinBox->setValue(bezierCurve->getLineWidth());
-        m_propertiesLayout->addWidget(widthSpinBox);
-
-        connect(widthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                [this, bezierCurve](double value) {
-            bezierCurve->setLineWidth(value);
-            m_canvas->refresh();
-            statusBar()->showMessage(QString("Zmieniono grubość linii na %1").arg(std::to_string(value)));
-        });
-
-        return;
-    }
-    else {
-        m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt"));
-    }
-    m_propertiesLayout->addStretch();
-}
-
 void MainWindow::updateModeLabel() {
     switch (m_canvas->getEditMode()) {
         case Canvas::EditMode::None:
@@ -665,4 +381,189 @@ void MainWindow::onEditingFinished() {
     m_selectModeAction->setChecked(true);
     updateModeLabel();
     statusBar()->showMessage("Zakończono edycję punktów kontrolnych");
+}
+
+void MainWindow::addUnifiedCurveVisibilityControls(std::shared_ptr<Curve> curve) {
+    m_propertiesLayout->addWidget(new QLabel("<b>Kontrola wyświetlania:</b>"));
+
+    auto* drawCurveCheckBox = new QCheckBox("Rysuj krzywą główną");
+    drawCurveCheckBox->setChecked(curve->getDrawMainCurve());
+    m_propertiesLayout->addWidget(drawCurveCheckBox);
+
+    connect(drawCurveCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
+        curve->setDrawMainCurve(checked);
+        m_canvas->refresh();
+        statusBar()->showMessage(checked ? "Włączono rysowanie krzywej" : "Wyłączono rysowanie krzywej");
+    });
+
+    auto* drawPolylineCheckBox = new QCheckBox("Rysuj łamaną łączącą punkty");
+    drawPolylineCheckBox->setChecked(curve->getDrawPolyline());
+    m_propertiesLayout->addWidget(drawPolylineCheckBox);
+
+    connect(drawPolylineCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
+        curve->setDrawPolyline(checked);
+        m_canvas->refresh();
+        statusBar()->showMessage(checked ? "Włączono rysowanie łamanej" : "Wyłączono rysowanie łamanej");
+    });
+
+    auto* drawConvexHullCheckBox = new QCheckBox("Rysuj otoczkę wypukłą punktów");
+    drawConvexHullCheckBox->setChecked(curve->getDrawConvexHull());
+    m_propertiesLayout->addWidget(drawConvexHullCheckBox);
+
+    connect(drawConvexHullCheckBox, &QCheckBox::toggled, [this, curve](bool checked) {
+        curve->setDrawConvexHull(checked);
+        m_canvas->refresh();
+        statusBar()->showMessage(checked ? "Włączono rysowanie otoczki wypukłej" : "Wyłączono rysowanie otoczki wypukłej");
+    });
+}
+
+void MainWindow::addUnifiedCurveStyleControls(std::shared_ptr<Curve> curve) {
+    m_propertiesLayout->addWidget(new QLabel("<b>Styl krzywej głównej:</b>"));
+
+    m_propertiesLayout->addWidget(new QLabel("Kolor linii:"));
+    QPushButton* colorButton = new QPushButton();
+    colorButton->setFixedSize(80, 25);
+    QColor currentColor = curve->getColor();
+    colorButton->setStyleSheet(QString("background-color: %1;").arg(currentColor.name()));
+    m_propertiesLayout->addWidget(colorButton);
+
+    connect(colorButton, &QPushButton::clicked, [this, curve, colorButton]() {
+        QColor color = QColorDialog::getColor(curve->getColor(), nullptr, "Wybierz kolor linii");
+        if (color.isValid()) {
+            curve->setColor(color);
+            colorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+            m_canvas->refresh();
+            statusBar()->showMessage("Zmieniono kolor linii");
+        }
+    });
+
+    m_propertiesLayout->addWidget(new QLabel("Grubość linii:"));
+    auto* widthSpinBox = new QDoubleSpinBox();
+    widthSpinBox->setRange(0.1, 10.0);
+    widthSpinBox->setSingleStep(0.1);
+    widthSpinBox->setValue(curve->getLineWidth());
+    m_propertiesLayout->addWidget(widthSpinBox);
+
+    connect(widthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
+        curve->setLineWidth(value);
+        m_canvas->refresh();
+        statusBar()->showMessage(QString("Zmieniono grubość linii na %1").arg(QString::number(value)));
+    });
+
+    m_propertiesLayout->addWidget(new QLabel("<b>Styl łamanej:</b>"));
+
+    m_propertiesLayout->addWidget(new QLabel("Kolor łamanej:"));
+    auto polylineColorButton = new QPushButton();
+    polylineColorButton->setFixedSize(80, 25);
+    QColor currentPolylineColor = curve->getPolylineColor();
+    polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(currentPolylineColor.name()));
+    m_propertiesLayout->addWidget(polylineColorButton);
+
+    connect(polylineColorButton, &QPushButton::clicked, [this, curve, polylineColorButton]() {
+        QColor color = QColorDialog::getColor(curve->getPolylineColor(), nullptr, "Wybierz kolor łamanej");
+        if (color.isValid()) {
+            curve->setPolylineColor(color);
+            polylineColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+            m_canvas->refresh();
+            statusBar()->showMessage("Zmieniono kolor łamanej");
+        }
+    });
+
+    m_propertiesLayout->addWidget(new QLabel("Grubość łamanej:"));
+    auto* polylineWidthSpinBox = new QDoubleSpinBox();
+    polylineWidthSpinBox->setRange(0.1, 10.0);
+    polylineWidthSpinBox->setSingleStep(0.1);
+    polylineWidthSpinBox->setValue(curve->getPolylineWidth());
+    m_propertiesLayout->addWidget(polylineWidthSpinBox);
+
+    connect(polylineWidthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, curve](double value) {
+        curve->setPolylineWidth(value);
+        m_canvas->refresh();
+        statusBar()->showMessage(QString("Zmieniono grubość łamanej na %1").arg(QString::number(value)));
+    });
+
+    m_propertiesLayout->addWidget(new QLabel("<b>Styl otoczki wypukłej:</b>"));
+
+    m_propertiesLayout->addWidget(new QLabel("Kolor otoczki wypukłej:"));
+    QPushButton* convexHullColorButton = new QPushButton();
+    convexHullColorButton->setFixedSize(80, 25);
+    QColor currentConvexHullColor = curve->getConvexHullColor();
+    convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(currentConvexHullColor.name()));
+    m_propertiesLayout->addWidget(convexHullColorButton);
+
+    connect(convexHullColorButton, &QPushButton::clicked, [this, curve, convexHullColorButton]() {
+        QColor color = QColorDialog::getColor(curve->getConvexHullColor(), nullptr, "Wybierz kolor otoczki wypukłej");
+        if (color.isValid()) {
+            curve->setConvexHullColor(color);
+            convexHullColorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+            m_canvas->refresh();
+            statusBar()->showMessage("Zmieniono kolor otoczki wypukłej");
+        }
+    });
+
+    m_propertiesLayout->addWidget(new QLabel(QString("Długość krzywej: %1")
+        .arg(QString::number(curve->getLength(), 'f', 2))));
+}
+
+void MainWindow::updatePropertiesPanel() {
+    QLayoutItem* child;
+    while ((child = m_propertiesLayout->takeAt(0)) != nullptr) {
+        delete child->widget();
+        delete child;
+    }
+
+    auto selectedObject = m_canvas->selectedObject();
+    if (!selectedObject) {
+        m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt, aby edytować jego właściwości"));
+        return;
+    }
+
+    if (auto curve = std::dynamic_pointer_cast<InterpolatedCurve>(selectedObject)) {
+        m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej interpolowanej</b>"));
+
+        m_propertiesLayout->addWidget(new QLabel("Typ interpolacji:"));
+        QComboBox* typeCombo = new QComboBox();
+        typeCombo->addItem("NIFS3 (Natural Cubic Spline)", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::NIFS3)));
+        typeCombo->addItem("OIFS3 (Closed Cubic Spline)", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::OIFS3)));
+        typeCombo->addItem("Lagrange", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Lagrange)));
+        typeCombo->addItem("Barycentric", QVariant::fromValue(static_cast<int>(InterpolatedCurve::InterpolationType::Barycentric)));
+
+        typeCombo->setCurrentIndex(static_cast<int>(curve->getInterpolationType()));
+        m_propertiesLayout->addWidget(typeCombo);
+
+        connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            [this, curve](int index) {
+                const auto type = static_cast<InterpolatedCurve::InterpolationType>(index);
+                curve->setInterpolationType(type);
+                m_canvas->refresh();
+                QTimer::singleShot(0, [this]() { updatePropertiesPanel(); });
+
+                QString typeName;
+                switch (type) {
+                    case InterpolatedCurve::InterpolationType::NIFS3: typeName = "NIFS3"; break;
+                    case InterpolatedCurve::InterpolationType::OIFS3: typeName = "OIFS3"; break;
+                    case InterpolatedCurve::InterpolationType::Lagrange: typeName = "Lagrange"; break;
+                    case InterpolatedCurve::InterpolationType::Barycentric: typeName = "Barycentric"; break;
+                }
+                statusBar()->showMessage(QString("Zmieniono typ interpolacji na %1").arg(typeName));
+            });
+
+        addUnifiedCurveVisibilityControls(std::static_pointer_cast<Curve>(curve));
+        addUnifiedCurveStyleControls(std::static_pointer_cast<Curve>(curve));
+    }
+    else if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObject)) {
+        m_propertiesLayout->addWidget(new QLabel("<b>Właściwości krzywej Béziera</b>"));
+        m_propertiesLayout->addWidget(new QLabel(QString("Liczba punktów kontrolnych: %1")
+                                                .arg(QString::number(bezierCurve->getControlPointCount()))));
+        m_propertiesLayout->addWidget(new QLabel(QString("Stopień krzywej: %1")
+                                                .arg(QString::number(bezierCurve->getDegree()))));
+
+        addUnifiedCurveVisibilityControls(std::static_pointer_cast<Curve>(bezierCurve));
+        addUnifiedCurveStyleControls(std::static_pointer_cast<Curve>(bezierCurve));
+    }
+    else {
+        m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt"));
+    }
+
+    m_propertiesLayout->addStretch();
 }

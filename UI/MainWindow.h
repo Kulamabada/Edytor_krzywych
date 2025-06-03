@@ -122,5 +122,8 @@ private:
 
     std::unique_ptr<ActionHandler> m_actionHandler;
 
+    void addUnifiedCurveVisibilityControls(std::shared_ptr<Curve> curve);
+    void addUnifiedCurveStyleControls(std::shared_ptr<Curve> curve);
+
     friend class ActionHandler;
 };
