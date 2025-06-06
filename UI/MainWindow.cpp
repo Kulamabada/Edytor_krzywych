@@ -174,6 +174,7 @@ void MainWindow::createDockWidgets() {
     addDockWidget(Qt::RightDockWidgetArea, m_propertiesDock);
 
     m_modeLabel = new QLabel("Tryb: Normalny");
+
     statusBar()->addPermanentWidget(m_modeLabel);
 }
 
