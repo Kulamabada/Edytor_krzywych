@@ -16,8 +16,10 @@ std::unique_ptr<Curve> BezierCurve::createClone() const {
 }
 
 void BezierCurve::copySpecificPropertiesTo(Curve* target) const {
-    if (auto bezierTarget = dynamic_cast<BezierCurve*>(target))
+    if (auto bezierTarget = dynamic_cast<BezierCurve*>(target)) {
         bezierTarget->m_weights = m_weights;
+        bezierTarget->m_showWeights = m_showWeights;
+    }
 }
 
 Point BezierCurve::getPointAt(double t) const {
@@ -77,25 +79,19 @@ bool BezierCurve::hasWeights() const {
     return !m_weights.empty() && m_weights.size() == m_controlPoints.size();
 }
 
-void BezierCurve::clearWeights() {
-    m_weights.clear();
-    onControlPointsChanged();
-}
-
 void BezierCurve::resetWeights() {
     if (m_weights.empty())
         ensureWeightsSize();
 
-    std::fill(m_weights.begin(), m_weights.end(), 1.0);
+    std::ranges::fill(m_weights, 1.0);
     onControlPointsChanged();
 }
 
 void BezierCurve::normalizeWeights() {
     if (m_weights.empty()) return;
 
-    double sum = std::accumulate(m_weights.begin(), m_weights.end(), 0.0);
-    if (sum > 0.0) {
-        double factor = static_cast<double>(m_weights.size()) / sum;
+    if (const double sum = std::accumulate(m_weights.begin(), m_weights.end(), 0.0); sum > 0.0) {
+        const double factor = static_cast<double>(m_weights.size()) / sum;
         for (double& weight : m_weights)
             weight *= factor;
 
@@ -106,11 +102,10 @@ void BezierCurve::normalizeWeights() {
 void BezierCurve::addControlPoint(const Point& point) {
     Curve::addControlPoint(point);
 
-    if (!m_weights.empty())
-        m_weights.push_back(1.0);
+    if (!m_weights.empty()) m_weights.push_back(1.0);
 }
 
-void BezierCurve::insertControlPoint(size_t index, const Point& point) {
+void BezierCurve::insertControlPoint(const size_t index, const Point& point) {
     if (index <= m_controlPoints.size()) {
         Curve::insertControlPoint(index, point);
 
@@ -247,4 +242,13 @@ void BezierCurve::validateWeights() const {
 
     if (std::ranges::any_of(m_weights, [](double w) { return w <= 0.0; }))
         throw std::runtime_error("Wszystkie wagi muszą być dodatnie");
+}
+
+void BezierCurve::setShowWeights(bool show) {
+    m_showWeights = show;
+
+    if (show && !hasWeights() && !m_controlPoints.empty()) {
+        ensureWeightsSize();
+        resetWeights();
+    }
 }

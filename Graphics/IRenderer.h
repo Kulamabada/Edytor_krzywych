@@ -11,6 +11,7 @@ class GeometricObject;
 class Point;
 class Curve;
 class ViewportManager;
+class BezierCurve;
 
 class IRenderer {
 public:
@@ -47,4 +48,6 @@ public:
     virtual void setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) = 0;
 
     virtual void renderCurveExtras(const Curve& curve) = 0;
+
+    virtual void renderWeights(const BezierCurve& curve) = 0;
 };

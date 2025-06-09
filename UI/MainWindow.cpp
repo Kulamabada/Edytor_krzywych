@@ -88,6 +88,10 @@ void MainWindow::createMenus() {
     m_lagrangeAction = m_interpolatedCurvesMenu->addAction("Lagrange");
     m_barycentricAction = m_interpolatedCurvesMenu->addAction("Barycentric");
     m_bezierAction = m_curvesMenu->addAction("Krzywa Beziera");
+    m_viewMenu->addSeparator();
+    m_showWeightsPanelAction = m_viewMenu->addAction("Panel wag Béziera");
+    m_showWeightsPanelAction->setCheckable(true);
+    m_showWeightsPanelAction->setChecked(true);
 
     m_addImageAction = m_imageMenu->addAction("Dodaj obraz...");
     m_editImageAction = m_imageMenu->addAction("Edytuj narożniki obrazu");
@@ -176,6 +180,12 @@ void MainWindow::createDockWidgets() {
     m_modeLabel = new QLabel("Tryb: Normalny");
 
     statusBar()->addPermanentWidget(m_modeLabel);
+
+    m_weightsPanel = new WeightsPanel;
+    m_weightsDock = new QDockWidget("Wagi Béziera", this);
+    m_weightsDock->setWidget(m_weightsPanel);
+    m_weightsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    addDockWidget(Qt::LeftDockWidgetArea, m_weightsDock);
 }
 
 void MainWindow::connectSignals() {
@@ -217,6 +227,15 @@ void MainWindow::connectSignals() {
             }
         }
     });
+    connect(m_showWeightsPanelAction, &QAction::toggled, m_weightsDock, &QDockWidget::setVisible);
+    connect(m_weightsDock, &QDockWidget::visibilityChanged, m_showWeightsPanelAction, &QAction::setChecked);
+
+    connect(m_weightsPanel, &WeightsPanel::weightChanged, this, &MainWindow::onWeightChanged);
+    connect(m_weightsPanel, &WeightsPanel::weightsReset, this, &MainWindow::onWeightsReset);
+    connect(m_weightsPanel, &WeightsPanel::weightsNormalized, this, &MainWindow::onWeightsNormalized);
+    connect(m_canvas, &Canvas::objectSelected, this, &MainWindow::updateWeightsPanel);
+    connect(m_canvas, &Canvas::selectionCleared, this, &MainWindow::updateWeightsPanel);
+    connect(m_weightsPanel, &WeightsPanel::showWeightsToggled, this, &MainWindow::onShowWeightsToggled);
 }
 
 void MainWindow::updateObjectsTree() {
@@ -567,4 +586,49 @@ void MainWindow::updatePropertiesPanel() {
     }
 
     m_propertiesLayout->addStretch();
+}
+
+void MainWindow::onWeightChanged(int pointIndex, double weight) {
+    auto selectedObj = m_canvas->selectedObject();
+    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        bezierCurve->setWeight(pointIndex, weight);
+        m_canvas->refresh();
+        statusBar()->showMessage(QString("Zmieniono wagę punktu %1 na %2").arg(std::to_string(pointIndex)).arg(std::to_string(weight)));
+    }
+}
+
+void MainWindow::onWeightsReset() {
+    auto selectedObj = m_canvas->selectedObject();
+    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        bezierCurve->resetWeights();
+        m_weightsPanel->updateWeights();
+        m_canvas->refresh();
+        statusBar()->showMessage("Zresetowano wagi do 1.0");
+    }
+}
+
+void MainWindow::onWeightsNormalized() {
+    auto selectedObj = m_canvas->selectedObject();
+    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        bezierCurve->normalizeWeights();
+        m_weightsPanel->updateWeights();
+        m_canvas->refresh();
+        statusBar()->showMessage("Znormalizowano wagi");
+    }
+}
+
+void MainWindow::updateWeightsPanel() {
+    if (const auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(m_canvas->selectedObject())) {
+        m_weightsPanel->setShowWeights(bezierCurve->getShowWeights());
+        m_weightsPanel->setBezierCurve(bezierCurve);
+    }
+}
+
+void MainWindow::onShowWeightsToggled(bool show) {
+    auto selectedObj = m_canvas->selectedObject();
+    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        bezierCurve->setShowWeights(show);
+        m_canvas->refresh();
+        statusBar()->showMessage(show ? "Włączono wyświetlanie wag" : "Wyłączono wyświetlanie wag");
+    }
 }

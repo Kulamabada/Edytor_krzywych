@@ -17,7 +17,6 @@ public:
     void setWeight(size_t index, double weight);
     double getWeight(size_t index) const;
     bool hasWeights() const;
-    void clearWeights();
 
     void resetWeights();
     void normalizeWeights();
@@ -26,6 +25,9 @@ public:
     void insertControlPoint(size_t index, const Point& point) override;
     void removeControlPoint(size_t index) override;
     void setControlPoints(const std::vector<Point>& points) override;
+
+    void setShowWeights(bool show);
+    bool getShowWeights() const { return m_showWeights; }
 
 protected:
     std::unique_ptr<Curve> createClone() const override;
@@ -41,4 +43,5 @@ private:
     void validateWeights() const;
 
     std::vector<double> m_weights;
+    bool m_showWeights{false};
 };

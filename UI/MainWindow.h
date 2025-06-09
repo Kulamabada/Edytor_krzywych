@@ -18,6 +18,7 @@
 #include "../Math/EigenMathAdapter.h"
 #include "../Graphics/QtRenderer.h"
 #include "../Geometry/ImageObject.h"
+#include "WeightsPanel.h"
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QKeySequence>
@@ -45,6 +46,7 @@ public:
     void updateObjectsTree();
     void updatePropertiesPanel();
     void updateModeLabel();
+    WeightsPanel* getWeightsPanel() const { return m_weightsPanel; }
 
 public slots:
     void onObjectAdded(std::shared_ptr<GeometricObject> obj);
@@ -56,6 +58,12 @@ public slots:
     void onControlPointSelected(int pointIndex);
     void onEditingStarted();
     void onEditingFinished();
+    void onWeightChanged(int pointIndex, double weight);
+    void onWeightsReset();
+    void onWeightsNormalized();
+    void updateWeightsPanel();
+
+    void onShowWeightsToggled(bool show);
 
 private:
     void createMenus();
@@ -86,6 +94,7 @@ private:
     QDockWidget* m_propertiesDock;
     QWidget* m_propertiesWidget;
     QVBoxLayout* m_propertiesLayout;
+    QCheckBox* m_showWeightsCheckBox{nullptr};
 
     QTreeWidget* m_objectsTree;
     QLabel* m_modeLabel;
@@ -121,6 +130,10 @@ private:
     QToolButton* m_interpolatedButton;
 
     std::unique_ptr<ActionHandler> m_actionHandler;
+
+    QAction* m_showWeightsPanelAction;
+    QDockWidget* m_weightsDock;
+    WeightsPanel* m_weightsPanel;
 
     void addUnifiedCurveVisibilityControls(std::shared_ptr<Curve> curve);
     void addUnifiedCurveStyleControls(std::shared_ptr<Curve> curve);
