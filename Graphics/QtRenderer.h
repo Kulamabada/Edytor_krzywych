@@ -43,6 +43,7 @@ public:
     void setPolylineStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) override;
     void setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) override;
     void renderCurveExtras(const Curve& curve) override;
+    void renderWeights(const BezierCurve& curve);
 
 private:
     QColor m_pointColor{Qt::black};

@@ -54,6 +54,8 @@ add_executable(edytor_krzywych
         Geometry/BezierCurve.h
         Geometry/CurveStyle.h
         Geometry/Curve.cpp
+        UI/WeightsPanel.cpp
+        UI/WeightsPanel.h
 )
 
 find_package(Qt6 COMPONENTS Core Gui Widgets REQUIRED)

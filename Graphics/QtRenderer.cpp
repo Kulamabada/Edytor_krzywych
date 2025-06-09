@@ -52,6 +52,10 @@ void QtRenderer::renderCurve(const Curve& curve) {
 
     renderMainCurve(curve);
     renderCurveExtras(curve);
+
+    if (const auto* bezierCurve = dynamic_cast<const BezierCurve*>(&curve))
+        if (bezierCurve->getShowWeights() && bezierCurve->hasWeights())
+            renderWeights(*bezierCurve);
 }
 
 void QtRenderer::renderMainCurve(const Curve& curve) {
@@ -112,6 +116,46 @@ void QtRenderer::renderCurveConvexHull(const Curve& curve) {
         hullPolygon << QPointF(hull[0].x(), hull[0].y());
     }
     m_painter->drawPolyline(hullPolygon);
+}
+
+void QtRenderer::renderWeights(const BezierCurve& curve) {
+    if (!curve.hasControlPoints() || !curve.hasWeights()) return;
+
+    const auto& points = curve.getControlPoints();
+    const auto& weights = curve.getWeights();
+
+    m_painter->save();
+    m_painter->resetTransform();
+
+    QPen textPen(Qt::darkBlue);
+    m_painter->setPen(textPen);
+
+    QFont font = m_painter->font();
+    font.setPointSize(9);
+    font.setBold(true);
+    m_painter->setFont(font);
+
+    for (size_t i = 0; i < points.size() && i < weights.size(); ++i) {
+        QPointF screenPos = m_viewportManager->worldToScreen(QPointF(points[i].x(), points[i].y()));
+
+        QString weightText = QString("w%1: %2").arg(std::to_string(i)).arg(std::to_string(weights[i]));
+        QFontMetrics fm(font);
+        QRect textRect = fm.boundingRect(weightText);
+
+        QPointF textPos = screenPos + QPointF(-textRect.width() - 5, -curve.getControlPointSize() - 5);
+
+        QRectF bgRect(textPos.x() - 2, textPos.y() - textRect.height(),
+                      textRect.width() + 4, textRect.height() + 2);
+        m_painter->fillRect(bgRect, QColor(255, 255, 255, 200));
+
+        m_painter->setPen(QPen(Qt::darkBlue, 1));
+        m_painter->drawRect(bgRect);
+
+        m_painter->setPen(textPen);
+        m_painter->drawText(textPos, weightText);
+    }
+
+    m_painter->restore();
 }
 
 QPolygonF QtRenderer::pointsToPolygon(const std::vector<Point>& points) const {
