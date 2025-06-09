@@ -17,7 +17,6 @@
 
 #include "../Math/EigenMathAdapter.h"
 #include "../Graphics/QtRenderer.h"
-#include "../Geometry/ImageObject.h"
 #include "WeightsPanel.h"
 #include <QFileDialog>
 #include <QMessageBox>
@@ -122,8 +121,6 @@ private:
     QAction* m_barycentricAction;
     QAction* m_bezierAction;
     QAction* m_addImageAction;
-    QAction* m_editImageAction;
-    QAction* m_lockImageAction;
     QAction* m_aboutAction;
 
     QActionGroup* m_editModeGroup;

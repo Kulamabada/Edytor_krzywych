@@ -11,7 +11,6 @@
 #include <QDebug>
 
 #include "../Geometry/InterpolatedCurve.h"
-#include "../Geometry/ImageObject.h"
 #include "../Geometry/BezierCurve.h"
 
 class QtRenderer : public IRenderer {

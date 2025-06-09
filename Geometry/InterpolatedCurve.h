@@ -24,7 +24,6 @@ public:
     InterpolationType getInterpolationType() const;
 
     Point getPointAt(double t) const override;
-    Vector getTangentAt(double t) const override;
 
 protected:
     std::unique_ptr<Curve> createClone() const override;

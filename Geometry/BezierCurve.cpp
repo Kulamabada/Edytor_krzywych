@@ -25,17 +25,9 @@ void BezierCurve::copySpecificPropertiesTo(Curve* target) const {
 Point BezierCurve::getPointAt(double t) const {
     validateParameterRange(t);
 
-    if (hasWeights())
+    if (hasWeights() && !std::ranges::all_of(m_weights, [this](double w){ return std::abs(w - m_weights[0]) < 1e-9; }))
         return rationalDeCasteljau(t);
     return deCasteljau(t);
-}
-
-Vector BezierCurve::getTangentAt(double t) const {
-    validateParameterRange(t);
-
-    if (hasWeights())
-        return rationalDeCasteljauDerivative(t);
-    return deCasteljauDerivative(t);
 }
 
 void BezierCurve::setWeights(const std::vector<double>& weights) {

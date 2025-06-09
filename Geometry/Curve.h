@@ -51,7 +51,6 @@ public:
 
     virtual double getLength() const;
     virtual Point getPointAt(double t) const = 0;
-    virtual Vector getTangentAt(double t) const = 0;
     std::unique_ptr<Curve> clone() const;
 
     virtual bool hasControlPoints() const { return true; }
@@ -139,7 +138,6 @@ protected:
     virtual void onControlPointsChanged() {}
 
     double calculateLengthByDiscretization(int numSamples = -1) const;
-    Vector calculateTangentByFiniteDifference(double t, double epsilon = -1.0) const;
     bool validateParameterRange(double& t) const;
     Point interpolateLinear(const Point& p1, const Point& p2, double t) const;
     double calculateParameterForSegment(size_t segmentIndex, size_t totalSegments, double localT) const;

@@ -44,8 +44,6 @@ add_executable(edytor_krzywych
         Graphics/ViewportManager.h
         Graphics/QtRenderer.cpp
         Graphics/QtRenderer.h
-        Geometry/ImageObject.cpp
-        Geometry/ImageObject.h
         UI/MainWindow.cpp
         UI/MainWindow.h
         UI/ActionHandler.cpp

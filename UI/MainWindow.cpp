@@ -94,8 +94,6 @@ void MainWindow::createMenus() {
     m_showWeightsPanelAction->setChecked(true);
 
     m_addImageAction = m_imageMenu->addAction("Dodaj obraz...");
-    m_editImageAction = m_imageMenu->addAction("Edytuj narożniki obrazu");
-    m_lockImageAction = m_imageMenu->addAction("Zablokuj/Odblokuj obraz");
 
     m_aboutAction = m_helpMenu->addAction(QIcon::fromTheme("help-about"), "O programie");
 }
@@ -138,8 +136,6 @@ void MainWindow::createToolbars() {
     addToolBar(m_imageToolBar);
 
     m_imageToolBar->addAction(m_addImageAction);
-    m_imageToolBar->addAction(m_editImageAction);
-    m_imageToolBar->addAction(m_lockImageAction);
 }
 
 void MainWindow::setupCentralWidget() {
@@ -259,19 +255,6 @@ void MainWindow::updateObjectsTree() {
 
                 pointItem->setData(0, Qt::UserRole, QVariant::fromValue(static_cast<int>(i)));
                 pointItem->setData(0, Qt::UserRole + 1, QVariant::fromValue(index));
-            }
-        }
-        else if (const auto image = std::dynamic_pointer_cast<ImageObject>(obj)) {
-            item->setText(1, "Obraz");
-
-            const auto& corners = image->getCornerPoints();
-            for (size_t i = 0; i < corners.size(); ++i) {
-                auto* cornerItem = new QTreeWidgetItem(item);
-                const Point& p = corners[i];
-                cornerItem->setText(0, QString("Narożnik %1").arg(std::to_string(i)));
-                cornerItem->setText(1, QString("(%1, %2)")
-                    .arg(QString::number(p.x(), 'f', 2),
-                         QString::number(p.y(), 'f', 2)));
             }
         }
         else if (const auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(obj)) {
@@ -595,6 +578,7 @@ void MainWindow::onWeightChanged(int pointIndex, double weight) {
         m_canvas->refresh();
         statusBar()->showMessage(QString("Zmieniono wagę punktu %1 na %2").arg(std::to_string(pointIndex)).arg(std::to_string(weight)));
     }
+    updatePropertiesPanel();
 }
 
 void MainWindow::onWeightsReset() {

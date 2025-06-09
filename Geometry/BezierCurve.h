@@ -10,7 +10,6 @@ public:
     int getDegree() const;
 
     Point getPointAt(double t) const override;
-    Vector getTangentAt(double t) const override;
 
     void setWeights(const std::vector<double>& weights);
     const std::vector<double>& getWeights() const;

@@ -17,7 +17,6 @@
 
 #include <utility>
 #include <QMessageBox>
-#include "../Geometry/ImageObject.h"
 #include "../Geometry/BezierCurve.h"
 #include "../Geometry/InterpolatedCurve.h"
 

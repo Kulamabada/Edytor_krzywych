@@ -59,10 +59,6 @@ void InterpolatedCurve::rebuildInterpolation() const {
     needsRebuild = false;
 }
 
-Vector InterpolatedCurve::getTangentAt(double t) const {
-    return calculateTangentByFiniteDifference(t);
-}
-
 Point InterpolatedCurve::getPointAt(double t) const {
     if (m_controlPoints.empty()) return Point(0.0, 0.0, 0.0);
     if (m_controlPoints.size() == 1) return m_controlPoints[0];

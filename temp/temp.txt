@@ -1,5 +1,5 @@
-// Plik wygenerowany automatycznie 2025-06-09 20:18:11
-// Zawiera 38 plików z projektu edytora krzywych
+// Plik wygenerowany automatycznie 2025-06-10 10:22:16
+// Zawiera 36 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
 
@@ -684,17 +684,9 @@ void BezierCurve::copySpecificPropertiesTo(Curve* target) const {
 Point BezierCurve::getPointAt(double t) const {
     validateParameterRange(t);
 
-    if (hasWeights())
+    if (hasWeights() && !std::ranges::all_of(m_weights, [this](double w){ return std::abs(w - m_weights[0]) < 1e-9; }))
         return rationalDeCasteljau(t);
     return deCasteljau(t);
-}
-
-Vector BezierCurve::getTangentAt(double t) const {
-    validateParameterRange(t);
-
-    if (hasWeights())
-        return rationalDeCasteljauDerivative(t);
-    return deCasteljauDerivative(t);
 }
 
 void BezierCurve::setWeights(const std::vector<double>& weights) {
@@ -928,7 +920,6 @@ public:
     int getDegree() const;
 
     Point getPointAt(double t) const override;
-    Vector getTangentAt(double t) const override;
 
     void setWeights(const std::vector<double>& weights);
     const std::vector<double>& getWeights() const;
@@ -1182,20 +1173,6 @@ double Curve::calculateLengthByDiscretization(int numSamples) const {
     return length;
 }
 
-Vector Curve::calculateTangentByFiniteDifference(double t, double epsilon) const {
-    if (epsilon <= 0.0)
-        epsilon = getDefaultTangentEpsilon();
-
-    Point p1 = getPointAt(t);
-    Point p2 = getPointAt(t + epsilon);
-
-    return Vector(
-        (p2.x() - p1.x()) / epsilon,
-        (p2.y() - p1.y()) / epsilon,
-        (p2.z() - p1.z()) / epsilon
-    );
-}
-
 bool Curve::validateParameterRange(double& t) const {
     t = std::max(0.0, std::min(1.0, t));
     return t >= 0.0 && t <= 1.0;
@@ -1272,7 +1249,6 @@ public:
 
     virtual double getLength() const;
     virtual Point getPointAt(double t) const = 0;
-    virtual Vector getTangentAt(double t) const = 0;
     std::unique_ptr<Curve> clone() const;
 
     virtual bool hasControlPoints() const { return true; }
@@ -1360,7 +1336,6 @@ protected:
     virtual void onControlPointsChanged() {}
 
     double calculateLengthByDiscretization(int numSamples = -1) const;
-    Vector calculateTangentByFiniteDifference(double t, double epsilon = -1.0) const;
     bool validateParameterRange(double& t) const;
     Point interpolateLinear(const Point& p1, const Point& p2, double t) const;
     double calculateParameterForSegment(size_t segmentIndex, size_t totalSegments, double localT) const;
@@ -1447,107 +1422,6 @@ public:
 
 //===== END FILE: Geometry\GeometricObject.h =====//
 
-//===== START FILE: Geometry\ImageObject.cpp =====//
-
-#include "ImageObject.h"
-#include "TransformMatrix.h"
-
-ImageObject::ImageObject(const QString& filePath) : m_image(QImage(filePath)) {
-    const double width = m_image.width() / 20.0;  // Skalowanie do współrzędnych świata
-    const double height = m_image.height() / 20.0;
-
-    // Domyślnie tworzymy prostokąt o środku w (0,0)
-    m_cornerPoints = {
-        Point(-width/2, -height/2, 0),  // Lewy górny
-        Point(width/2, -height/2, 0),   // Prawy górny
-        Point(width/2, height/2, 0),    // Prawy dolny
-        Point(-width/2, height/2, 0)    // Lewy dolny
-    };
-}
-
-void ImageObject::setCornerPoints(const std::array<Point, 4>& points) {
-    if (m_locked) return;
-    m_cornerPoints = points;
-}
-
-void ImageObject::setOpacity(double opacity) {
-    m_opacity = std::max(0.0, std::min(1.0, opacity));
-}
-
-void ImageObject::setLocked(bool locked) {
-    m_locked = locked;
-}
-
-Vector ImageObject::getPosition() const {
-    // Zwracamy środek prostokąta
-    Vector sum = Vector::Zero();
-    for (const auto& p : m_cornerPoints) {
-        sum += Vector(p.x(), p.y(), p.z());
-    }
-    return sum / 4.0;
-}
-
-void ImageObject::setPosition(const Eigen::Vector3d& position) {
-    if (m_locked) return;
-
-    Vector currentPos = getPosition();
-    Vector delta = position - currentPos;
-
-    for (auto& p : m_cornerPoints) {
-        p.setX(p.x() + delta.x());
-        p.setY(p.y() + delta.y());
-        p.setZ(p.z() + delta.z());
-    }
-}
-
-void ImageObject::transform(const TransformMatrix& matrix) {
-    if (m_locked) return;
-
-    for (auto& p : m_cornerPoints) {
-        p.transform(matrix);
-    }
-}
-
-//===== END FILE: Geometry\ImageObject.cpp =====//
-
-//===== START FILE: Geometry\ImageObject.h =====//
-
-#pragma once
-
-#include "Point.h"
-#include <QImage>
-
-class ImageObject final : public GeometricObject {
-public:
-    ImageObject(const QString& filePath);
-    ~ImageObject() override = default;
-
-    // Gettery i settery
-    QImage getImage() const { return m_image; }
-
-    std::array<Point, 4> getCornerPoints() const { return m_cornerPoints; }
-    void setCornerPoints(const std::array<Point, 4>& points);
-
-    double getOpacity() const { return m_opacity; }
-    void setOpacity(double opacity);
-
-    bool isLocked() const { return m_locked; }
-    void setLocked(bool locked);
-
-    // Implementacja GeometricObject
-    Vector getPosition() const override;
-    void setPosition(const Eigen::Vector3d& position) override;
-    void transform(const TransformMatrix& matrix) override;
-
-private:
-    QImage m_image;
-    std::array<Point, 4> m_cornerPoints;
-    double m_opacity{1.0};
-    bool m_locked{false};
-};
-
-//===== END FILE: Geometry\ImageObject.h =====//
-
 //===== START FILE: Geometry\InterpolatedCurve.cpp =====//
 
 #include "InterpolatedCurve.h"
@@ -1609,10 +1483,6 @@ void InterpolatedCurve::rebuildInterpolation() const {
     }
 
     needsRebuild = false;
-}
-
-Vector InterpolatedCurve::getTangentAt(double t) const {
-    return calculateTangentByFiniteDifference(t);
 }
 
 Point InterpolatedCurve::getPointAt(double t) const {
@@ -1851,7 +1721,6 @@ public:
     InterpolationType getInterpolationType() const;
 
     Point getPointAt(double t) const override;
-    Vector getTangentAt(double t) const override;
 
 protected:
     std::unique_ptr<Curve> createClone() const override;
@@ -2570,7 +2439,6 @@ std::shared_ptr<GeometricObject> Canvas::hitTestObject(const QPointF& pos, doubl
 
 #include <utility>
 #include <QMessageBox>
-#include "../Geometry/ImageObject.h"
 #include "../Geometry/BezierCurve.h"
 #include "../Geometry/InterpolatedCurve.h"
 
@@ -3332,7 +3200,6 @@ double QtRenderer::distanceSquared(const Point& a, const Point& b)
 #include <QDebug>
 
 #include "../Geometry/InterpolatedCurve.h"
-#include "../Geometry/ImageObject.h"
 #include "../Geometry/BezierCurve.h"
 
 class QtRenderer : public IRenderer {
@@ -4364,19 +4231,6 @@ void MainWindow::updateObjectsTree() {
                 pointItem->setData(0, Qt::UserRole + 1, QVariant::fromValue(index));
             }
         }
-        else if (const auto image = std::dynamic_pointer_cast<ImageObject>(obj)) {
-            item->setText(1, "Obraz");
-
-            const auto& corners = image->getCornerPoints();
-            for (size_t i = 0; i < corners.size(); ++i) {
-                auto* cornerItem = new QTreeWidgetItem(item);
-                const Point& p = corners[i];
-                cornerItem->setText(0, QString("Narożnik %1").arg(std::to_string(i)));
-                cornerItem->setText(1, QString("(%1, %2)")
-                    .arg(QString::number(p.x(), 'f', 2),
-                         QString::number(p.y(), 'f', 2)));
-            }
-        }
         else if (const auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(obj)) {
             item->setText(1, "Krzywa Béziera");
 
@@ -4698,6 +4552,7 @@ void MainWindow::onWeightChanged(int pointIndex, double weight) {
         m_canvas->refresh();
         statusBar()->showMessage(QString("Zmieniono wagę punktu %1 na %2").arg(std::to_string(pointIndex)).arg(std::to_string(weight)));
     }
+    updatePropertiesPanel();
 }
 
 void MainWindow::onWeightsReset() {
@@ -4759,7 +4614,6 @@ void MainWindow::onShowWeightsToggled(bool show) {
 
 #include "../Math/EigenMathAdapter.h"
 #include "../Graphics/QtRenderer.h"
-#include "../Geometry/ImageObject.h"
 #include "WeightsPanel.h"
 #include <QFileDialog>
 #include <QMessageBox>

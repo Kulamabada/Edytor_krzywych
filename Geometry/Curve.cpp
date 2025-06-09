@@ -212,20 +212,6 @@ double Curve::calculateLengthByDiscretization(int numSamples) const {
     return length;
 }
 
-Vector Curve::calculateTangentByFiniteDifference(double t, double epsilon) const {
-    if (epsilon <= 0.0)
-        epsilon = getDefaultTangentEpsilon();
-
-    Point p1 = getPointAt(t);
-    Point p2 = getPointAt(t + epsilon);
-
-    return Vector(
-        (p2.x() - p1.x()) / epsilon,
-        (p2.y() - p1.y()) / epsilon,
-        (p2.z() - p1.z()) / epsilon
-    );
-}
-
 bool Curve::validateParameterRange(double& t) const {
     t = std::max(0.0, std::min(1.0, t));
     return t >= 0.0 && t <= 1.0;
