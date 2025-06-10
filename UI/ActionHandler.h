@@ -7,6 +7,7 @@
 #include <QFileDialog>
 #include <QKeyEvent>
 #include <QStatusBar>
+#include "../Core/ProjectSerializer.h"
 
 class MainWindow;
 using Type = InterpolatedCurve::InterpolationType;

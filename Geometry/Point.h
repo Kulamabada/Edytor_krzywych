@@ -1,11 +1,14 @@
 #pragma once
 
 #include "GeometricObject.h"
+#include "../Core/JsonSerializable.h"
 #include <array>
+#include "TransformMatrix.h"
+#include <cmath>
 
 class TransformMatrix;
 
-class Point : public GeometricObject {
+class Point : public GeometricObject , public JsonSerializable {
 public:
     Point() : m_coordinates{0.0, 0.0, 0.0} {}
     Point(double x, double y, double z = 0.0) : m_coordinates{x, y, z} {}
@@ -34,6 +37,8 @@ public:
         setZ(position.z());
     }
 
+    QJsonObject toJson() const override;
+    bool fromJson(const QJsonObject& json) override;
 private:
     std::array<double, 3> m_coordinates;
 };

@@ -36,6 +36,9 @@ public:
 
     std::vector<std::vector<Point>> getDeCasteljauSteps() const;
 
+    QJsonObject toJson() const override;
+    bool fromJson(const QJsonObject& json) override;
+
 protected:
     std::unique_ptr<Curve> createClone() const override;
     void copySpecificPropertiesTo(Curve* target) const override;

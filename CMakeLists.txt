@@ -54,6 +54,9 @@ add_executable(edytor_krzywych
         Geometry/Curve.cpp
         UI/WeightsPanel.cpp
         UI/WeightsPanel.h
+        Core/JsonSerializable.h
+        Core/ProjectSerializer.cpp
+        Core/ProjectSerializer.h
 )
 
 find_package(Qt6 COMPONENTS Core Gui Widgets REQUIRED)

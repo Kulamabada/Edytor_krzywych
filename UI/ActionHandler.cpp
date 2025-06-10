@@ -48,22 +48,31 @@ void ActionHandler::onNewAction() {
 
 void ActionHandler::onOpenAction() {
     QString filePath = QFileDialog::getOpenFileName(&m_mainWindow, "Otwórz projekt",
-        QString(), "Pliki projektu (*.crv);;Wszystkie pliki (*.*)");
+        QString(), "Pliki projektu (*.json);;Wszystkie pliki (*.*)");
     if (!filePath.isEmpty()) {
-        m_mainWindow.getStatusBar()->showMessage("Otwieranie projektu nie jest jeszcze zaimplementowane");
+        if (ProjectSerializer::loadProject(filePath, m_mainWindow.getCanvas())) {
+            m_mainWindow.updateObjectsTree();
+            m_mainWindow.getStatusBar()->showMessage("Projekt wczytany pomyślnie");
+        } else {
+            m_mainWindow.getStatusBar()->showMessage("Błąd podczas wczytywania projektu");
+        }
     }
 }
 
 void ActionHandler::onSaveAction() {
-    m_mainWindow.getStatusBar()->showMessage("Zapisywanie projektu nie jest jeszcze zaimplementowane");
+    QString filePath = QFileDialog::getSaveFileName(&m_mainWindow, "Zapisz projekt",
+        QString(), "Pliki projektu (*.json);;Wszystkie pliki (*.*)");
+    if (!filePath.isEmpty()) {
+        if (ProjectSerializer::saveProject(filePath, m_mainWindow.getCanvas())) {
+            m_mainWindow.getStatusBar()->showMessage("Projekt zapisany pomyślnie");
+        } else {
+            m_mainWindow.getStatusBar()->showMessage("Błąd podczas zapisywania projektu");
+        }
+    }
 }
 
 void ActionHandler::onSaveAsAction() {
-    QString filePath = QFileDialog::getSaveFileName(&m_mainWindow, "Zapisz projekt jako",
-        QString(), "Pliki projektu (*.crv);;Wszystkie pliki (*.*)");
-    if (!filePath.isEmpty()) {
-        m_mainWindow.getStatusBar()->showMessage("Zapisywanie projektu nie jest jeszcze zaimplementowane");
-    }
+    onSaveAction();
 }
 
 void ActionHandler::onExitAction() {

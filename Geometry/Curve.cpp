@@ -230,3 +230,77 @@ double Curve::calculateParameterForSegment(size_t segmentIndex, size_t totalSegm
     double segmentLength = 1.0 / totalSegments;
     return segmentIndex * segmentLength + localT * segmentLength;
 }
+
+QJsonObject Curve::serializeCurveData() const {
+    QJsonObject json;
+
+    QJsonArray pointsArray;
+    for (const auto& point : m_controlPoints) {
+        pointsArray.append(point.toJson());
+    }
+    json["controlPoints"] = pointsArray;
+
+    json["style"] = m_style.toJson();
+    json["controlPointStyle"] = m_controlPointStyle.toJson();
+    json["drawPolyline"] = m_drawPolyline;
+    json["drawConvexHull"] = m_drawConvexHull;
+    json["drawMainCurve"] = m_drawMainCurve;
+
+    QJsonObject polylineStyle;
+    polylineStyle["color"] = m_polylineColor.name();
+    polylineStyle["width"] = m_polylineWidth;
+    polylineStyle["style"] = static_cast<int>(m_polylineStyle);
+    json["polylineStyle"] = polylineStyle;
+
+    QJsonObject convexHullStyle;
+    convexHullStyle["color"] = m_convexHullColor.name();
+    convexHullStyle["width"] = m_convexHullWidth;
+    convexHullStyle["style"] = static_cast<int>(m_convexHullStyle);
+    json["convexHullStyle"] = convexHullStyle;
+
+    return json;
+}
+
+bool Curve::deserializeCurveData(const QJsonObject& json) {
+    if (!json.contains("controlPoints")) return false;
+
+    QJsonArray pointsArray = json["controlPoints"].toArray();
+    std::vector<Point> points;
+
+    for (const auto& value : pointsArray) {
+        Point point;
+        if (point.fromJson(value.toObject())) {
+            points.push_back(point);
+        }
+    }
+
+    setControlPoints(points);
+
+    if (json.contains("style")) {
+        m_style.fromJson(json["style"].toObject());
+    }
+
+    if (json.contains("controlPointStyle")) {
+        m_controlPointStyle.fromJson(json["controlPointStyle"].toObject());
+    }
+
+    m_drawPolyline = json["drawPolyline"].toBool(false);
+    m_drawConvexHull = json["drawConvexHull"].toBool(false);
+    m_drawMainCurve = json["drawMainCurve"].toBool(true);
+
+    if (json.contains("polylineStyle")) {
+        QJsonObject polylineStyle = json["polylineStyle"].toObject();
+        m_polylineColor = QColor(polylineStyle["color"].toString());
+        m_polylineWidth = polylineStyle["width"].toDouble(1.0);
+        m_polylineStyle = static_cast<Qt::PenStyle>(polylineStyle["style"].toInt(Qt::DashLine));
+    }
+
+    if (json.contains("convexHullStyle")) {
+        QJsonObject convexHullStyle = json["convexHullStyle"].toObject();
+        m_convexHullColor = QColor(convexHullStyle["color"].toString());
+        m_convexHullWidth = convexHullStyle["width"].toDouble(1.0);
+        m_convexHullStyle = static_cast<Qt::PenStyle>(convexHullStyle["style"].toInt(Qt::DotLine));
+    }
+
+    return true;
+}

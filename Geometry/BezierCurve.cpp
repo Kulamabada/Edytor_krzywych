@@ -278,3 +278,44 @@ std::vector<std::vector<Point>> BezierCurve::getDeCasteljauSteps() const {
 
     return steps;
 }
+
+QJsonObject BezierCurve::toJson() const {
+    QJsonObject json = serializeCurveData();
+
+    if (hasWeights()) {
+        QJsonArray weightsArray;
+        for (double weight : m_weights) {
+            weightsArray.append(weight);
+        }
+        json["weights"] = weightsArray;
+    }
+
+    json["showWeights"] = m_showWeights;
+    json["showDeCasteljau"] = m_showDeCasteljau;
+    json["deCasteljauT"] = m_deCasteljauT;
+
+    return json;
+}
+
+bool BezierCurve::fromJson(const QJsonObject& json) {
+    if (!deserializeCurveData(json)) return false;
+
+    if (json.contains("weights")) {
+        QJsonArray weightsArray = json["weights"].toArray();
+        std::vector<double> weights;
+
+        for (const auto& value : weightsArray) {
+            weights.push_back(value.toDouble(1.0));
+        }
+
+        if (!weights.empty()) {
+            setWeights(weights);
+        }
+    }
+
+    m_showWeights = json["showWeights"].toBool(false);
+    m_showDeCasteljau = json["showDeCasteljau"].toBool(false);
+    m_deCasteljauT = json["deCasteljauT"].toDouble(0.5);
+
+    return true;
+}

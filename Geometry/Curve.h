@@ -38,7 +38,7 @@ struct CurvePrecisionConfig {
     int renderSamples = 1000;
 };
 
-class Curve : public GeometricObject {
+class Curve : public GeometricObject, public JsonSerializable {
 public:
     explicit Curve(CurveType type = CurveType::Generic);
     explicit Curve(const DefaultCurveConfig& config);
@@ -141,6 +141,9 @@ protected:
     double calculateLengthByDiscretization(int numSamples = -1) const;
     bool validateParameterRange(double& t) const;
     double calculateParameterForSegment(size_t segmentIndex, size_t totalSegments, double localT) const;
+
+    virtual QJsonObject serializeCurveData() const;
+    virtual bool deserializeCurveData(const QJsonObject& json);
 
     std::vector<Point> m_controlPoints;
     CurveStyle m_style;

@@ -1,6 +1,21 @@
 #include "Point.h"
-#include "TransformMatrix.h"
-#include <cmath>
+
+QJsonObject Point::toJson() const {
+    QJsonObject json;
+    json["x"] = x();
+    json["y"] = y();
+    json["z"] = z();
+    return json;
+}
+
+bool Point::fromJson(const QJsonObject& json) {
+    if (!json.contains("x") || !json.contains("y")) return false;
+
+    setX(json["x"].toDouble());
+    setY(json["y"].toDouble());
+    setZ(json["z"].toDouble(0.0));
+    return true;
+}
 
 double Point::distanceTo(const Point& other) const {
     const double dx = other.x() - x();

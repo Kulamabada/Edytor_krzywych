@@ -264,3 +264,19 @@ void InterpolatedCurve::buildBarycentric() const {
     const size_t n = m_controlPoints.size();
     if (n < 2) return;
 }
+
+QJsonObject InterpolatedCurve::toJson() const {
+    QJsonObject json = serializeCurveData();
+    json["interpolationType"] = static_cast<int>(type);
+    return json;
+}
+
+bool InterpolatedCurve::fromJson(const QJsonObject& json) {
+    if (!deserializeCurveData(json)) return false;
+
+    int typeInt = json["interpolationType"].toInt(0);
+    type = static_cast<InterpolationType>(typeInt);
+    needsRebuild = true;
+
+    return true;
+}

@@ -25,6 +25,9 @@ public:
 
     Point getPointAt(double t) const override;
 
+    QJsonObject toJson() const override;
+    bool fromJson(const QJsonObject& json) override;
+
 protected:
     std::unique_ptr<Curve> createClone() const override;
     void copySpecificPropertiesTo(Curve* target) const override;
