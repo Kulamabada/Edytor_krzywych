@@ -1,5 +1,5 @@
-// Plik wygenerowany automatycznie 2025-06-10 20:59:26
-// Zawiera 36 plików z projektu edytora krzywych
+// Plik wygenerowany automatycznie 2025-06-10 22:50:17
+// Zawiera 41 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
 
@@ -392,6 +392,95 @@ namespace {
     }
 }
 
+AddImageCommand::AddImageCommand(std::shared_ptr<Image> image)
+    : m_image(std::move(image)) {
+}
+
+bool AddImageCommand::execute() {
+    if (!m_image) {
+        return false;
+    }
+
+    m_imageId = addObjectToScene(m_image);
+    return m_imageId >= 0;
+}
+
+bool AddImageCommand::undo() {
+    if (m_imageId < 0) {
+        return false;
+    }
+
+    return removeObjectFromScene(m_imageId);
+}
+
+bool AddImageCommand::redo() {
+    return execute();
+}
+
+TransformImageCommand::TransformImageCommand(std::shared_ptr<Image> image,
+                                           const Vector& newPosition,
+                                           double newWidth, double newHeight)
+    : m_image(image), m_newPosition(newPosition), m_newWidth(newWidth), m_newHeight(newHeight) {
+    if (m_image) {
+        m_oldPosition = m_image->getPosition();
+        m_oldWidth = m_image->getWidth();
+        m_oldHeight = m_image->getHeight();
+    }
+}
+
+bool TransformImageCommand::execute() {
+    if (!m_image) {
+        return false;
+    }
+
+    m_image->setPosition(m_newPosition);
+    m_image->setSize(m_newWidth, m_newHeight);
+    return true;
+}
+
+bool TransformImageCommand::undo() {
+    if (!m_image) {
+        return false;
+    }
+
+    m_image->setPosition(m_oldPosition);
+    m_image->setSize(m_oldWidth, m_oldHeight);
+    return true;
+}
+
+bool TransformImageCommand::redo() {
+    return execute();
+}
+
+MoveImageCommand::MoveImageCommand(std::shared_ptr<Image> image, const Vector& newPosition)
+    : m_image(image), m_newPosition(newPosition) {
+    if (m_image) {
+        m_oldPosition = m_image->getPosition();
+    }
+}
+
+bool MoveImageCommand::execute() {
+    if (!m_image || m_image->isLocked()) {
+        return false;
+    }
+
+    m_image->setPosition(m_newPosition);
+    return true;
+}
+
+bool MoveImageCommand::undo() {
+    if (!m_image || m_image->isLocked()) {
+        return false;
+    }
+
+    m_image->setPosition(m_oldPosition);
+    return true;
+}
+
+bool MoveImageCommand::redo() {
+    return execute();
+}
+
 //===== END FILE: Core\Command.cpp =====//
 
 //===== START FILE: Core\Command.h =====//
@@ -401,6 +490,7 @@ namespace {
 #include <string>
 #include "AbstractCommand.h"
 #include "../Geometry/Curve.h"
+#include "../Geometry/Image.h"
 #include <algorithm>
 #include <cassert>
 #include <ranges>
@@ -551,6 +641,55 @@ private:
     std::vector<Point> m_newPoints;
 };
 
+class AddImageCommand : public AbstractCommand {
+public:
+    explicit AddImageCommand(std::shared_ptr<Image> image);
+    ~AddImageCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<Image> m_image;
+    int m_imageId{-1};
+};
+
+class TransformImageCommand : public AbstractCommand {
+public:
+    TransformImageCommand(std::shared_ptr<Image> image, const Vector& newPosition,
+                         double newWidth, double newHeight);
+    ~TransformImageCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<Image> m_image;
+    Vector m_oldPosition;
+    Vector m_newPosition;
+    double m_oldWidth;
+    double m_oldHeight;
+    double m_newWidth;
+    double m_newHeight;
+};
+
+class MoveImageCommand : public AbstractCommand {
+public:
+    MoveImageCommand(std::shared_ptr<Image> image, const Vector& newPosition);
+    ~MoveImageCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<Image> m_image;
+    Vector m_oldPosition;
+    Vector m_newPosition;
+};
+
 //===== END FILE: Core\Command.h =====//
 
 //===== START FILE: Core\CommandManager.cpp =====//
@@ -654,6 +793,209 @@ private:
 };
 
 //===== END FILE: Core\CommandManager.h =====//
+
+//===== START FILE: Core\JsonSerializable.h =====//
+
+#pragma once
+
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QString>
+
+class JsonSerializable {
+public:
+    virtual ~JsonSerializable() = default;
+    virtual QJsonObject toJson() const = 0;
+    virtual bool fromJson(const QJsonObject& json) = 0;
+};
+
+//===== END FILE: Core\JsonSerializable.h =====//
+
+//===== START FILE: Core\ProjectSerializer.cpp =====//
+
+#include "ProjectSerializer.h"
+#include "../Graphics/Canvas.h"
+#include "../Graphics/ViewportManager.h"
+#include "../Geometry/BezierCurve.h"
+#include "../Geometry/InterpolatedCurve.h"
+#include "../Math/EigenMathAdapter.h"
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QFile>
+
+bool ProjectSerializer::saveProject(const QString& filePath, const Canvas* canvas) {
+    if (!canvas) return false;
+
+    QJsonObject root;
+    root["version"] = "1.0";
+    root["viewport"] = serializeViewport(canvas->viewportManager());
+    root["objects"] = serializeObjects(canvas);
+
+    int selectedIndex = -1;
+    auto selectedObj = canvas->selectedObject();
+    if (selectedObj) {
+        const auto& objects = canvas->objects();
+        auto it = std::find(objects.begin(), objects.end(), selectedObj);
+        if (it != objects.end()) {
+            selectedIndex = std::distance(objects.begin(), it);
+        }
+    }
+    root["selectedObjectIndex"] = selectedIndex;
+
+    QJsonDocument doc(root);
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly)) return false;
+
+    file.write(doc.toJson());
+    return true;
+}
+
+bool ProjectSerializer::loadProject(const QString& filePath, Canvas* canvas) {
+    if (!canvas) return false;
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) return false;
+
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
+    if (error.error != QJsonParseError::NoError) return false;
+
+    QJsonObject root = doc.object();
+    if (!root.contains("version") || !root.contains("objects")) return false;
+
+    canvas->clearObjects();
+
+    if (!deserializeViewport(root["viewport"].toObject(), canvas->viewportManager())) {
+        return false;
+    }
+
+    if (!deserializeObjects(root["objects"].toArray(), canvas)) {
+        return false;
+    }
+
+    int selectedIndex = root["selectedObjectIndex"].toInt(-1);
+    if (selectedIndex >= 0) {
+        const auto& objects = canvas->objects();
+        if (selectedIndex < static_cast<int>(objects.size())) {
+            canvas->selectObject(objects[selectedIndex]);
+        }
+    }
+
+    canvas->refresh();
+    return true;
+}
+
+QJsonObject ProjectSerializer::serializeViewport(const ViewportManager* viewport) {
+    QJsonObject json;
+    if (!viewport) return json;
+
+    json["zoomFactor"] = viewport->zoomFactor();
+
+    QJsonObject panOffset;
+    panOffset["x"] = viewport->panOffset().x();
+    panOffset["y"] = viewport->panOffset().y();
+    json["panOffset"] = panOffset;
+
+    return json;
+}
+
+bool ProjectSerializer::deserializeViewport(const QJsonObject& json, ViewportManager* viewport) {
+    if (!viewport) return false;
+
+    viewport->setZoomFactor(json["zoomFactor"].toDouble(1.0));
+
+    QJsonObject panOffset = json["panOffset"].toObject();
+    viewport->setPanOffset(QPointF(
+        panOffset["x"].toDouble(0.0),
+        panOffset["y"].toDouble(0.0)
+    ));
+
+    return true;
+}
+
+QJsonArray ProjectSerializer::serializeObjects(const Canvas* canvas) {
+    QJsonArray array;
+    if (!canvas) return array;
+
+    for (const auto& obj : canvas->objects()) {
+        if (auto serializable = dynamic_cast<const JsonSerializable*>(obj.get())) {
+            QJsonObject objJson = serializable->toJson();
+
+            if (dynamic_cast<const BezierCurve*>(obj.get())) {
+                objJson["type"] = "BezierCurve";
+            } else if (dynamic_cast<const InterpolatedCurve*>(obj.get())) {
+                objJson["type"] = "InterpolatedCurve";
+            }
+
+            array.append(objJson);
+        }
+    }
+
+    return array;
+}
+
+bool ProjectSerializer::deserializeObjects(const QJsonArray& json, Canvas* canvas) {
+    if (!canvas) return false;
+
+    for (const auto& value : json) {
+        QJsonObject objJson = value.toObject();
+        auto obj = createObjectFromJson(objJson);
+        if (obj) {
+            canvas->addObject(obj);
+        }
+    }
+
+    return true;
+}
+
+std::shared_ptr<GeometricObject> ProjectSerializer::createObjectFromJson(const QJsonObject& json) {
+    QString type = json["type"].toString();
+
+    if (type == "BezierCurve") {
+        auto curve = std::make_shared<BezierCurve>();
+        if (curve->fromJson(json)) {
+            return curve;
+        }
+    } else if (type == "InterpolatedCurve") {
+        auto mathProvider = std::make_shared<EigenMathAdapter>();
+        auto curve = std::make_shared<InterpolatedCurve>(mathProvider, InterpolatedCurve::InterpolationType::NIFS3);
+        if (curve->fromJson(json)) {
+            return curve;
+        }
+    }
+
+    return nullptr;
+}
+
+//===== END FILE: Core\ProjectSerializer.cpp =====//
+
+//===== START FILE: Core\ProjectSerializer.h =====//
+
+#pragma once
+
+#include "JsonSerializable.h"
+#include <QJsonDocument>
+#include <memory>
+
+class Canvas;
+class ViewportManager;
+class GeometricObject;
+
+class ProjectSerializer {
+public:
+    static bool saveProject(const QString& filePath, const Canvas* canvas);
+    static bool loadProject(const QString& filePath, Canvas* canvas);
+
+private:
+    static QJsonObject serializeViewport(const ViewportManager* viewport);
+    static bool deserializeViewport(const QJsonObject& json, ViewportManager* viewport);
+    static QJsonArray serializeObjects(const Canvas* canvas);
+    static bool deserializeObjects(const QJsonArray& json, Canvas* canvas);
+    static std::shared_ptr<GeometricObject> createObjectFromJson(const QJsonObject& json);
+};
+
+//===== END FILE: Core\ProjectSerializer.h =====//
 
 //===== START FILE: Geometry\BezierCurve.cpp =====//
 
@@ -938,6 +1280,47 @@ std::vector<std::vector<Point>> BezierCurve::getDeCasteljauSteps() const {
     return steps;
 }
 
+QJsonObject BezierCurve::toJson() const {
+    QJsonObject json = serializeCurveData();
+
+    if (hasWeights()) {
+        QJsonArray weightsArray;
+        for (double weight : m_weights) {
+            weightsArray.append(weight);
+        }
+        json["weights"] = weightsArray;
+    }
+
+    json["showWeights"] = m_showWeights;
+    json["showDeCasteljau"] = m_showDeCasteljau;
+    json["deCasteljauT"] = m_deCasteljauT;
+
+    return json;
+}
+
+bool BezierCurve::fromJson(const QJsonObject& json) {
+    if (!deserializeCurveData(json)) return false;
+
+    if (json.contains("weights")) {
+        QJsonArray weightsArray = json["weights"].toArray();
+        std::vector<double> weights;
+
+        for (const auto& value : weightsArray) {
+            weights.push_back(value.toDouble(1.0));
+        }
+
+        if (!weights.empty()) {
+            setWeights(weights);
+        }
+    }
+
+    m_showWeights = json["showWeights"].toBool(false);
+    m_showDeCasteljau = json["showDeCasteljau"].toBool(false);
+    m_deCasteljauT = json["deCasteljauT"].toDouble(0.5);
+
+    return true;
+}
+
 //===== END FILE: Geometry\BezierCurve.cpp =====//
 
 //===== START FILE: Geometry\BezierCurve.h =====//
@@ -979,6 +1362,9 @@ public:
     double getDeCasteljauT() const { return m_deCasteljauT; }
 
     std::vector<std::vector<Point>> getDeCasteljauSteps() const;
+
+    QJsonObject toJson() const override;
+    bool fromJson(const QJsonObject& json) override;
 
 protected:
     std::unique_ptr<Curve> createClone() const override;
@@ -1236,6 +1622,80 @@ double Curve::calculateParameterForSegment(size_t segmentIndex, size_t totalSegm
     return segmentIndex * segmentLength + localT * segmentLength;
 }
 
+QJsonObject Curve::serializeCurveData() const {
+    QJsonObject json;
+
+    QJsonArray pointsArray;
+    for (const auto& point : m_controlPoints) {
+        pointsArray.append(point.toJson());
+    }
+    json["controlPoints"] = pointsArray;
+
+    json["style"] = m_style.toJson();
+    json["controlPointStyle"] = m_controlPointStyle.toJson();
+    json["drawPolyline"] = m_drawPolyline;
+    json["drawConvexHull"] = m_drawConvexHull;
+    json["drawMainCurve"] = m_drawMainCurve;
+
+    QJsonObject polylineStyle;
+    polylineStyle["color"] = m_polylineColor.name();
+    polylineStyle["width"] = m_polylineWidth;
+    polylineStyle["style"] = static_cast<int>(m_polylineStyle);
+    json["polylineStyle"] = polylineStyle;
+
+    QJsonObject convexHullStyle;
+    convexHullStyle["color"] = m_convexHullColor.name();
+    convexHullStyle["width"] = m_convexHullWidth;
+    convexHullStyle["style"] = static_cast<int>(m_convexHullStyle);
+    json["convexHullStyle"] = convexHullStyle;
+
+    return json;
+}
+
+bool Curve::deserializeCurveData(const QJsonObject& json) {
+    if (!json.contains("controlPoints")) return false;
+
+    QJsonArray pointsArray = json["controlPoints"].toArray();
+    std::vector<Point> points;
+
+    for (const auto& value : pointsArray) {
+        Point point;
+        if (point.fromJson(value.toObject())) {
+            points.push_back(point);
+        }
+    }
+
+    setControlPoints(points);
+
+    if (json.contains("style")) {
+        m_style.fromJson(json["style"].toObject());
+    }
+
+    if (json.contains("controlPointStyle")) {
+        m_controlPointStyle.fromJson(json["controlPointStyle"].toObject());
+    }
+
+    m_drawPolyline = json["drawPolyline"].toBool(false);
+    m_drawConvexHull = json["drawConvexHull"].toBool(false);
+    m_drawMainCurve = json["drawMainCurve"].toBool(true);
+
+    if (json.contains("polylineStyle")) {
+        QJsonObject polylineStyle = json["polylineStyle"].toObject();
+        m_polylineColor = QColor(polylineStyle["color"].toString());
+        m_polylineWidth = polylineStyle["width"].toDouble(1.0);
+        m_polylineStyle = static_cast<Qt::PenStyle>(polylineStyle["style"].toInt(Qt::DashLine));
+    }
+
+    if (json.contains("convexHullStyle")) {
+        QJsonObject convexHullStyle = json["convexHullStyle"].toObject();
+        m_convexHullColor = QColor(convexHullStyle["color"].toString());
+        m_convexHullWidth = convexHullStyle["width"].toDouble(1.0);
+        m_convexHullStyle = static_cast<Qt::PenStyle>(convexHullStyle["style"].toInt(Qt::DotLine));
+    }
+
+    return true;
+}
+
 //===== END FILE: Geometry\Curve.cpp =====//
 
 //===== START FILE: Geometry\Curve.h =====//
@@ -1280,7 +1740,7 @@ struct CurvePrecisionConfig {
     int renderSamples = 1000;
 };
 
-class Curve : public GeometricObject {
+class Curve : public GeometricObject, public JsonSerializable {
 public:
     explicit Curve(CurveType type = CurveType::Generic);
     explicit Curve(const DefaultCurveConfig& config);
@@ -1384,6 +1844,9 @@ protected:
     bool validateParameterRange(double& t) const;
     double calculateParameterForSegment(size_t segmentIndex, size_t totalSegments, double localT) const;
 
+    virtual QJsonObject serializeCurveData() const;
+    virtual bool deserializeCurveData(const QJsonObject& json);
+
     std::vector<Point> m_controlPoints;
     CurveStyle m_style;
     ControlPointStyle m_controlPointStyle;
@@ -1414,11 +1877,11 @@ private:
 //===== START FILE: Geometry\CurveStyle.h =====//
 
 #pragma once
-
+#include "../Core/JsonSerializable.h"
 #include <QColor>
 #include <Qt>
 
-struct CurveStyle {
+struct CurveStyle : public JsonSerializable {
     QColor color{Qt::blue};
     double lineWidth{1.0};
     Qt::PenStyle lineStyle{Qt::SolidLine};
@@ -1426,9 +1889,25 @@ struct CurveStyle {
     CurveStyle() = default;
     CurveStyle(const QColor& c, double w, Qt::PenStyle s)
         : color(c), lineWidth(w), lineStyle(s) {}
+    QJsonObject toJson() const override {
+        QJsonObject json;
+        json["color"] = color.name();
+        json["lineWidth"] = lineWidth;
+        json["lineStyle"] = static_cast<int>(lineStyle);
+        return json;
+    }
+
+    bool fromJson(const QJsonObject& json) override {
+        if (!json.contains("color")) return false;
+
+        color = QColor(json["color"].toString());
+        lineWidth = json["lineWidth"].toDouble(1.0);
+        lineStyle = static_cast<Qt::PenStyle>(json["lineStyle"].toInt(Qt::SolidLine));
+        return true;
+    }
 };
 
-struct ControlPointStyle {
+struct ControlPointStyle : public JsonSerializable {
     bool show{true};
     QColor normalColor{Qt::blue};
     QColor selectedColor{Qt::red};
@@ -1440,6 +1919,25 @@ struct ControlPointStyle {
                      const QColor& active, double sz)
         : show(s), normalColor(normal), selectedColor(selected),
           activeColor(active), size(sz) {}
+
+    QJsonObject toJson() const override {
+        QJsonObject json;
+        json["show"] = show;
+        json["normalColor"] = normalColor.name();
+        json["selectedColor"] = selectedColor.name();
+        json["activeColor"] = activeColor.name();
+        json["size"] = size;
+        return json;
+    }
+
+    bool fromJson(const QJsonObject& json) override {
+        show = json["show"].toBool(true);
+        normalColor = QColor(json["normalColor"].toString("#0000FF"));
+        selectedColor = QColor(json["selectedColor"].toString("#FF0000"));
+        activeColor = QColor(json["activeColor"].toString("#00FF00"));
+        size = json["size"].toDouble(5.0);
+        return true;
+    }
 };
 
 //===== END FILE: Geometry\CurveStyle.h =====//
@@ -1465,6 +1963,154 @@ public:
 };
 
 //===== END FILE: Geometry\GeometricObject.h =====//
+
+//===== START FILE: Geometry\Image.cpp =====//
+
+#include "Image.h"
+
+Image::Image() = default;
+
+Image::Image(const QString& filePath) {
+    loadFromFile(filePath);
+}
+
+Image::Image(const QPixmap& pixmap) : m_pixmap(pixmap) {
+    if (!m_pixmap.isNull()) {
+        m_width = m_pixmap.width();
+        m_height = m_pixmap.height();
+    }
+}
+
+bool Image::loadFromFile(const QString& filePath) {
+    QPixmap pixmap(filePath);
+    if (pixmap.isNull()) {
+        return false;
+    }
+
+    m_pixmap = pixmap;
+    m_filePath = filePath;
+    m_width = pixmap.width();
+    m_height = pixmap.height();
+
+    return true;
+}
+
+void Image::setPixmap(const QPixmap& pixmap) {
+    m_pixmap = pixmap;
+    if (!pixmap.isNull()) {
+        m_width = pixmap.width();
+        m_height = pixmap.height();
+    }
+}
+
+const QPixmap& Image::getPixmap() const {
+    return m_pixmap;
+}
+
+void Image::setSize(double width, double height) {
+    m_width = std::max(1.0, width);
+    m_height = std::max(1.0, height);
+}
+
+double Image::getWidth() const {
+    return m_width;
+}
+
+double Image::getHeight() const {
+    return m_height;
+}
+
+void Image::setOpacity(double opacity) {
+    m_opacity = std::clamp(opacity, 0.0, 1.0);
+}
+
+double Image::getOpacity() const {
+    return m_opacity;
+}
+
+QString Image::getFilePath() const {
+    return m_filePath;
+}
+
+bool Image::isValid() const {
+    return !m_pixmap.isNull();
+}
+
+Vector Image::getPosition() const {
+    return m_position;
+}
+
+void Image::setPosition(const Eigen::Vector3d& position) {
+    if (m_locked) return;
+    m_position = position;
+}
+
+void Image::transform(const TransformMatrix& matrix) {
+    if (m_locked) return;
+
+    Eigen::Vector4d homogeneousPos(m_position.x(), m_position.y(), m_position.z(), 1.0);
+    Eigen::Vector4d transformed = matrix.getMatrix() * homogeneousPos;
+
+    if (std::abs(transformed(3)) > 1e-10) {
+        m_position = Vector(
+            transformed(0) / transformed(3),
+            transformed(1) / transformed(3),
+            transformed(2) / transformed(3)
+        );
+    }
+}
+
+//===== END FILE: Geometry\Image.cpp =====//
+
+//===== START FILE: Geometry\Image.h =====//
+
+#pragma once
+
+#include "GeometricObject.h"
+#include <QPixmap>
+#include <QString>
+#include "TransformMatrix.h"
+#include <QFileInfo>
+
+class Image : public GeometricObject {
+public:
+    Image();
+    explicit Image(const QString& filePath);
+    explicit Image(const QPixmap& pixmap);
+    ~Image() override = default;
+
+    bool loadFromFile(const QString& filePath);
+    void setPixmap(const QPixmap& pixmap);
+    const QPixmap& getPixmap() const;
+
+    void setSize(double width, double height);
+    double getWidth() const;
+    double getHeight() const;
+
+    void setOpacity(double opacity);
+    double getOpacity() const;
+
+    QString getFilePath() const;
+    bool isValid() const;
+
+    Vector getPosition() const override;
+    void setPosition(const Eigen::Vector3d& position) override;
+    void transform(const TransformMatrix& matrix) override;
+
+    void setLocked(bool locked) { m_locked = locked; }
+    bool isLocked() const { return m_locked; }
+
+private:
+    QPixmap m_pixmap;
+    QString m_filePath;
+    Vector m_position{0.0, 0.0, 0.0};
+    double m_width{100.0};
+    double m_height{100.0};
+    double m_opacity{1.0};
+    bool m_locked{false};
+};
+
+//===== END FILE: Geometry\Image.h =====//
 
 //===== START FILE: Geometry\InterpolatedCurve.cpp =====//
 
@@ -1735,6 +2381,22 @@ void InterpolatedCurve::buildBarycentric() const {
     if (n < 2) return;
 }
 
+QJsonObject InterpolatedCurve::toJson() const {
+    QJsonObject json = serializeCurveData();
+    json["interpolationType"] = static_cast<int>(type);
+    return json;
+}
+
+bool InterpolatedCurve::fromJson(const QJsonObject& json) {
+    if (!deserializeCurveData(json)) return false;
+
+    int typeInt = json["interpolationType"].toInt(0);
+    type = static_cast<InterpolationType>(typeInt);
+    needsRebuild = true;
+
+    return true;
+}
+
 //===== END FILE: Geometry\InterpolatedCurve.cpp =====//
 
 //===== START FILE: Geometry\InterpolatedCurve.h =====//
@@ -1766,6 +2428,9 @@ public:
 
     Point getPointAt(double t) const override;
 
+    QJsonObject toJson() const override;
+    bool fromJson(const QJsonObject& json) override;
+
 protected:
     std::unique_ptr<Curve> createClone() const override;
     void copySpecificPropertiesTo(Curve* target) const override;
@@ -1790,8 +2455,23 @@ private:
 //===== START FILE: Geometry\Point.cpp =====//
 
 #include "Point.h"
-#include "TransformMatrix.h"
-#include <cmath>
+
+QJsonObject Point::toJson() const {
+    QJsonObject json;
+    json["x"] = x();
+    json["y"] = y();
+    json["z"] = z();
+    return json;
+}
+
+bool Point::fromJson(const QJsonObject& json) {
+    if (!json.contains("x") || !json.contains("y")) return false;
+
+    setX(json["x"].toDouble());
+    setY(json["y"].toDouble());
+    setZ(json["z"].toDouble(0.0));
+    return true;
+}
 
 double Point::distanceTo(const Point& other) const {
     const double dx = other.x() - x();
@@ -1826,11 +2506,14 @@ void Point::transform(const TransformMatrix& matrix) {
 #pragma once
 
 #include "GeometricObject.h"
+#include "../Core/JsonSerializable.h"
 #include <array>
+#include "TransformMatrix.h"
+#include <cmath>
 
 class TransformMatrix;
 
-class Point : public GeometricObject {
+class Point : public GeometricObject , public JsonSerializable {
 public:
     Point() : m_coordinates{0.0, 0.0, 0.0} {}
     Point(double x, double y, double z = 0.0) : m_coordinates{x, y, z} {}
@@ -1859,6 +2542,8 @@ public:
         setZ(position.z());
     }
 
+    QJsonObject toJson() const override;
+    bool fromJson(const QJsonObject& json) override;
 private:
     std::array<double, 3> m_coordinates;
 };
@@ -2460,6 +3145,42 @@ std::shared_ptr<GeometricObject> Canvas::hitTestObject(const QPointF& pos, doubl
     return nullptr;
 }
 
+void Canvas::addImage() {
+    QString filePath = QFileDialog::getOpenFileName(this,
+        "Wybierz obraz", QString(),
+        "Obrazy (*.png *.jpg *.jpeg *.bmp *.gif);;Wszystkie pliki (*.*)");
+
+    if (!filePath.isEmpty()) {
+        addImageFromFile(filePath);
+    }
+}
+
+void Canvas::addImageFromFile(const QString& filePath) {
+    auto image = std::make_shared<Image>(filePath);
+
+    if (!image->isValid()) {
+        QMessageBox::warning(this, "Błąd", "Nie można wczytać obrazu z pliku: " + filePath);
+        return;
+    }
+
+    if (m_viewportManager) {
+        QPointF center = m_viewportManager->visibleWorldRect().center();
+        image->setPosition(Vector(center.x(), center.y(), 0.0));
+    }
+
+    addObject(image);
+    selectObject(image);
+    update();
+}
+
+std::shared_ptr<Image> Canvas::getSelectedImage() const {
+    return std::dynamic_pointer_cast<Image>(m_selectedObject);
+}
+
+bool Canvas::isImageSelected() const {
+    return getSelectedImage() != nullptr;
+}
+
 //===== END FILE: Graphics\Canvas.cpp =====//
 
 //===== START FILE: Graphics\Canvas.h =====//
@@ -2476,6 +3197,7 @@ std::shared_ptr<GeometricObject> Canvas::hitTestObject(const QPointF& pos, doubl
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QResizeEvent>
+#include <QFileDialog>
 #include <algorithm>
 
 #include "../Core/ApplicationCore.h"
@@ -2494,7 +3216,7 @@ public:
         None,
         SelectPoint,
         AddPoint,
-        MovePoint,
+        MovePoint
     };
 
     explicit Canvas(QWidget* parent = nullptr);
@@ -2532,6 +3254,9 @@ public slots:
     void startAddingControlPoints();
     void startMovingControlPoints();
 
+    void addImage();
+    void addImageFromFile(const QString& filePath);
+    std::shared_ptr<Image> getSelectedImage() const;
 signals:
     void objectAdded(std::shared_ptr<GeometricObject> object);
     void objectRemoved(std::shared_ptr<GeometricObject> object);
@@ -2560,6 +3285,7 @@ private:
     void drawControlPoints();
     std::shared_ptr<BezierCurve> getSelectedBezierCurve() const;
     std::shared_ptr<GeometricObject> hitTestObject(const QPointF& pos, double tolerance = 10.0) const;
+    bool isImageSelected() const;
 
     std::vector<std::shared_ptr<GeometricObject>> m_objects;
     std::shared_ptr<GeometricObject> m_selectedObject;
@@ -2584,6 +3310,7 @@ private:
 #include <QColor>
 #include <qimage.h>
 #include <Qt>
+#include "../Geometry/Image.h"
 
 class QPainter;
 class QPointF;
@@ -2631,6 +3358,8 @@ public:
     virtual void renderCurveExtras(const Curve& curve) = 0;
 
     virtual void renderWeights(const BezierCurve& curve) = 0;
+
+    virtual void renderImage(const Image& image) = 0;
 };
 
 //===== END FILE: Graphics\IRenderer.h =====//
@@ -2809,15 +3538,21 @@ QPolygonF QtRenderer::pointsToPolygon(const std::vector<Point>& points) const {
     return polygon;
 }
 
-void QtRenderer::renderObject(const GeometricObject& object)
-{
+void QtRenderer::renderObject(const GeometricObject& object) {
     if (const auto* point = dynamic_cast<const Point*>(&object)) {
         renderPoint(*point);
         return;
     }
 
-    if (const auto* curve = dynamic_cast<const Curve*>(&object))
+    if (const auto* curve = dynamic_cast<const Curve*>(&object)) {
         renderCurve(*curve);
+        return;
+    }
+
+    if (const auto* image = dynamic_cast<const Image*>(&object)) {
+        renderImage(*image);
+        return;
+    }
 }
 
 void QtRenderer::renderGrid(double gridSize) {
@@ -3269,6 +4004,50 @@ void QtRenderer::renderDeCasteljauSteps(const BezierCurve& curve) {
     m_painter->restore();
 }
 
+void QtRenderer::renderImage(const Image& image) {
+    if (!m_painter || !m_viewportManager || !image.isValid()) {
+        return;
+    }
+
+    const QPixmap& pixmap = image.getPixmap();
+    Vector pos = image.getPosition();
+
+    qreal oldOpacity = m_painter->opacity();
+    m_painter->setOpacity(image.isLocked() ? 0.6 : image.getOpacity());
+
+    m_painter->save();
+    m_painter->translate(pos.x(), pos.y());
+    m_painter->scale(1.0, -1.0);
+
+    QRectF centeredRect(
+        -image.getWidth() / 2.0,
+        -image.getHeight() / 2.0,
+        image.getWidth(),
+        image.getHeight()
+    );
+
+    m_painter->drawPixmap(centeredRect, pixmap, pixmap.rect());
+
+    if (image.isLocked()) {
+        m_painter->scale(1.0, -1.0);
+        QPen lockPen(Qt::red, 2.0 / m_viewportManager->zoomFactor());
+        m_painter->setPen(lockPen);
+        m_painter->setBrush(Qt::NoBrush);
+
+        double lockSize = 20.0 / m_viewportManager->zoomFactor();
+        QRectF lockRect(-lockSize/2, -lockSize/2, lockSize, lockSize);
+        m_painter->drawRect(lockRect);
+
+        double crossSize = lockSize * 0.7;
+        m_painter->drawLine(-crossSize/2, -crossSize/2, crossSize/2, crossSize/2);
+        m_painter->drawLine(-crossSize/2, crossSize/2, crossSize/2, -crossSize/2);
+    }
+
+    m_painter->restore();
+    m_painter->setOpacity(oldOpacity);
+}
+
+
 //===== END FILE: Graphics\QtRenderer.cpp =====//
 
 //===== START FILE: Graphics\QtRenderer.h =====//
@@ -3317,7 +4096,8 @@ public:
     void setPolylineStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DashLine) override;
     void setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) override;
     void renderCurveExtras(const Curve& curve) override;
-    void renderWeights(const BezierCurve& curve);
+    void renderImage(const Image& image) override;
+    void renderWeights(const BezierCurve& curve) override;
     void renderDeCasteljauSteps(const BezierCurve& curve);
 
 private:
@@ -3788,6 +4568,7 @@ void ActionHandler::connectActions() {
     connect(m_mainWindow.m_bezierAction, &QAction::triggered, this, &ActionHandler::onBezierAction);
 
     connect(m_mainWindow.m_aboutAction, &QAction::triggered, this, &ActionHandler::onAboutAction);
+    connect(m_mainWindow.m_addImageAction, &QAction::triggered, this, &ActionHandler::onAddImageAction);
 }
 
 void ActionHandler::onNewAction() {
@@ -3800,22 +4581,31 @@ void ActionHandler::onNewAction() {
 
 void ActionHandler::onOpenAction() {
     QString filePath = QFileDialog::getOpenFileName(&m_mainWindow, "Otwórz projekt",
-        QString(), "Pliki projektu (*.crv);;Wszystkie pliki (*.*)");
+        QString(), "Pliki projektu (*.json);;Wszystkie pliki (*.*)");
     if (!filePath.isEmpty()) {
-        m_mainWindow.getStatusBar()->showMessage("Otwieranie projektu nie jest jeszcze zaimplementowane");
+        if (ProjectSerializer::loadProject(filePath, m_mainWindow.getCanvas())) {
+            m_mainWindow.updateObjectsTree();
+            m_mainWindow.getStatusBar()->showMessage("Projekt wczytany pomyślnie");
+        } else {
+            m_mainWindow.getStatusBar()->showMessage("Błąd podczas wczytywania projektu");
+        }
     }
 }
 
 void ActionHandler::onSaveAction() {
-    m_mainWindow.getStatusBar()->showMessage("Zapisywanie projektu nie jest jeszcze zaimplementowane");
+    QString filePath = QFileDialog::getSaveFileName(&m_mainWindow, "Zapisz projekt",
+        QString(), "Pliki projektu (*.json);;Wszystkie pliki (*.*)");
+    if (!filePath.isEmpty()) {
+        if (ProjectSerializer::saveProject(filePath, m_mainWindow.getCanvas())) {
+            m_mainWindow.getStatusBar()->showMessage("Projekt zapisany pomyślnie");
+        } else {
+            m_mainWindow.getStatusBar()->showMessage("Błąd podczas zapisywania projektu");
+        }
+    }
 }
 
 void ActionHandler::onSaveAsAction() {
-    QString filePath = QFileDialog::getSaveFileName(&m_mainWindow, "Zapisz projekt jako",
-        QString(), "Pliki projektu (*.crv);;Wszystkie pliki (*.*)");
-    if (!filePath.isEmpty()) {
-        m_mainWindow.getStatusBar()->showMessage("Zapisywanie projektu nie jest jeszcze zaimplementowane");
-    }
+    onSaveAction();
 }
 
 void ActionHandler::onExitAction() {
@@ -3988,6 +4778,12 @@ void ActionHandler::onAboutAction() const {
         "</ul>");
 }
 
+void ActionHandler::onAddImageAction() {
+    m_mainWindow.getCanvas()->addImage();
+    m_mainWindow.updateObjectsTree();
+    m_mainWindow.getStatusBar()->showMessage("Dodano obraz");
+}
+
 //===== END FILE: UI\ActionHandler.cpp =====//
 
 //===== START FILE: UI\ActionHandler.h =====//
@@ -4001,6 +4797,7 @@ void ActionHandler::onAboutAction() const {
 #include <QFileDialog>
 #include <QKeyEvent>
 #include <QStatusBar>
+#include "../Core/ProjectSerializer.h"
 
 class MainWindow;
 using Type = InterpolatedCurve::InterpolationType;
@@ -4012,8 +4809,8 @@ public:
     explicit ActionHandler(MainWindow& mainWindow);
     ~ActionHandler() override = default;
 
-    public slots:
-        void onNewAction();
+public slots:
+    void onNewAction();
     void onOpenAction();
     void onSaveAction();
     void onSaveAsAction();
@@ -4042,6 +4839,8 @@ public:
     void onBezierAction();
 
     void onAboutAction() const;
+
+    void onAddImageAction();
 
 private:
     void connectActions();

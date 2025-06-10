@@ -3,6 +3,7 @@
 #include <QColor>
 #include <qimage.h>
 #include <Qt>
+#include "../Geometry/Image.h"
 
 class QPainter;
 class QPointF;
@@ -50,4 +51,6 @@ public:
     virtual void renderCurveExtras(const Curve& curve) = 0;
 
     virtual void renderWeights(const BezierCurve& curve) = 0;
+
+    virtual void renderImage(const Image& image) = 0;
 };

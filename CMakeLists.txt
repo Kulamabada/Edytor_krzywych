@@ -57,6 +57,8 @@ add_executable(edytor_krzywych
         Core/JsonSerializable.h
         Core/ProjectSerializer.cpp
         Core/ProjectSerializer.h
+        Geometry/Image.cpp
+        Geometry/Image.h
 )
 
 find_package(Qt6 COMPONENTS Core Gui Widgets REQUIRED)

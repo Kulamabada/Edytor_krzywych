@@ -36,6 +36,7 @@ void ActionHandler::connectActions() {
     connect(m_mainWindow.m_bezierAction, &QAction::triggered, this, &ActionHandler::onBezierAction);
 
     connect(m_mainWindow.m_aboutAction, &QAction::triggered, this, &ActionHandler::onAboutAction);
+    connect(m_mainWindow.m_addImageAction, &QAction::triggered, this, &ActionHandler::onAddImageAction);
 }
 
 void ActionHandler::onNewAction() {
@@ -243,4 +244,10 @@ void ActionHandler::onAboutAction() const {
         "<li>Usuwanie wybranych punktów</li>"
         "<li>Wizualizacja punktów kontrolnych</li>"
         "</ul>");
+}
+
+void ActionHandler::onAddImageAction() {
+    m_mainWindow.getCanvas()->addImage();
+    m_mainWindow.updateObjectsTree();
+    m_mainWindow.getStatusBar()->showMessage("Dodano obraz");
 }

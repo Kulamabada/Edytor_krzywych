@@ -319,16 +319,23 @@ void Canvas::paintEvent(QPaintEvent* event)
     m_renderer->renderAxes();
 
     for (const auto& object : m_objects)
-        m_renderer->renderObject(*object);
+        if (dynamic_cast<const Image*>(object.get()))
+            m_renderer->renderObject(*object);
 
-    if (m_selectedObject) {
-        const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_selectedObject.get());
-        if (geometricObj) {
+    for (const auto& object : m_objects)
+        if (dynamic_cast<const Curve*>(object.get())) 
+            m_renderer->renderObject(*object);
+
+    for (const auto& object : m_objects)
+        if (!dynamic_cast<const Image*>(object.get()) && !dynamic_cast<const Curve*>(object.get()))
+            m_renderer->renderObject(*object);
+
+    if (m_selectedObject)
+        if (const auto* geometricObj = dynamic_cast<const GeometricObject*>(m_selectedObject.get())) {
             auto position = geometricObj->getPosition();
             QPointF selectionPos = m_viewportManager->worldToScreen(QPointF(position.x(), position.y()));
             m_renderer->renderSelectionMarker(selectionPos);
         }
-    }
 
     if (m_isEditingPoints && m_selectedObject)
         drawControlPoints();
@@ -531,4 +538,40 @@ std::shared_ptr<GeometricObject> Canvas::hitTestObject(const QPointF& pos, doubl
     }
 
     return nullptr;
+}
+
+void Canvas::addImage() {
+    QString filePath = QFileDialog::getOpenFileName(this,
+        "Wybierz obraz", QString(),
+        "Obrazy (*.png *.jpg *.jpeg *.bmp *.gif);;Wszystkie pliki (*.*)");
+
+    if (!filePath.isEmpty()) {
+        addImageFromFile(filePath);
+    }
+}
+
+void Canvas::addImageFromFile(const QString& filePath) {
+    auto image = std::make_shared<Image>(filePath);
+
+    if (!image->isValid()) {
+        QMessageBox::warning(this, "Błąd", "Nie można wczytać obrazu z pliku: " + filePath);
+        return;
+    }
+
+    if (m_viewportManager) {
+        QPointF center = m_viewportManager->visibleWorldRect().center();
+        image->setPosition(Vector(center.x(), center.y(), 0.0));
+    }
+
+    addObject(image);
+    selectObject(image);
+    update();
+}
+
+std::shared_ptr<Image> Canvas::getSelectedImage() const {
+    return std::dynamic_pointer_cast<Image>(m_selectedObject);
+}
+
+bool Canvas::isImageSelected() const {
+    return getSelectedImage() != nullptr;
 }

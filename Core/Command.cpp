@@ -296,3 +296,92 @@ namespace {
         return objectId > 0;
     }
 }
+
+AddImageCommand::AddImageCommand(std::shared_ptr<Image> image)
+    : m_image(std::move(image)) {
+}
+
+bool AddImageCommand::execute() {
+    if (!m_image) {
+        return false;
+    }
+
+    m_imageId = addObjectToScene(m_image);
+    return m_imageId >= 0;
+}
+
+bool AddImageCommand::undo() {
+    if (m_imageId < 0) {
+        return false;
+    }
+
+    return removeObjectFromScene(m_imageId);
+}
+
+bool AddImageCommand::redo() {
+    return execute();
+}
+
+TransformImageCommand::TransformImageCommand(std::shared_ptr<Image> image,
+                                           const Vector& newPosition,
+                                           double newWidth, double newHeight)
+    : m_image(image), m_newPosition(newPosition), m_newWidth(newWidth), m_newHeight(newHeight) {
+    if (m_image) {
+        m_oldPosition = m_image->getPosition();
+        m_oldWidth = m_image->getWidth();
+        m_oldHeight = m_image->getHeight();
+    }
+}
+
+bool TransformImageCommand::execute() {
+    if (!m_image) {
+        return false;
+    }
+
+    m_image->setPosition(m_newPosition);
+    m_image->setSize(m_newWidth, m_newHeight);
+    return true;
+}
+
+bool TransformImageCommand::undo() {
+    if (!m_image) {
+        return false;
+    }
+
+    m_image->setPosition(m_oldPosition);
+    m_image->setSize(m_oldWidth, m_oldHeight);
+    return true;
+}
+
+bool TransformImageCommand::redo() {
+    return execute();
+}
+
+MoveImageCommand::MoveImageCommand(std::shared_ptr<Image> image, const Vector& newPosition)
+    : m_image(image), m_newPosition(newPosition) {
+    if (m_image) {
+        m_oldPosition = m_image->getPosition();
+    }
+}
+
+bool MoveImageCommand::execute() {
+    if (!m_image || m_image->isLocked()) {
+        return false;
+    }
+
+    m_image->setPosition(m_newPosition);
+    return true;
+}
+
+bool MoveImageCommand::undo() {
+    if (!m_image || m_image->isLocked()) {
+        return false;
+    }
+
+    m_image->setPosition(m_oldPosition);
+    return true;
+}
+
+bool MoveImageCommand::redo() {
+    return execute();
+}

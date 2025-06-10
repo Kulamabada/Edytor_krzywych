@@ -19,8 +19,8 @@ public:
     explicit ActionHandler(MainWindow& mainWindow);
     ~ActionHandler() override = default;
 
-    public slots:
-        void onNewAction();
+public slots:
+    void onNewAction();
     void onOpenAction();
     void onSaveAction();
     void onSaveAsAction();
@@ -49,6 +49,8 @@ public:
     void onBezierAction();
 
     void onAboutAction() const;
+
+    void onAddImageAction();
 
 private:
     void connectActions();

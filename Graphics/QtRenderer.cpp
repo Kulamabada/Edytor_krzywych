@@ -170,15 +170,21 @@ QPolygonF QtRenderer::pointsToPolygon(const std::vector<Point>& points) const {
     return polygon;
 }
 
-void QtRenderer::renderObject(const GeometricObject& object)
-{
+void QtRenderer::renderObject(const GeometricObject& object) {
     if (const auto* point = dynamic_cast<const Point*>(&object)) {
         renderPoint(*point);
         return;
     }
 
-    if (const auto* curve = dynamic_cast<const Curve*>(&object))
+    if (const auto* curve = dynamic_cast<const Curve*>(&object)) {
         renderCurve(*curve);
+        return;
+    }
+
+    if (const auto* image = dynamic_cast<const Image*>(&object)) {
+        renderImage(*image);
+        return;
+    }
 }
 
 void QtRenderer::renderGrid(double gridSize) {
@@ -629,3 +635,47 @@ void QtRenderer::renderDeCasteljauSteps(const BezierCurve& curve) {
 
     m_painter->restore();
 }
+
+void QtRenderer::renderImage(const Image& image) {
+    if (!m_painter || !m_viewportManager || !image.isValid()) {
+        return;
+    }
+
+    const QPixmap& pixmap = image.getPixmap();
+    Vector pos = image.getPosition();
+
+    qreal oldOpacity = m_painter->opacity();
+    m_painter->setOpacity(image.isLocked() ? 0.6 : image.getOpacity());
+
+    m_painter->save();
+    m_painter->translate(pos.x(), pos.y());
+    m_painter->scale(1.0, -1.0);
+
+    QRectF centeredRect(
+        -image.getWidth() / 2.0,
+        -image.getHeight() / 2.0,
+        image.getWidth(),
+        image.getHeight()
+    );
+
+    m_painter->drawPixmap(centeredRect, pixmap, pixmap.rect());
+
+    if (image.isLocked()) {
+        m_painter->scale(1.0, -1.0);
+        QPen lockPen(Qt::red, 2.0 / m_viewportManager->zoomFactor());
+        m_painter->setPen(lockPen);
+        m_painter->setBrush(Qt::NoBrush);
+
+        double lockSize = 20.0 / m_viewportManager->zoomFactor();
+        QRectF lockRect(-lockSize/2, -lockSize/2, lockSize, lockSize);
+        m_painter->drawRect(lockRect);
+
+        double crossSize = lockSize * 0.7;
+        m_painter->drawLine(-crossSize/2, -crossSize/2, crossSize/2, crossSize/2);
+        m_painter->drawLine(-crossSize/2, crossSize/2, crossSize/2, -crossSize/2);
+    }
+
+    m_painter->restore();
+    m_painter->setOpacity(oldOpacity);
+}
+

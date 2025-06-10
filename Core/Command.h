@@ -3,6 +3,7 @@
 #include <string>
 #include "AbstractCommand.h"
 #include "../Geometry/Curve.h"
+#include "../Geometry/Image.h"
 #include <algorithm>
 #include <cassert>
 #include <ranges>
@@ -151,4 +152,53 @@ public:
 private:
     std::vector<Point> m_oldPoints;
     std::vector<Point> m_newPoints;
+};
+
+class AddImageCommand : public AbstractCommand {
+public:
+    explicit AddImageCommand(std::shared_ptr<Image> image);
+    ~AddImageCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<Image> m_image;
+    int m_imageId{-1};
+};
+
+class TransformImageCommand : public AbstractCommand {
+public:
+    TransformImageCommand(std::shared_ptr<Image> image, const Vector& newPosition,
+                         double newWidth, double newHeight);
+    ~TransformImageCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<Image> m_image;
+    Vector m_oldPosition;
+    Vector m_newPosition;
+    double m_oldWidth;
+    double m_oldHeight;
+    double m_newWidth;
+    double m_newHeight;
+};
+
+class MoveImageCommand : public AbstractCommand {
+public:
+    MoveImageCommand(std::shared_ptr<Image> image, const Vector& newPosition);
+    ~MoveImageCommand() override = default;
+
+    bool execute() override;
+    bool undo() override;
+    bool redo() override;
+
+private:
+    std::shared_ptr<Image> m_image;
+    Vector m_oldPosition;
+    Vector m_newPosition;
 };

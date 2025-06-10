@@ -10,6 +10,7 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QResizeEvent>
+#include <QFileDialog>
 #include <algorithm>
 
 #include "../Core/ApplicationCore.h"
@@ -28,7 +29,7 @@ public:
         None,
         SelectPoint,
         AddPoint,
-        MovePoint,
+        MovePoint
     };
 
     explicit Canvas(QWidget* parent = nullptr);
@@ -66,6 +67,9 @@ public slots:
     void startAddingControlPoints();
     void startMovingControlPoints();
 
+    void addImage();
+    void addImageFromFile(const QString& filePath);
+    std::shared_ptr<Image> getSelectedImage() const;
 signals:
     void objectAdded(std::shared_ptr<GeometricObject> object);
     void objectRemoved(std::shared_ptr<GeometricObject> object);
@@ -94,6 +98,7 @@ private:
     void drawControlPoints();
     std::shared_ptr<BezierCurve> getSelectedBezierCurve() const;
     std::shared_ptr<GeometricObject> hitTestObject(const QPointF& pos, double tolerance = 10.0) const;
+    bool isImageSelected() const;
 
     std::vector<std::shared_ptr<GeometricObject>> m_objects;
     std::shared_ptr<GeometricObject> m_selectedObject;
