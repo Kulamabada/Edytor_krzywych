@@ -570,6 +570,7 @@ void MainWindow::updatePropertiesPanel() {
     }
 
     m_propertiesLayout->addStretch();
+    m_weightsPanel->updateWeights();
 }
 
 void MainWindow::onWeightChanged(int pointIndex, double weight) {
