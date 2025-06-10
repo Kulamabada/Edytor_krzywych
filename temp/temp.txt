@@ -1,4 +1,4 @@
-// Plik wygenerowany automatycznie 2025-06-10 10:22:16
+// Plik wygenerowany automatycznie 2025-06-10 18:42:50
 // Zawiera 36 plików z projektu edytora krzywych
 
 //===== START FILE: Core\AbstractCommand.h =====//
@@ -851,35 +851,13 @@ Vector BezierCurve::deCasteljauDerivative(double t) const {
     }
 
     for (size_t level = 1; level < derivativePoints.size(); ++level)
-        for (size_t i = 0; i < derivativePoints.size() - level; ++i) {
+        for (size_t i = 0; i < derivativePoints.size() - level; ++i)
             derivativePoints[i] = interpolateLinear(derivativePoints[i], derivativePoints[i + 1], t);
-        }
 
     if (derivativePoints.empty())
         return Vector::Zero();
 
     return Vector(derivativePoints[0].x(), derivativePoints[0].y(), derivativePoints[0].z());
-}
-
-Vector BezierCurve::rationalDeCasteljauDerivative(double t) const {
-    if (m_controlPoints.size() < 2)
-        return Vector::Zero();
-
-    validateWeights();
-
-    const double epsilon = 1e-6;
-    const double t1 = std::max(0.0, t - epsilon);
-    const double t2 = std::min(1.0, t + epsilon);
-
-    const Point p1 = rationalDeCasteljau(t1);
-    const Point p2 = rationalDeCasteljau(t2);
-    const double dt = t2 - t1;
-
-    return Vector(
-        (p2.x() - p1.x()) / dt,
-        (p2.y() - p1.y()) / dt,
-        (p2.z() - p1.z()) / dt
-    );
 }
 
 void BezierCurve::ensureWeightsSize() {
@@ -902,6 +880,62 @@ void BezierCurve::setShowWeights(bool show) {
         ensureWeightsSize();
         resetWeights();
     }
+}
+
+std::vector<std::vector<Point>> BezierCurve::getDeCasteljauSteps() const {
+    std::vector<std::vector<Point>> steps;
+    if (m_controlPoints.size() < 2) return steps;
+
+    if (hasWeights() && !std::ranges::all_of(m_weights, [this](double w){ return std::abs(w - m_weights[0]) < 1e-9; })) {
+        const size_t n = m_controlPoints.size();
+        std::vector<Point> tempPoints = m_controlPoints;
+        std::vector<double> tempWeights = m_weights;
+
+        steps.push_back(tempPoints);
+
+        for (size_t level = 1; level < n; ++level) {
+            std::vector<Point> nextPoints;
+            std::vector<double> nextWeights;
+
+            for (size_t i = 0; i < n - level; ++i) {
+                const double newWeight = (1.0 - m_deCasteljauT) * tempWeights[i] + m_deCasteljauT * tempWeights[i + 1];
+                const double w1 = (1.0 - m_deCasteljauT) * tempWeights[i];
+                const double w2 = m_deCasteljauT * tempWeights[i + 1];
+
+                const Point& p1 = tempPoints[i];
+                const Point& p2 = tempPoints[i + 1];
+
+                const double invNewWeight = 1.0 / newWeight;
+                Point newPoint(
+                    (w1 * p1.x() + w2 * p2.x()) * invNewWeight,
+                    (w1 * p1.y() + w2 * p2.y()) * invNewWeight,
+                    (w1 * p1.z() + w2 * p2.z()) * invNewWeight
+                );
+
+                nextPoints.push_back(newPoint);
+                nextWeights.push_back(newWeight);
+            }
+
+            steps.push_back(nextPoints);
+            tempPoints = nextPoints;
+            tempWeights = nextWeights;
+        }
+    } else {
+        std::vector<Point> currentLevel = m_controlPoints;
+        steps.push_back(currentLevel);
+
+        for (size_t level = 1; level < m_controlPoints.size(); ++level) {
+            std::vector<Point> nextLevel;
+            for (size_t i = 0; i < currentLevel.size() - 1; ++i) {
+                Point interpolated = interpolateLinear(currentLevel[i], currentLevel[i + 1], m_deCasteljauT);
+                nextLevel.push_back(interpolated);
+            }
+            steps.push_back(nextLevel);
+            currentLevel = nextLevel;
+        }
+    }
+
+    return steps;
 }
 
 //===== END FILE: Geometry\BezierCurve.cpp =====//
@@ -938,6 +972,14 @@ public:
     void setShowWeights(bool show);
     bool getShowWeights() const { return m_showWeights; }
 
+    void setShowDeCasteljau(bool show) { m_showDeCasteljau = show; }
+    bool getShowDeCasteljau() const { return m_showDeCasteljau; }
+
+    void setDeCasteljauT(double t) { m_deCasteljauT = std::clamp(t, 0.0, 1.0); }
+    double getDeCasteljauT() const { return m_deCasteljauT; }
+
+    std::vector<std::vector<Point>> getDeCasteljauSteps() const;
+
 protected:
     std::unique_ptr<Curve> createClone() const override;
     void copySpecificPropertiesTo(Curve* target) const override;
@@ -946,13 +988,15 @@ private:
     Point deCasteljau(double t) const;
     Point rationalDeCasteljau(double t) const;
     Vector deCasteljauDerivative(double t) const;
-    Vector rationalDeCasteljauDerivative(double t) const;
 
     void ensureWeightsSize();
     void validateWeights() const;
 
     std::vector<double> m_weights;
     bool m_showWeights{false};
+
+    bool m_showDeCasteljau{false};
+    double m_deCasteljauT{0.5};
 };
 
 //===== END FILE: Geometry\BezierCurve.h =====//
@@ -1327,6 +1371,7 @@ public:
     virtual int getDefaultLengthSamples() const { return m_precisionConfig.lengthSamples; }
     virtual double getDefaultTangentEpsilon() const { return m_precisionConfig.tangentEpsilon; }
     virtual int getDefaultRenderSamples() const { return m_precisionConfig.renderSamples; }
+    Point interpolateLinear(const Point& p1, const Point& p2, double t) const;
 
 protected:
     virtual std::unique_ptr<Curve> createClone() const = 0;
@@ -1337,7 +1382,6 @@ protected:
 
     double calculateLengthByDiscretization(int numSamples = -1) const;
     bool validateParameterRange(double& t) const;
-    Point interpolateLinear(const Point& p1, const Point& p2, double t) const;
     double calculateParameterForSegment(size_t segmentIndex, size_t totalSegments, double localT) const;
 
     std::vector<Point> m_controlPoints;
@@ -2648,9 +2692,12 @@ void QtRenderer::renderCurve(const Curve& curve) {
     renderMainCurve(curve);
     renderCurveExtras(curve);
 
-    if (const auto* bezierCurve = dynamic_cast<const BezierCurve*>(&curve))
+    if (const auto* bezierCurve = dynamic_cast<const BezierCurve*>(&curve)) {
         if (bezierCurve->getShowWeights() && bezierCurve->hasWeights())
             renderWeights(*bezierCurve);
+        if (bezierCurve->getShowDeCasteljau())
+            renderDeCasteljauSteps(*bezierCurve);
+    }
 }
 
 void QtRenderer::renderMainCurve(const Curve& curve) {
@@ -3183,6 +3230,45 @@ double QtRenderer::distanceSquared(const Point& a, const Point& b)
     return dx * dx + dy * dy;
 }
 
+void QtRenderer::renderDeCasteljauSteps(const BezierCurve& curve) {
+    if (!curve.getShowDeCasteljau() || !curve.hasControlPoints()) return;
+
+    const auto steps = curve.getDeCasteljauSteps();
+    if (steps.size() < 2) return;
+
+    m_painter->save();
+
+    QColor baseColor = curve.getColor();
+
+    for (size_t levelIndex = 0; levelIndex < steps.size(); ++levelIndex) {
+        const auto& level = steps[levelIndex];
+        if (level.size() < 2) continue;
+
+        float alpha = 1.0f - (static_cast<float>(levelIndex) / static_cast<float>(steps.size() - 1)) * 0.7f;
+        QColor levelColor = baseColor;
+        levelColor.setAlphaF(alpha);
+
+        float lineWidth = 1.5f - (static_cast<float>(levelIndex) / static_cast<float>(steps.size() - 1)) * 0.5f;
+        QPen pen(levelColor, lineWidth, Qt::DashLine);
+        m_painter->setPen(pen);
+
+        for (size_t i = 0; i < level.size() - 1; ++i) {
+            QPointF p1(level[i].x(), level[i].y());
+            QPointF p2(level[i + 1].x(), level[i + 1].y());
+            m_painter->drawLine(p1, p2);
+        }
+
+        m_painter->setPen(QPen(levelColor, 1.0));
+        m_painter->setBrush(QBrush(levelColor));
+        for (const auto& point : level) {
+            double size = 3.0 - (static_cast<double>(levelIndex) / static_cast<double>(steps.size() - 1)) * 1.0;
+            m_painter->drawEllipse(QPointF(point.x(), point.y()), size, size);
+        }
+    }
+
+    m_painter->restore();
+}
+
 //===== END FILE: Graphics\QtRenderer.cpp =====//
 
 //===== START FILE: Graphics\QtRenderer.h =====//
@@ -3232,6 +3318,7 @@ public:
     void setConvexHullStyle(const QColor& color, float width, Qt::PenStyle style = Qt::DotLine) override;
     void renderCurveExtras(const Curve& curve) override;
     void renderWeights(const BezierCurve& curve);
+    void renderDeCasteljauSteps(const BezierCurve& curve);
 
 private:
     QColor m_pointColor{Qt::black};
@@ -4064,8 +4151,6 @@ void MainWindow::createMenus() {
     m_showWeightsPanelAction->setChecked(true);
 
     m_addImageAction = m_imageMenu->addAction("Dodaj obraz...");
-    m_editImageAction = m_imageMenu->addAction("Edytuj narożniki obrazu");
-    m_lockImageAction = m_imageMenu->addAction("Zablokuj/Odblokuj obraz");
 
     m_aboutAction = m_helpMenu->addAction(QIcon::fromTheme("help-about"), "O programie");
 }
@@ -4108,8 +4193,6 @@ void MainWindow::createToolbars() {
     addToolBar(m_imageToolBar);
 
     m_imageToolBar->addAction(m_addImageAction);
-    m_imageToolBar->addAction(m_editImageAction);
-    m_imageToolBar->addAction(m_lockImageAction);
 }
 
 void MainWindow::setupCentralWidget() {
@@ -4537,6 +4620,7 @@ void MainWindow::updatePropertiesPanel() {
 
         addUnifiedCurveVisibilityControls(std::static_pointer_cast<Curve>(bezierCurve));
         addUnifiedCurveStyleControls(std::static_pointer_cast<Curve>(bezierCurve));
+        addBezierCurveControls(bezierCurve);
     }
     else {
         m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt"));
@@ -4589,6 +4673,69 @@ void MainWindow::onShowWeightsToggled(bool show) {
         m_canvas->refresh();
         statusBar()->showMessage(show ? "Włączono wyświetlanie wag" : "Wyłączono wyświetlanie wag");
     }
+}
+
+void MainWindow::onShowDeCasteljauChanged(bool show) {
+    auto selectedObj = m_canvas->selectedObject();
+    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        bezierCurve->setShowDeCasteljau(show);
+        m_deCasteljauTSlider->setEnabled(show);
+        m_deCasteljauTLabel->setEnabled(show);
+        m_canvas->refresh();
+    }
+}
+
+void MainWindow::onDeCasteljauTChanged(int value) {
+    double t = value / 1000.0;
+    m_deCasteljauTLabel->setText(QString::number(t, 'f', 3));
+
+    auto selectedObj = m_canvas->selectedObject();
+    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        bezierCurve->setDeCasteljauT(t);
+        if (bezierCurve->getShowDeCasteljau())
+            m_canvas->refresh();
+    }
+}
+
+void MainWindow::addBezierCurveControls(std::shared_ptr<BezierCurve> curve) {
+    m_propertiesLayout->addWidget(new QLabel("<b>Wizualizacja de Casteljau:</b>"));
+
+    auto* showDeCasteljauCheckBox = new QCheckBox("Pokaż algorytm de Casteljau");
+    showDeCasteljauCheckBox->setChecked(curve->getShowDeCasteljau());
+    m_propertiesLayout->addWidget(showDeCasteljauCheckBox);
+
+    auto* tLabel = new QLabel("Parametr t:");
+    m_propertiesLayout->addWidget(tLabel);
+
+    auto* tSlider = new QSlider(Qt::Horizontal);
+    tSlider->setRange(0, 1000);
+    tSlider->setValue(static_cast<int>(curve->getDeCasteljauT() * 1000));
+    tSlider->setEnabled(curve->getShowDeCasteljau());
+
+    auto* tValueLabel = new QLabel(QString::number(curve->getDeCasteljauT(), 'f', 3));
+    tValueLabel->setMinimumWidth(50);
+
+    auto* tLayout = new QHBoxLayout();
+    tLayout->addWidget(tSlider);
+    tLayout->addWidget(tValueLabel);
+
+    auto* tWidget = new QWidget();
+    tWidget->setLayout(tLayout);
+    m_propertiesLayout->addWidget(tWidget);
+
+    connect(showDeCasteljauCheckBox, &QCheckBox::toggled, [this, curve, tSlider](bool checked) {
+        curve->setShowDeCasteljau(checked);
+        tSlider->setEnabled(checked);
+        m_canvas->refresh();
+        statusBar()->showMessage(checked ? "Włączono wizualizację de Casteljau" : "Wyłączono wizualizację de Casteljau");
+    });
+
+    connect(tSlider, &QSlider::valueChanged, [this, curve, tValueLabel](int value) {
+        double t = value / 1000.0;
+        curve->setDeCasteljauT(t);
+        tValueLabel->setText(QString::number(t, 'f', 3));
+        m_canvas->refresh();
+    });
 }
 
 //===== END FILE: UI\MainWindow.cpp =====//
@@ -4718,8 +4865,6 @@ private:
     QAction* m_barycentricAction;
     QAction* m_bezierAction;
     QAction* m_addImageAction;
-    QAction* m_editImageAction;
-    QAction* m_lockImageAction;
     QAction* m_aboutAction;
 
     QActionGroup* m_editModeGroup;
@@ -4731,10 +4876,21 @@ private:
     QDockWidget* m_weightsDock;
     WeightsPanel* m_weightsPanel;
 
+    QCheckBox* m_showDeCasteljauCheckBox;
+    QSlider* m_deCasteljauTSlider;
+    QLabel* m_deCasteljauTLabel;
+    QGroupBox* m_deCasteljauGroup;
+
     void addUnifiedCurveVisibilityControls(std::shared_ptr<Curve> curve);
     void addUnifiedCurveStyleControls(std::shared_ptr<Curve> curve);
 
     friend class ActionHandler;
+
+private slots:
+    void onShowDeCasteljauChanged(bool show);
+    void onDeCasteljauTChanged(int value);
+
+    void addBezierCurveControls(std::shared_ptr<BezierCurve> curve);
 };
 
 //===== END FILE: UI\MainWindow.h =====//

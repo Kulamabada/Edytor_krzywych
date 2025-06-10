@@ -129,6 +129,7 @@ public:
     virtual int getDefaultLengthSamples() const { return m_precisionConfig.lengthSamples; }
     virtual double getDefaultTangentEpsilon() const { return m_precisionConfig.tangentEpsilon; }
     virtual int getDefaultRenderSamples() const { return m_precisionConfig.renderSamples; }
+    Point interpolateLinear(const Point& p1, const Point& p2, double t) const;
 
 protected:
     virtual std::unique_ptr<Curve> createClone() const = 0;
@@ -139,7 +140,6 @@ protected:
 
     double calculateLengthByDiscretization(int numSamples = -1) const;
     bool validateParameterRange(double& t) const;
-    Point interpolateLinear(const Point& p1, const Point& p2, double t) const;
     double calculateParameterForSegment(size_t segmentIndex, size_t totalSegments, double localT) const;
 
     std::vector<Point> m_controlPoints;
