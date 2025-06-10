@@ -563,6 +563,7 @@ void MainWindow::updatePropertiesPanel() {
 
         addUnifiedCurveVisibilityControls(std::static_pointer_cast<Curve>(bezierCurve));
         addUnifiedCurveStyleControls(std::static_pointer_cast<Curve>(bezierCurve));
+        addBezierCurveControls(bezierCurve);
     }
     else {
         m_propertiesLayout->addWidget(new QLabel("Wybierz obiekt"));
@@ -615,4 +616,67 @@ void MainWindow::onShowWeightsToggled(bool show) {
         m_canvas->refresh();
         statusBar()->showMessage(show ? "Włączono wyświetlanie wag" : "Wyłączono wyświetlanie wag");
     }
+}
+
+void MainWindow::onShowDeCasteljauChanged(bool show) {
+    auto selectedObj = m_canvas->selectedObject();
+    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        bezierCurve->setShowDeCasteljau(show);
+        m_deCasteljauTSlider->setEnabled(show);
+        m_deCasteljauTLabel->setEnabled(show);
+        m_canvas->refresh();
+    }
+}
+
+void MainWindow::onDeCasteljauTChanged(int value) {
+    double t = value / 1000.0;
+    m_deCasteljauTLabel->setText(QString::number(t, 'f', 3));
+
+    auto selectedObj = m_canvas->selectedObject();
+    if (auto bezierCurve = std::dynamic_pointer_cast<BezierCurve>(selectedObj)) {
+        bezierCurve->setDeCasteljauT(t);
+        if (bezierCurve->getShowDeCasteljau())
+            m_canvas->refresh();
+    }
+}
+
+void MainWindow::addBezierCurveControls(std::shared_ptr<BezierCurve> curve) {
+    m_propertiesLayout->addWidget(new QLabel("<b>Wizualizacja de Casteljau:</b>"));
+
+    auto* showDeCasteljauCheckBox = new QCheckBox("Pokaż algorytm de Casteljau");
+    showDeCasteljauCheckBox->setChecked(curve->getShowDeCasteljau());
+    m_propertiesLayout->addWidget(showDeCasteljauCheckBox);
+
+    auto* tLabel = new QLabel("Parametr t:");
+    m_propertiesLayout->addWidget(tLabel);
+
+    auto* tSlider = new QSlider(Qt::Horizontal);
+    tSlider->setRange(0, 1000);
+    tSlider->setValue(static_cast<int>(curve->getDeCasteljauT() * 1000));
+    tSlider->setEnabled(curve->getShowDeCasteljau());
+
+    auto* tValueLabel = new QLabel(QString::number(curve->getDeCasteljauT(), 'f', 3));
+    tValueLabel->setMinimumWidth(50);
+
+    auto* tLayout = new QHBoxLayout();
+    tLayout->addWidget(tSlider);
+    tLayout->addWidget(tValueLabel);
+
+    auto* tWidget = new QWidget();
+    tWidget->setLayout(tLayout);
+    m_propertiesLayout->addWidget(tWidget);
+
+    connect(showDeCasteljauCheckBox, &QCheckBox::toggled, [this, curve, tSlider](bool checked) {
+        curve->setShowDeCasteljau(checked);
+        tSlider->setEnabled(checked);
+        m_canvas->refresh();
+        statusBar()->showMessage(checked ? "Włączono wizualizację de Casteljau" : "Wyłączono wizualizację de Casteljau");
+    });
+
+    connect(tSlider, &QSlider::valueChanged, [this, curve, tValueLabel](int value) {
+        double t = value / 1000.0;
+        curve->setDeCasteljauT(t);
+        tValueLabel->setText(QString::number(t, 'f', 3));
+        m_canvas->refresh();
+    });
 }

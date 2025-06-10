@@ -192,35 +192,13 @@ Vector BezierCurve::deCasteljauDerivative(double t) const {
     }
 
     for (size_t level = 1; level < derivativePoints.size(); ++level)
-        for (size_t i = 0; i < derivativePoints.size() - level; ++i) {
+        for (size_t i = 0; i < derivativePoints.size() - level; ++i)
             derivativePoints[i] = interpolateLinear(derivativePoints[i], derivativePoints[i + 1], t);
-        }
 
     if (derivativePoints.empty())
         return Vector::Zero();
 
     return Vector(derivativePoints[0].x(), derivativePoints[0].y(), derivativePoints[0].z());
-}
-
-Vector BezierCurve::rationalDeCasteljauDerivative(double t) const {
-    if (m_controlPoints.size() < 2)
-        return Vector::Zero();
-
-    validateWeights();
-
-    const double epsilon = 1e-6;
-    const double t1 = std::max(0.0, t - epsilon);
-    const double t2 = std::min(1.0, t + epsilon);
-
-    const Point p1 = rationalDeCasteljau(t1);
-    const Point p2 = rationalDeCasteljau(t2);
-    const double dt = t2 - t1;
-
-    return Vector(
-        (p2.x() - p1.x()) / dt,
-        (p2.y() - p1.y()) / dt,
-        (p2.z() - p1.z()) / dt
-    );
 }
 
 void BezierCurve::ensureWeightsSize() {
@@ -243,4 +221,60 @@ void BezierCurve::setShowWeights(bool show) {
         ensureWeightsSize();
         resetWeights();
     }
+}
+
+std::vector<std::vector<Point>> BezierCurve::getDeCasteljauSteps() const {
+    std::vector<std::vector<Point>> steps;
+    if (m_controlPoints.size() < 2) return steps;
+
+    if (hasWeights() && !std::ranges::all_of(m_weights, [this](double w){ return std::abs(w - m_weights[0]) < 1e-9; })) {
+        const size_t n = m_controlPoints.size();
+        std::vector<Point> tempPoints = m_controlPoints;
+        std::vector<double> tempWeights = m_weights;
+
+        steps.push_back(tempPoints);
+
+        for (size_t level = 1; level < n; ++level) {
+            std::vector<Point> nextPoints;
+            std::vector<double> nextWeights;
+
+            for (size_t i = 0; i < n - level; ++i) {
+                const double newWeight = (1.0 - m_deCasteljauT) * tempWeights[i] + m_deCasteljauT * tempWeights[i + 1];
+                const double w1 = (1.0 - m_deCasteljauT) * tempWeights[i];
+                const double w2 = m_deCasteljauT * tempWeights[i + 1];
+
+                const Point& p1 = tempPoints[i];
+                const Point& p2 = tempPoints[i + 1];
+
+                const double invNewWeight = 1.0 / newWeight;
+                Point newPoint(
+                    (w1 * p1.x() + w2 * p2.x()) * invNewWeight,
+                    (w1 * p1.y() + w2 * p2.y()) * invNewWeight,
+                    (w1 * p1.z() + w2 * p2.z()) * invNewWeight
+                );
+
+                nextPoints.push_back(newPoint);
+                nextWeights.push_back(newWeight);
+            }
+
+            steps.push_back(nextPoints);
+            tempPoints = nextPoints;
+            tempWeights = nextWeights;
+        }
+    } else {
+        std::vector<Point> currentLevel = m_controlPoints;
+        steps.push_back(currentLevel);
+
+        for (size_t level = 1; level < m_controlPoints.size(); ++level) {
+            std::vector<Point> nextLevel;
+            for (size_t i = 0; i < currentLevel.size() - 1; ++i) {
+                Point interpolated = interpolateLinear(currentLevel[i], currentLevel[i + 1], m_deCasteljauT);
+                nextLevel.push_back(interpolated);
+            }
+            steps.push_back(nextLevel);
+            currentLevel = nextLevel;
+        }
+    }
+
+    return steps;
 }

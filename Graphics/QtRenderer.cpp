@@ -53,9 +53,12 @@ void QtRenderer::renderCurve(const Curve& curve) {
     renderMainCurve(curve);
     renderCurveExtras(curve);
 
-    if (const auto* bezierCurve = dynamic_cast<const BezierCurve*>(&curve))
+    if (const auto* bezierCurve = dynamic_cast<const BezierCurve*>(&curve)) {
         if (bezierCurve->getShowWeights() && bezierCurve->hasWeights())
             renderWeights(*bezierCurve);
+        if (bezierCurve->getShowDeCasteljau())
+            renderDeCasteljauSteps(*bezierCurve);
+    }
 }
 
 void QtRenderer::renderMainCurve(const Curve& curve) {
@@ -586,4 +589,43 @@ double QtRenderer::distanceSquared(const Point& a, const Point& b)
 {
     const double dx = a.x() - b.x(), dy = a.y() - b.y();
     return dx * dx + dy * dy;
+}
+
+void QtRenderer::renderDeCasteljauSteps(const BezierCurve& curve) {
+    if (!curve.getShowDeCasteljau() || !curve.hasControlPoints()) return;
+
+    const auto steps = curve.getDeCasteljauSteps();
+    if (steps.size() < 2) return;
+
+    m_painter->save();
+
+    QColor baseColor = curve.getColor();
+
+    for (size_t levelIndex = 0; levelIndex < steps.size(); ++levelIndex) {
+        const auto& level = steps[levelIndex];
+        if (level.size() < 2) continue;
+
+        float alpha = 1.0f - (static_cast<float>(levelIndex) / static_cast<float>(steps.size() - 1)) * 0.7f;
+        QColor levelColor = baseColor;
+        levelColor.setAlphaF(alpha);
+
+        float lineWidth = 1.5f - (static_cast<float>(levelIndex) / static_cast<float>(steps.size() - 1)) * 0.5f;
+        QPen pen(levelColor, lineWidth, Qt::DashLine);
+        m_painter->setPen(pen);
+
+        for (size_t i = 0; i < level.size() - 1; ++i) {
+            QPointF p1(level[i].x(), level[i].y());
+            QPointF p2(level[i + 1].x(), level[i + 1].y());
+            m_painter->drawLine(p1, p2);
+        }
+
+        m_painter->setPen(QPen(levelColor, 1.0));
+        m_painter->setBrush(QBrush(levelColor));
+        for (const auto& point : level) {
+            double size = 3.0 - (static_cast<double>(levelIndex) / static_cast<double>(steps.size() - 1)) * 1.0;
+            m_painter->drawEllipse(QPointF(point.x(), point.y()), size, size);
+        }
+    }
+
+    m_painter->restore();
 }

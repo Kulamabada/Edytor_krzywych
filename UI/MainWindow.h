@@ -132,8 +132,19 @@ private:
     QDockWidget* m_weightsDock;
     WeightsPanel* m_weightsPanel;
 
+    QCheckBox* m_showDeCasteljauCheckBox;
+    QSlider* m_deCasteljauTSlider;
+    QLabel* m_deCasteljauTLabel;
+    QGroupBox* m_deCasteljauGroup;
+
     void addUnifiedCurveVisibilityControls(std::shared_ptr<Curve> curve);
     void addUnifiedCurveStyleControls(std::shared_ptr<Curve> curve);
 
     friend class ActionHandler;
+
+private slots:
+    void onShowDeCasteljauChanged(bool show);
+    void onDeCasteljauTChanged(int value);
+
+    void addBezierCurveControls(std::shared_ptr<BezierCurve> curve);
 };

@@ -28,6 +28,14 @@ public:
     void setShowWeights(bool show);
     bool getShowWeights() const { return m_showWeights; }
 
+    void setShowDeCasteljau(bool show) { m_showDeCasteljau = show; }
+    bool getShowDeCasteljau() const { return m_showDeCasteljau; }
+
+    void setDeCasteljauT(double t) { m_deCasteljauT = std::clamp(t, 0.0, 1.0); }
+    double getDeCasteljauT() const { return m_deCasteljauT; }
+
+    std::vector<std::vector<Point>> getDeCasteljauSteps() const;
+
 protected:
     std::unique_ptr<Curve> createClone() const override;
     void copySpecificPropertiesTo(Curve* target) const override;
@@ -36,11 +44,13 @@ private:
     Point deCasteljau(double t) const;
     Point rationalDeCasteljau(double t) const;
     Vector deCasteljauDerivative(double t) const;
-    Vector rationalDeCasteljauDerivative(double t) const;
 
     void ensureWeightsSize();
     void validateWeights() const;
 
     std::vector<double> m_weights;
     bool m_showWeights{false};
+
+    bool m_showDeCasteljau{false};
+    double m_deCasteljauT{0.5};
 };
